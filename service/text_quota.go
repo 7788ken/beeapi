@@ -1,0 +1,644 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/backgroundtask"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/types"
+
+	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
+)
+
+type textQuotaSummary struct {
+	PromptTokens             int
+	CompletionTokens         int
+	TotalTokens              int
+	CacheTokens              int
+	CacheCreationTokens      int
+	CacheCreationTokens5m    int
+	CacheCreationTokens1h    int
+	ImageTokens              int
+	AudioTokens              int
+	ModelName                string
+	TokenName                string
+	UseTimeSeconds           int64
+	CompletionRatio          float64
+	CacheRatio               float64
+	ImageRatio               float64
+	ModelRatio               float64
+	GroupRatio               float64
+	ModelPrice               float64
+	CacheCreationRatio       float64
+	CacheCreationRatio5m     float64
+	CacheCreationRatio1h     float64
+	Quota                    int
+	IsClaudeUsageSemantic    bool
+	UsageSemantic            string
+	WebSearchPrice           float64
+	WebSearchCallCount       int
+	ClaudeWebSearchPrice     float64
+	ClaudeWebSearchCallCount int
+	FileSearchPrice          float64
+	FileSearchCallCount      int
+	AudioInputPrice          float64
+	ImageGenerationCallPrice float64
+	ToolCallSurchargeQuota   decimal.Decimal
+}
+
+func cacheWriteTokensTotal(summary textQuotaSummary) int {
+	if summary.CacheCreationTokens5m > 0 || summary.CacheCreationTokens1h > 0 {
+		splitCacheWriteTokens := summary.CacheCreationTokens5m + summary.CacheCreationTokens1h
+		if summary.CacheCreationTokens > splitCacheWriteTokens {
+			return summary.CacheCreationTokens
+		}
+		return splitCacheWriteTokens
+	}
+	return summary.CacheCreationTokens
+}
+
+func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
+	if relayInfo == nil || usage == nil {
+		return false
+	}
+	if relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude {
+		return false
+	}
+	if usage.UsageSource != "" || usage.UsageSemantic != "" {
+		return false
+	}
+	return usage.ClaudeCacheCreation5mTokens > 0 || usage.ClaudeCacheCreation1hTokens > 0
+}
+
+func calculateTextToolCallSurcharge(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary) decimal.Decimal {
+	dGroupRatio := decimal.NewFromFloat(summary.GroupRatio)
+	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+
+	var surcharge decimal.Decimal
+
+	if relayInfo.ResponsesUsageInfo != nil {
+		if webSearchTool, exists := relayInfo.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview]; exists && webSearchTool.CallCount > 0 {
+			summary.WebSearchCallCount = webSearchTool.CallCount
+			summary.WebSearchPrice = operation_setting.GetToolPriceForModel("web_search_preview", summary.ModelName)
+			surcharge = surcharge.Add(decimal.NewFromFloat(summary.WebSearchPrice).
+				Mul(decimal.NewFromInt(int64(webSearchTool.CallCount))).
+				Div(decimal.NewFromInt(1000)).
+				Mul(dGroupRatio).
+				Mul(dQuotaPerUnit))
+		}
+	} else if strings.HasSuffix(summary.ModelName, "search-preview") {
+		summary.WebSearchCallCount = 1
+		summary.WebSearchPrice = operation_setting.GetToolPriceForModel("web_search_preview", summary.ModelName)
+		surcharge = surcharge.Add(decimal.NewFromFloat(summary.WebSearchPrice).
+			Div(decimal.NewFromInt(1000)).
+			Mul(dGroupRatio).
+			Mul(dQuotaPerUnit))
+	}
+
+	summary.ClaudeWebSearchCallCount = ctx.GetInt("claude_web_search_requests")
+	if summary.ClaudeWebSearchCallCount > 0 {
+		summary.ClaudeWebSearchPrice = operation_setting.GetToolPrice("web_search")
+		surcharge = surcharge.Add(decimal.NewFromFloat(summary.ClaudeWebSearchPrice).
+			Div(decimal.NewFromInt(1000)).
+			Mul(dGroupRatio).
+			Mul(dQuotaPerUnit).
+			Mul(decimal.NewFromInt(int64(summary.ClaudeWebSearchCallCount))))
+	}
+
+	if relayInfo.ResponsesUsageInfo != nil {
+		if fileSearchTool, exists := relayInfo.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolFileSearch]; exists && fileSearchTool.CallCount > 0 {
+			summary.FileSearchCallCount = fileSearchTool.CallCount
+			summary.FileSearchPrice = operation_setting.GetToolPrice("file_search")
+			surcharge = surcharge.Add(decimal.NewFromFloat(summary.FileSearchPrice).
+				Mul(decimal.NewFromInt(int64(fileSearchTool.CallCount))).
+				Div(decimal.NewFromInt(1000)).
+				Mul(dGroupRatio).
+				Mul(dQuotaPerUnit))
+		}
+	}
+
+	if ctx.GetBool("image_generation_call") {
+		summary.ImageGenerationCallPrice = operation_setting.GetGPTImage1PriceOnceCall(ctx.GetString("image_generation_call_quality"), ctx.GetString("image_generation_call_size"))
+		surcharge = surcharge.Add(decimal.NewFromFloat(summary.ImageGenerationCallPrice).
+			Mul(dGroupRatio).
+			Mul(dQuotaPerUnit))
+	}
+
+	return surcharge
+}
+
+func noteQuotaClamp(relayInfo *relaycommon.RelayInfo, clamp *common.QuotaClamp) {
+	if relayInfo != nil && relayInfo.QuotaClamp == nil && clamp != nil {
+		relayInfo.QuotaClamp = clamp
+	}
+}
+
+func composeTieredTextQuota(relayInfo *relaycommon.RelayInfo, summary textQuotaSummary, tieredQuota int, tieredResult *billingexpr.TieredResult) int {
+	if summary.ToolCallSurchargeQuota.IsZero() {
+		return tieredQuota
+	}
+
+	if tieredResult != nil {
+		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
+			quota, clamp := common.QuotaFromDecimalChecked(decimal.NewFromFloat(tieredResult.ActualQuotaBeforeGroup).
+				Mul(decimal.NewFromFloat(snap.GroupRatio)).
+				Add(summary.ToolCallSurchargeQuota))
+			noteQuotaClamp(relayInfo, clamp)
+			return quota
+		}
+	}
+
+	// Saturate the final sum, not just the surcharge: tieredQuota can be near
+	// MaxQuota and adding the surcharge could push the total past the int32
+	// quota policy bound (persisted quota columns are 32-bit).
+	quota, clamp := common.QuotaFromDecimalChecked(decimal.NewFromInt(int64(tieredQuota)).Add(summary.ToolCallSurchargeQuota))
+	noteQuotaClamp(relayInfo, clamp)
+	return quota
+}
+
+func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
+	summary := textQuotaSummary{
+		ModelName:            relayInfo.OriginModelName,
+		TokenName:            ctx.GetString("token_name"),
+		UseTimeSeconds:       time.Now().Unix() - relayInfo.StartTime.Unix(),
+		CompletionRatio:      relayInfo.PriceData.CompletionRatio,
+		CacheRatio:           relayInfo.PriceData.CacheRatio,
+		ImageRatio:           relayInfo.PriceData.ImageRatio,
+		ModelRatio:           relayInfo.PriceData.ModelRatio,
+		GroupRatio:           relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+		ModelPrice:           relayInfo.PriceData.ModelPrice,
+		CacheCreationRatio:   relayInfo.PriceData.CacheCreationRatio,
+		CacheCreationRatio5m: relayInfo.PriceData.CacheCreation5mRatio,
+		CacheCreationRatio1h: relayInfo.PriceData.CacheCreation1hRatio,
+		UsageSemantic:        usageSemanticFromUsage(relayInfo, usage),
+	}
+	summary.IsClaudeUsageSemantic = summary.UsageSemantic == "anthropic"
+
+	if usage == nil {
+		usage = &dto.Usage{
+			PromptTokens:     relayInfo.GetEstimatePromptTokens(),
+			CompletionTokens: 0,
+			TotalTokens:      relayInfo.GetEstimatePromptTokens(),
+		}
+	}
+
+	summary.PromptTokens = usage.PromptTokens
+	summary.CompletionTokens = usage.CompletionTokens
+	summary.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	summary.CacheTokens = usage.PromptTokensDetails.CachedTokens
+	summary.CacheCreationTokens = usage.PromptTokensDetails.CacheCreationTokensTotal()
+	summary.CacheCreationTokens5m = usage.ClaudeCacheCreation5mTokens
+	summary.CacheCreationTokens1h = usage.ClaudeCacheCreation1hTokens
+	summary.ImageTokens = usage.PromptTokensDetails.ImageTokens
+	summary.AudioTokens = usage.PromptTokensDetails.AudioTokens
+	legacyClaudeDerived := isLegacyClaudeDerivedOpenAIUsage(relayInfo, usage)
+	isOpenRouterClaudeBilling := relayInfo.ChannelMeta != nil &&
+		relayInfo.ChannelType == constant.ChannelTypeOpenRouter &&
+		summary.IsClaudeUsageSemantic
+
+	if isOpenRouterClaudeBilling {
+		summary.PromptTokens -= summary.CacheTokens
+		isUsingCustomSettings := relayInfo.PriceData.UsePrice || hasCustomModelRatio(summary.ModelName, relayInfo.PriceData.ModelRatio)
+		if summary.CacheCreationTokens == 0 && relayInfo.PriceData.CacheCreationRatio != 1 && usage.Cost != 0 && !isUsingCustomSettings {
+			maybeCacheCreationTokens := CalcOpenRouterCacheCreateTokens(*usage, relayInfo.PriceData)
+			if maybeCacheCreationTokens >= 0 && summary.PromptTokens >= maybeCacheCreationTokens {
+				summary.CacheCreationTokens = maybeCacheCreationTokens
+			}
+		}
+		summary.PromptTokens -= summary.CacheCreationTokens
+	}
+
+	dPromptTokens := decimal.NewFromInt(int64(summary.PromptTokens))
+	dCacheTokens := decimal.NewFromInt(int64(summary.CacheTokens))
+	dImageTokens := decimal.NewFromInt(int64(summary.ImageTokens))
+	dAudioTokens := decimal.NewFromInt(int64(summary.AudioTokens))
+	dCompletionTokens := decimal.NewFromInt(int64(summary.CompletionTokens))
+	dCachedCreationTokens := decimal.NewFromInt(int64(summary.CacheCreationTokens))
+	dCompletionRatio := decimal.NewFromFloat(summary.CompletionRatio)
+	dCacheRatio := decimal.NewFromFloat(summary.CacheRatio)
+	dImageRatio := decimal.NewFromFloat(summary.ImageRatio)
+	dModelRatio := decimal.NewFromFloat(summary.ModelRatio)
+	dGroupRatio := decimal.NewFromFloat(summary.GroupRatio)
+	dModelPrice := decimal.NewFromFloat(summary.ModelPrice)
+	dCacheCreationRatio := decimal.NewFromFloat(summary.CacheCreationRatio)
+	dCacheCreationRatio5m := decimal.NewFromFloat(summary.CacheCreationRatio5m)
+	dCacheCreationRatio1h := decimal.NewFromFloat(summary.CacheCreationRatio1h)
+	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+
+	ratio := dModelRatio.Mul(dGroupRatio)
+	summary.ToolCallSurchargeQuota = calculateTextToolCallSurcharge(ctx, relayInfo, &summary)
+
+	var audioInputQuota decimal.Decimal
+	if !relayInfo.PriceData.UsePrice {
+		baseTokens := dPromptTokens
+
+		var cachedTokensWithRatio decimal.Decimal
+		if !dCacheTokens.IsZero() {
+			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
+				baseTokens = baseTokens.Sub(dCacheTokens)
+			}
+			cachedTokensWithRatio = dCacheTokens.Mul(dCacheRatio)
+		}
+
+		var cachedCreationTokensWithRatio decimal.Decimal
+		hasSplitCacheCreationTokens := summary.CacheCreationTokens5m > 0 || summary.CacheCreationTokens1h > 0
+		if !dCachedCreationTokens.IsZero() || hasSplitCacheCreationTokens {
+			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
+				baseTokens = baseTokens.Sub(dCachedCreationTokens)
+				cachedCreationTokensWithRatio = dCachedCreationTokens.Mul(dCacheCreationRatio)
+			} else {
+				remaining := summary.CacheCreationTokens - summary.CacheCreationTokens5m - summary.CacheCreationTokens1h
+				if remaining < 0 {
+					remaining = 0
+				}
+				cachedCreationTokensWithRatio = decimal.NewFromInt(int64(remaining)).Mul(dCacheCreationRatio)
+				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(dCacheCreationRatio5m))
+				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(dCacheCreationRatio1h))
+			}
+		}
+
+		var imageTokensWithRatio decimal.Decimal
+		if !dImageTokens.IsZero() {
+			baseTokens = baseTokens.Sub(dImageTokens)
+			imageTokensWithRatio = dImageTokens.Mul(dImageRatio)
+		}
+
+		if !dAudioTokens.IsZero() {
+			summary.AudioInputPrice = operation_setting.GetGeminiInputAudioPricePerMillionTokens(summary.ModelName)
+			if summary.AudioInputPrice > 0 {
+				baseTokens = baseTokens.Sub(dAudioTokens)
+				audioInputQuota = decimal.NewFromFloat(summary.AudioInputPrice).
+					Div(decimal.NewFromInt(1000000)).Mul(dAudioTokens).Mul(dGroupRatio).Mul(dQuotaPerUnit)
+			}
+		}
+
+		if baseTokens.IsNegative() {
+			baseTokens = decimal.Zero
+		}
+
+		promptQuota := baseTokens.Add(cachedTokensWithRatio).Add(imageTokensWithRatio).Add(cachedCreationTokensWithRatio)
+		completionQuota := dCompletionTokens.Mul(dCompletionRatio)
+		quotaCalculateDecimal := promptQuota.Add(completionQuota).Mul(ratio)
+		quotaCalculateDecimal = quotaCalculateDecimal.Add(summary.ToolCallSurchargeQuota)
+		quotaCalculateDecimal = quotaCalculateDecimal.Add(audioInputQuota)
+
+		if len(relayInfo.PriceData.OtherRatios) > 0 {
+			for _, otherRatio := range relayInfo.PriceData.OtherRatios {
+				quotaCalculateDecimal = quotaCalculateDecimal.Mul(decimal.NewFromFloat(otherRatio))
+			}
+		}
+
+		if !ratio.IsZero() && quotaCalculateDecimal.LessThanOrEqual(decimal.Zero) {
+			quotaCalculateDecimal = decimal.NewFromInt(1)
+		}
+		quota, clamp := common.QuotaFromDecimalChecked(quotaCalculateDecimal)
+		summary.Quota = quota
+		noteQuotaClamp(relayInfo, clamp)
+	} else {
+		quotaCalculateDecimal := dModelPrice.Mul(dQuotaPerUnit).Mul(dGroupRatio)
+		quotaCalculateDecimal = quotaCalculateDecimal.Add(summary.ToolCallSurchargeQuota)
+		quotaCalculateDecimal = quotaCalculateDecimal.Add(audioInputQuota)
+		if len(relayInfo.PriceData.OtherRatios) > 0 {
+			for _, otherRatio := range relayInfo.PriceData.OtherRatios {
+				quotaCalculateDecimal = quotaCalculateDecimal.Mul(decimal.NewFromFloat(otherRatio))
+			}
+		}
+		quota, clamp := common.QuotaFromDecimalChecked(quotaCalculateDecimal)
+		summary.Quota = quota
+		noteQuotaClamp(relayInfo, clamp)
+	}
+
+	if summary.TotalTokens == 0 {
+		summary.Quota = 0
+	} else if !ratio.IsZero() && summary.Quota == 0 {
+		summary.Quota = 1
+	}
+
+	return summary
+}
+
+// noOutputRefundEligibleFormats 白名单：只有这些 RelayFormat 的请求才允许"零产出免单"。
+// 白名单（而非黑名单）的设计保证未来新增 RelayFormat 默认不享受免单——要 opt-in，
+// 避免"加新模式忘了加排除"导致的误退。RelayFormat 在 GenRelayInfo* 构造时显式设值，
+// 比 RelayMode 更可靠（后者依赖 Path2RelayMode 的路径匹配，未匹配会落 Unknown 桶）。
+//
+// 收录标准：客户端语义即"期待生成 completion_tokens 个文本/思考 token"，
+// completion=0 等价于"上游没产出可用内容"。
+//
+//   - RelayFormatOpenAI                    /v1/chat/completions, /v1/completions
+//   - RelayFormatClaude                    /v1/messages（Anthropic 原生）
+//   - RelayFormatGemini                    /v1beta/models/...:generateContent
+//   - RelayFormatOpenAIResponses           /v1/responses
+//   - RelayFormatOpenAIResponsesCompaction /v1/responses/compact
+//
+// 故意不收录：
+//   - OpenAIAudio / OpenAIImage / OpenAIRealtime / Rerank / Embedding：
+//     不是按 completion 计费，completion=0 是常态而非异常
+//   - Task / MjProxy：走异步任务流水，根本不会到 PostTextConsumeQuota
+var noOutputRefundEligibleFormats = map[types.RelayFormat]bool{
+	types.RelayFormatOpenAI:                    true,
+	types.RelayFormatClaude:                    true,
+	types.RelayFormatGemini:                    true,
+	types.RelayFormatOpenAIResponses:           true,
+	types.RelayFormatOpenAIResponsesCompaction: true,
+}
+
+// shouldRefundNoOutput 判断本次请求是否应作为"零产出"自动免单。
+//
+// 通用规则：non-async + completion_tokens=0 → 免单。
+//
+// 安全护栏（任一命中则不免单）：
+//  1. 开关关闭
+//  2. RelayFormat 不在 noOutputRefundEligibleFormats 白名单内
+//     （非 token 主导计费的模式：audio/image/realtime/rerank/embedding 等）
+//  3. summary 含 image/audio/web_search/file_search 等非 completion 计费组件
+//     （白名单格式 + 内嵌 image_generation_call / web_search 调用的混合计费场景）
+//
+// client_gone 不再一刀切拒退：completion_tokens==0 时客户端看不到任何生成内容（Claude 的
+// thinking 也计入 completion），断开只可能是上游迟迟不出字、客户端超时放弃。但为防"秒断刷
+// 上游 cache"的滥用，client_gone 场景额外要求请求已持续 >= 阈值
+// （RefundNoOutputClientGoneMinSeconds，默认 60s）才免单——正常久等的冤案 use_time 普遍远超
+// 此值，而秒断刷 cache 必然极短。应用 shutdown 不属于客户免单；其它结束原因
+// （EOF/timeout 等）不受时长限制。
+// 是否真有首帧仍记录到 other 的 had_first_chunk 审计字段。
+func shouldRefundNoOutput(relayInfo *relaycommon.RelayInfo, summary textQuotaSummary) bool {
+	if relayInfo == nil {
+		return false
+	}
+	if !operation_setting.GetQuotaSetting().BillingRefundWhenNoOutput {
+		return false
+	}
+	if summary.CompletionTokens != 0 {
+		return false
+	}
+	if !noOutputRefundEligibleFormats[relayInfo.RelayFormat] {
+		return false
+	}
+	if hasNonCompletionBillingComponent(summary) {
+		return false
+	}
+	if relayInfo.StreamStatus != nil && relayInfo.StreamStatus.EndReason() == relaycommon.StreamEndReasonShutdown {
+		return false
+	}
+	// client_gone：区分"被动久等的冤案"与"主动秒断刷 cache 的滥用"——仅当请求实际持续
+	// >= 阈值（客户确实在等慢上游）才免单。线上冤案 use_time 普遍 >60s，秒断必然极短。
+	if relayInfo.StreamStatus != nil && relayInfo.StreamStatus.EndReason() == relaycommon.StreamEndReasonClientGone {
+		if summary.UseTimeSeconds < operation_setting.GetQuotaSetting().RefundNoOutputClientGoneMinSeconds {
+			return false
+		}
+	}
+	return true
+}
+
+// hasNonCompletionBillingComponent 检查 summary 是否包含非 completion_tokens 计费
+// 来源——任何一项非 0 都意味着本次扣费不只依赖 completion，免单会误退。
+func hasNonCompletionBillingComponent(summary textQuotaSummary) bool {
+	if summary.ImageTokens > 0 || summary.ImageGenerationCallPrice > 0 {
+		return true
+	}
+	if summary.AudioTokens > 0 && summary.AudioInputPrice > 0 {
+		return true
+	}
+	if summary.WebSearchCallCount > 0 || summary.ClaudeWebSearchCallCount > 0 {
+		return true
+	}
+	if summary.FileSearchCallCount > 0 {
+		return true
+	}
+	return false
+}
+
+// decimalToQuota converts a computed quota decimal to int with saturation
+// (see common.QuotaFromDecimal). Oversized multipliers (e.g. an absurd image
+// generation count) must never wrap around and turn a charge into a credit.
+func decimalToQuota(d decimal.Decimal) int {
+	return common.QuotaFromDecimal(d)
+}
+
+func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) string {
+	if usage != nil && usage.UsageSemantic != "" {
+		return usage.UsageSemantic
+	}
+	if relayInfo != nil && relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude {
+		return "anthropic"
+	}
+	return "openai"
+}
+
+func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
+	originUsage := usage
+	billingUsage := effectiveBillingUsage(usage)
+	if usage == nil {
+		extraContent = append(extraContent, "上游无计费信息")
+	}
+	if originUsage != nil {
+		ObserveChannelAffinityUsageCacheByRelayFormat(ctx, billingUsage, relayInfo.GetFinalRequestRelayFormat())
+	}
+
+	adminRejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
+	summary := calculateTextQuotaSummary(ctx, relayInfo, billingUsage)
+
+	var tieredResult *billingexpr.TieredResult
+	tieredBillingApplied := false
+	if originUsage != nil {
+		var tieredUsedVars map[string]bool
+		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
+			tieredUsedVars = billingexpr.UsedVars(snap.ExprString)
+		}
+		tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, BuildTieredTokenParams(billingUsage, summary.IsClaudeUsageSemantic, tieredUsedVars))
+		if tieredOk {
+			tieredBillingApplied = true
+			tieredResult = tieredRes
+			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
+		}
+	}
+
+	if summary.WebSearchCallCount > 0 {
+		extraContent = append(extraContent, fmt.Sprintf("Web Search 调用 %d 次，调用花费 %s", summary.WebSearchCallCount, decimal.NewFromFloat(summary.WebSearchPrice).Mul(decimal.NewFromInt(int64(summary.WebSearchCallCount))).Div(decimal.NewFromInt(1000)).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
+	}
+	if summary.ClaudeWebSearchCallCount > 0 {
+		extraContent = append(extraContent, fmt.Sprintf("Claude Web Search 调用 %d 次，调用花费 %s", summary.ClaudeWebSearchCallCount, decimal.NewFromFloat(summary.ClaudeWebSearchPrice).Div(decimal.NewFromInt(1000)).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).Mul(decimal.NewFromInt(int64(summary.ClaudeWebSearchCallCount))).String()))
+	}
+	if summary.FileSearchCallCount > 0 {
+		extraContent = append(extraContent, fmt.Sprintf("File Search 调用 %d 次，调用花费 %s", summary.FileSearchCallCount, decimal.NewFromFloat(summary.FileSearchPrice).Mul(decimal.NewFromInt(int64(summary.FileSearchCallCount))).Div(decimal.NewFromInt(1000)).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
+	}
+	if summary.AudioInputPrice > 0 && summary.AudioTokens > 0 {
+		extraContent = append(extraContent, fmt.Sprintf("Audio Input 花费 %s", decimal.NewFromFloat(summary.AudioInputPrice).Div(decimal.NewFromInt(1000000)).Mul(decimal.NewFromInt(int64(summary.AudioTokens))).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
+	}
+	if summary.ImageGenerationCallPrice > 0 {
+		extraContent = append(extraContent, fmt.Sprintf("Image Generation Call 花费 %s", decimal.NewFromFloat(summary.ImageGenerationCallPrice).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
+	}
+
+	noOutputRefunded := shouldRefundNoOutput(relayInfo, summary)
+	noOutputHadFirstChunk := noOutputRefunded && relayInfo.HasSendResponse()
+	if noOutputRefunded {
+		switch {
+		case !relayInfo.IsStream:
+			extraContent = append(extraContent, "上游返回 completion_tokens=0，已自动免单")
+		case noOutputHadFirstChunk:
+			extraContent = append(extraContent, "上游流式响应仅有信封帧、未返回内容，已自动免单")
+		default:
+			extraContent = append(extraContent, "上游流式响应未返回任何内容，已自动免单")
+		}
+		logger.LogWarn(ctx, fmt.Sprintf("no-output refund applied, request_id=%s userId=%d channelId=%d tokenId=%d model=%s relay_format=%s relay_mode=%d is_stream=%t pre_consumed=%d original_quota=%d billing_source=%s tier_applied=%t had_first_chunk=%t",
+			relayInfo.RequestId, relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName,
+			relayInfo.RelayFormat, relayInfo.RelayMode, relayInfo.IsStream,
+			relayInfo.FinalPreConsumedQuota, summary.Quota, relayInfo.BillingSource, tieredBillingApplied, noOutputHadFirstChunk))
+		summary.Quota = 0
+	}
+
+	if summary.TotalTokens == 0 {
+		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
+		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
+	} else {
+		if err := model.UpdateUserAndChannelUsedQuota(relayInfo.UserId, relayInfo.ChannelId, summary.Quota); err != nil {
+			logger.LogError(ctx, "error updating usage statistics: "+err.Error())
+		}
+	}
+
+	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
+		logger.LogError(ctx, "error settling billing: "+err.Error())
+	}
+
+	logModel := summary.ModelName
+	if strings.HasPrefix(logModel, "gpt-4-gizmo") {
+		logModel = "gpt-4-gizmo-*"
+		extraContent = append(extraContent, fmt.Sprintf("模型 %s", summary.ModelName))
+	}
+	if strings.HasPrefix(logModel, "gpt-4o-gizmo") {
+		logModel = "gpt-4o-gizmo-*"
+		extraContent = append(extraContent, fmt.Sprintf("模型 %s", summary.ModelName))
+	}
+
+	logContent := strings.Join(extraContent, ", ")
+	var other map[string]interface{}
+	if summary.IsClaudeUsageSemantic {
+		other = GenerateClaudeOtherInfo(ctx, relayInfo,
+			summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio,
+			summary.CacheTokens, summary.CacheRatio,
+			summary.CacheCreationTokens, summary.CacheCreationRatio,
+			summary.CacheCreationTokens5m, summary.CacheCreationRatio5m,
+			summary.CacheCreationTokens1h, summary.CacheCreationRatio1h,
+			summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+		other["usage_semantic"] = "anthropic"
+	} else {
+		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	}
+	appendUsageBillingPathForLog(other, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens), originUsage)
+	if adminRejectReason != "" {
+		other["reject_reason"] = adminRejectReason
+	}
+	if summary.ImageTokens != 0 {
+		other["image"] = true
+		other["image_ratio"] = summary.ImageRatio
+		other["image_output"] = summary.ImageTokens
+	}
+	if summary.WebSearchCallCount > 0 {
+		other["web_search"] = true
+		other["web_search_call_count"] = summary.WebSearchCallCount
+		other["web_search_price"] = summary.WebSearchPrice
+	} else if summary.ClaudeWebSearchCallCount > 0 {
+		other["web_search"] = true
+		other["web_search_call_count"] = summary.ClaudeWebSearchCallCount
+		other["web_search_price"] = summary.ClaudeWebSearchPrice
+	}
+	if summary.FileSearchCallCount > 0 {
+		other["file_search"] = true
+		other["file_search_call_count"] = summary.FileSearchCallCount
+		other["file_search_price"] = summary.FileSearchPrice
+	}
+	if summary.AudioInputPrice > 0 && summary.AudioTokens > 0 {
+		other["audio_input_seperate_price"] = true
+		other["audio_input_token_count"] = summary.AudioTokens
+		other["audio_input_price"] = summary.AudioInputPrice
+	}
+	if summary.ImageGenerationCallPrice > 0 {
+		other["image_generation_call"] = true
+		other["image_generation_call_price"] = summary.ImageGenerationCallPrice
+	}
+	if summary.CacheCreationTokens > 0 {
+		other["cache_creation_tokens"] = summary.CacheCreationTokens
+		other["cache_creation_ratio"] = summary.CacheCreationRatio
+	}
+	if summary.CacheCreationTokens5m > 0 {
+		other["cache_creation_tokens_5m"] = summary.CacheCreationTokens5m
+		other["cache_creation_ratio_5m"] = summary.CacheCreationRatio5m
+	}
+	if summary.CacheCreationTokens1h > 0 {
+		other["cache_creation_tokens_1h"] = summary.CacheCreationTokens1h
+		other["cache_creation_ratio_1h"] = summary.CacheCreationRatio1h
+	}
+	cacheWriteTokens := cacheWriteTokensTotal(summary)
+	if cacheWriteTokens > 0 {
+		// cache_write_tokens: normalized cache creation total for UI display.
+		// If split 5m/1h values are present, this is their sum; otherwise it falls back
+		// to cache_creation_tokens.
+		other["cache_write_tokens"] = cacheWriteTokens
+	}
+	if relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude && billingUsage != nil && billingUsage.UsageSource != "" && billingUsage.InputTokens > 0 {
+		// input_tokens_total: explicit normalized total input used by the usage log UI.
+		// Only write this field when upstream/current conversion has already provided a
+		// reliable total input value and tagged the usage source. Do not infer it from
+		// prompt/cache fields here, otherwise old upstream payloads may be double-counted.
+		other["input_tokens_total"] = billingUsage.InputTokens
+	}
+	if tieredBillingApplied {
+		InjectTieredBillingInfo(other, relayInfo, tieredResult)
+	}
+	attachQuotaSaturation(ctx, relayInfo, other)
+
+	if noOutputRefunded {
+		other["no_output_refund"] = true
+		// had_first_chunk: true 表示上游发过 message_start 之类信封帧（但仍 0 内容）；
+		// false 表示真没收到任何首字节。两类成因不同，运维和上游工单要区分
+		other["had_first_chunk"] = noOutputHadFirstChunk
+		// tier 应用过则标记一下，免单覆盖了 tiered 算出的 quota，运维区分用
+		if tieredBillingApplied {
+			other["tier_overridden_by_refund"] = true
+		}
+		// 订阅计费源也单独标记，便于订阅大盘排查 PostDelta 负值来源
+		if relayInfo.BillingSource == BillingSourceSubscription {
+			other["subscription_no_output_refund"] = true
+		}
+		// 把 stream_status 由 eof/ok 校正为 empty_stream/error，便于运维识别
+		// 非流式请求也填一个 stream_status 标记，统一以"是否含 no_output_refund=true"
+		// 作为异常监控的检索字段；status=error / end_reason=empty_stream 对运维表意一致
+		streamInfo, ok := other["stream_status"].(map[string]interface{})
+		if !ok {
+			streamInfo = map[string]interface{}{}
+		}
+		streamInfo["status"] = "error"
+		streamInfo["end_reason"] = "empty_stream"
+		other["stream_status"] = streamInfo
+	}
+
+	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
+		ChannelId:        relayInfo.ChannelId,
+		PromptTokens:     summary.PromptTokens,
+		CompletionTokens: summary.CompletionTokens,
+		ModelName:        logModel,
+		TokenName:        summary.TokenName,
+		Quota:            summary.Quota,
+		Content:          logContent,
+		TokenId:          relayInfo.TokenId,
+		UseTimeSeconds:   int(summary.UseTimeSeconds),
+		IsStream:         relayInfo.IsStream,
+		Group:            relayInfo.UsingGroup,
+		Other:            other,
+	})
+	_ = backgroundtask.Submit("relay-sample-success", func(context.Context) {
+		perfmetrics.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
+	})
+}

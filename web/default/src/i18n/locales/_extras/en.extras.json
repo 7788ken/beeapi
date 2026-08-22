@@ -1,0 +1,3 @@
+{
+  "translation.Sliding window length for capacity counting. Default 60s. (P2: fixed at 60s in counter store; variable window enabled in P3.)": "Sliding window length for capacity counting. Default 60s. (P2: fixed at 60s in counter store; variable window enabled in P3.)"
+}

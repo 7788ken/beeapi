@@ -1,0 +1,4 @@
+{
+  "No-Output Refund: Min Request Seconds for Client-Gone": "No-Output Refund: Min Request Seconds for Client-Gone",
+  "When the client disconnects (client_gone) with zero output, refund only if the request lasted at least this many seconds. Filters short \"cache-farming\" abuse while refunding genuine long waits on slow upstreams. Other end reasons (EOF/timeout) are unaffected.": "When the client disconnects (client_gone) with zero output, refund only if the request lasted at least this many seconds. Filters short \"cache-farming\" abuse while refunding genuine long waits on slow upstreams. Other end reasons (EOF/timeout) are unaffected."
+}
