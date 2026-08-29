@@ -38,6 +38,7 @@ const (
 	MsgAuthUserIdMismatch        = "auth.user_id_mismatch"
 	MsgAuthUserBanned            = "auth.user_banned"
 	MsgAuthInsufficientPrivilege = "auth.insufficient_privilege"
+	MsgAuthAdminPermDenied       = "auth.admin_perm_denied"
 )
 
 // Token related messages
@@ -122,6 +123,10 @@ const (
 	MsgUserTelegramNotBound          = "user.telegram_not_bound"
 	MsgUserLinuxDOIdEmpty            = "user.linux_do_id_empty"
 	MsgUserQuotaChangeZero           = "user.quota_change_zero"
+	MsgUserQuotaAdjustAddOnly        = "user.quota_adjust_add_only"
+	MsgUserQuotaAdjustCommonOnly     = "user.quota_adjust_common_only"
+	MsgUserQuotaGrantSelfInsufficent = "user.quota_grant_self_insufficient"
+	MsgUserAdminPermsTargetInvalid   = "user.admin_perms_target_invalid"
 )
 
 // Quota related messages

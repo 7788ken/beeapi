@@ -241,7 +241,7 @@ func runChannelVerifyWithProtocol(parentCtx context.Context, channel *model.Chan
 	defer service.UnregisterVerifyCancel(report.Id)
 
 	// 发起上游 SSE
-	// 安全说明：base_url + api_key 会透传到测评网关 测评网关。
+	// 安全说明：base_url + api_key 会透传到外部测评网关。
 	// 这是设计本意（外部测评需要真 key 才能模拟客户端调用），且 AdminAuth 已限权；
 	// 但任何对 VerifyGatewayURL 配置项的修改都需经安全 review。
 	// extra_headers 来源于渠道的 header_override，主要用于 AWS External Anthropic API 等

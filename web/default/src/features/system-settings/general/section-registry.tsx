@@ -64,6 +64,10 @@ const GENERAL_SECTIONS = [
               settings['quota_setting.billing_refund_when_no_output'],
             refund_no_output_client_gone_min_seconds:
               settings['quota_setting.refund_no_output_client_gone_min_seconds'],
+            refund_no_output_exclude_upstream_refusal:
+              settings[
+                'quota_setting.refund_no_output_exclude_upstream_refusal'
+              ],
           },
         }}
       />

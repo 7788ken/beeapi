@@ -1,20 +1,24 @@
 import { useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useSearch } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { SectionPageLayout } from '@/components/layout'
+import { getUser } from './api'
 import { UsersDeleteDialog } from './components/users-delete-dialog'
 import { UsersMutateDrawer } from './components/users-mutate-drawer'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider, useUsers } from './components/users-provider'
 import { UsersTable } from './components/users-table'
-import { getUser } from './api'
 
 function UsersContent() {
   const { t } = useTranslation()
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()
   const search = useSearch({ strict: false }) as { edit?: number }
+  const canManage = useAdminPerms().user_manage
 
   useEffect(() => {
+    // ?edit=<id> 深链只对有「管理用户」权限的人开；否则抽屉里的保存也只会被后端 403
+    if (!canManage) return
     if (search.edit && !open) {
       getUser(search.edit).then((res) => {
         if (res.success && res.data) {
@@ -23,7 +27,7 @@ function UsersContent() {
         }
       })
     }
-  }, [search.edit])
+  }, [search.edit, canManage])
 
   return (
     <>

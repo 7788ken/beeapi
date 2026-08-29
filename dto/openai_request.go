@@ -90,6 +90,7 @@ type GeneralOpenAIRequest struct {
 	// Ali Qwen Params
 	VlHighResolutionImages json.RawMessage `json:"vl_high_resolution_images,omitempty"`
 	EnableThinking         json.RawMessage `json:"enable_thinking,omitempty"`
+	ThinkingBudget         json.RawMessage `json:"thinking_budget,omitempty"`
 	ChatTemplateKwargs     json.RawMessage `json:"chat_template_kwargs,omitempty"`
 	EnableSearch           json.RawMessage `json:"enable_search,omitempty"`
 	// ollama Params
@@ -106,6 +107,26 @@ type GeneralOpenAIRequest struct {
 	SearchMode             json.RawMessage `json:"search_mode,omitempty"`
 	// Minimax
 	ReasoningSplit json.RawMessage `json:"reasoning_split,omitempty"`
+}
+
+// IsQwenThinkingBudgetModel 判断模型是否属于支持 thinking_budget 的通义千问系列。
+// 覆盖 qwen / qwq 直接命名，以及 "厂商前缀/qwen-xxx" 这类聚合平台命名。
+func IsQwenThinkingBudgetModel(modelName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(normalized, "qwen") ||
+		strings.Contains(normalized, "/qwen") ||
+		strings.HasPrefix(normalized, "qwq") ||
+		strings.Contains(normalized, "/qwq")
+}
+
+// MarshalJSON 保证 thinking_budget 只在通义千问系列模型上向上游透传，
+// 避免该字段被其它渠道原样转发后触发上游的未知参数报错。
+func (r GeneralOpenAIRequest) MarshalJSON() ([]byte, error) {
+	type Alias GeneralOpenAIRequest
+	if !IsQwenThinkingBudgetModel(r.Model) {
+		r.ThinkingBudget = nil
+	}
+	return common.Marshal((*Alias)(&r))
 }
 
 func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {

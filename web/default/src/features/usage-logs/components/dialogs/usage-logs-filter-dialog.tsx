@@ -5,7 +5,7 @@ import { Search, RotateCcw, Calendar } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getNormalizedDateRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
-import { useIsAdmin } from '@/hooks/use-admin'
+import { useCanViewAllLogs } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { ComboboxInput } from '@/components/ui/combobox-input'
 import {
@@ -51,7 +51,8 @@ export function UsageLogsFilterDialog({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const searchParams = route.useSearch()
-  const isAdmin = useIsAdmin()
+  // isAdmin 在日志模块的语义是「看全站日志」：管理员被收回 log.view 后退化为只看自己的
+  const isAdmin = useCanViewAllLogs()
   const [internalOpen, setInternalOpen] = useState(false)
 
   const open = controlledOpen ?? internalOpen

@@ -1,6 +1,7 @@
 import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
+import { resolveAdminPermFlags } from '@/lib/admin-perms'
 import { ROLE } from '@/lib/roles'
 import { Users } from '@/features/users'
 
@@ -25,6 +26,17 @@ export const Route = createFileRoute('/_authenticated/users/')({
     const { auth } = useAuthStore.getState()
 
     if (!auth.user || auth.user.role < ROLE.ADMIN) {
+      throw redirect({
+        to: '/403',
+      })
+    }
+    // 「调整额度」也需要用户列表：任一权限即可进页面，页内动作再各自收窄
+    const perms = resolveAdminPermFlags(
+      auth.user.role,
+      auth.user.permissions?.admin,
+      auth.user.admin_perms
+    )
+    if (!perms.user_manage && !perms.quota_grant) {
       throw redirect({
         to: '/403',
       })

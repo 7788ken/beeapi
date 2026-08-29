@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useAdminPerms, useIsRoot } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,6 +32,13 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
   const [mode, setMode] = useState<QuotaAdjustMode>('add')
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
+  const isRoot = useIsRoot()
+  const perms = useAdminPerms()
+  // 管理员只能加额度：扣减和覆盖（含归零）是超级管理员专属，后端也会再拦一次
+  const availableModes: QuotaAdjustMode[] = isRoot
+    ? ['add', 'subtract', 'override']
+    : ['add']
+  const deductFromSelf = !isRoot && perms.quota_deduct_self
 
   const { meta: currencyMeta } = getCurrencyDisplay()
   const currencyLabel = getCurrencyLabel()
@@ -110,10 +118,20 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
             {getPreviewText()}
           </div>
 
-          <div className='space-y-2'>
+          {deductFromSelf && (
+            <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400'>
+              {t(
+                'This amount will be deducted from your own quota. The top-up fails if your balance is not enough.'
+              )}
+            </div>
+          )}
+
+          <div
+            className={cn('space-y-2', availableModes.length < 2 && 'hidden')}
+          >
             <Label>{t('Mode')}</Label>
             <div className='flex gap-1'>
-              {(['add', 'subtract', 'override'] as const).map((m) => (
+              {availableModes.map((m) => (
                 <Button
                   key={m}
                   type='button'

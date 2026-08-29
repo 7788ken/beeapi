@@ -79,7 +79,9 @@ export async function fetchChannelOptions(): Promise<ChannelOption[]> {
   try {
     const res = await api.get<{ success: boolean; data: { items: Array<{ id: number; name: string }> } }>('/api/channel/', {
       params: { p: 1, page_size: 200 },
-    })
+      // 渠道下拉只是筛选便利项；管理员没有「查看渠道」权限时会 403，静默降级成空列表
+      skipErrorHandler: true,
+    } as Parameters<typeof api.get>[1])
     if (res.data.success && Array.isArray(res.data.data?.items)) {
       return res.data.data.items.map(ch => ({ id: ch.id, name: ch.name }))
     }

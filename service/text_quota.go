@@ -355,51 +355,82 @@ var noOutputRefundEligibleFormats = map[types.RelayFormat]bool{
 	types.RelayFormatOpenAIResponsesCompaction: true,
 }
 
+// 拒退原因（refund_denied_reason）：基本免单条件已满足（completion=0 + 白名单格式 +
+// 无混合计费组件 + 开关开启）、但被策略性拒退时落库的稳定标记，供争议排查检索。
+const (
+	refundDeniedUpstreamRefusal = "upstream_refusal"
+	refundDeniedClientGoneQuick = "client_gone_quick"
+	refundDeniedShutdown        = "shutdown"
+)
+
+// isUpstreamRefusalReject 判断 admin_reject_reason 是否属于"上游显式拒绝"家族。
+// 只认响应体里的结构化标记；无标记的空流/断流不归因为拒绝——线上同形态绝大多数是
+// 渠道链路故障，按拒绝收费会误伤（solo/ch314 两案）。取值协议见 constant/reject_reason.go。
+// Gemini 两个前缀按值白名单收敛：OTHER/UNSPECIFIED/RECITATION 等归因不清或模型侧原因
+// 不算拒绝；gemini_empty_candidates（空候选且无 blockReason）同理不算。
+func isUpstreamRefusalReject(reason string) bool {
+	switch {
+	case reason == constant.RejectReasonClaudeRefusal:
+		return true
+	case reason == constant.RejectReasonOpenAIContentFilter:
+		return true
+	case strings.HasPrefix(reason, constant.RejectReasonGeminiBlockPrefix):
+		return constant.GeminiRefusalDenyValues[strings.ToUpper(strings.TrimPrefix(reason, constant.RejectReasonGeminiBlockPrefix))]
+	case strings.HasPrefix(reason, constant.RejectReasonGeminiFinishPrefix):
+		return constant.GeminiRefusalDenyValues[strings.ToUpper(strings.TrimPrefix(reason, constant.RejectReasonGeminiFinishPrefix))]
+	}
+	return false
+}
+
 // shouldRefundNoOutput 判断本次请求是否应作为"零产出"自动免单。
+// 返回 (是否免单, 拒退原因)：拒退原因仅在"本可免单但被策略拒退"时非空，用于落库审计。
 //
 // 通用规则：non-async + completion_tokens=0 → 免单。
 //
-// 安全护栏（任一命中则不免单）：
+// 安全护栏（任一命中则不免单，无拒退标记）：
 //  1. 开关关闭
 //  2. RelayFormat 不在 noOutputRefundEligibleFormats 白名单内
 //     （非 token 主导计费的模式：audio/image/realtime/rerank/embedding 等）
 //  3. summary 含 image/audio/web_search/file_search 等非 completion 计费组件
 //     （白名单格式 + 内嵌 image_generation_call / web_search 调用的混合计费场景）
 //
-// client_gone 不再一刀切拒退：completion_tokens==0 时客户端看不到任何生成内容（Claude 的
-// thinking 也计入 completion），断开只可能是上游迟迟不出字、客户端超时放弃。但为防"秒断刷
-// 上游 cache"的滥用，client_gone 场景额外要求请求已持续 >= 阈值
-// （RefundNoOutputClientGoneMinSeconds，默认 60s）才免单——正常久等的冤案 use_time 普遍远超
-// 此值，而秒断刷 cache 必然极短。应用 shutdown 不属于客户免单；其它结束原因
-// （EOF/timeout 等）不受时长限制。
+// 策略性拒退（落 refund_denied_reason）：
+//   - 上游显式拒绝（RefundNoOutputExcludeUpstreamRefusal 开启时）：客户内容触发上游
+//     风控（Claude refusal / OpenAI content_filter / Gemini 安全拦截），按输入照常计费。
+//   - shutdown：应用自身重启不属于客户免单。
+//   - client_gone 秒断：区分"被动久等的冤案"与"主动秒断刷 cache 的滥用"——仅当请求
+//     实际持续 >= 阈值（RefundNoOutputClientGoneMinSeconds，默认 60s）才免单；正常久等
+//     的冤案 use_time 普遍远超此值。其它结束原因（EOF/timeout 等）不受时长限制。
+//
 // 是否真有首帧仍记录到 other 的 had_first_chunk 审计字段。
-func shouldRefundNoOutput(relayInfo *relaycommon.RelayInfo, summary textQuotaSummary) bool {
+func shouldRefundNoOutput(relayInfo *relaycommon.RelayInfo, summary textQuotaSummary, adminRejectReason string) (bool, string) {
 	if relayInfo == nil {
-		return false
+		return false, ""
 	}
 	if !operation_setting.GetQuotaSetting().BillingRefundWhenNoOutput {
-		return false
+		return false, ""
 	}
 	if summary.CompletionTokens != 0 {
-		return false
+		return false, ""
 	}
 	if !noOutputRefundEligibleFormats[relayInfo.RelayFormat] {
-		return false
+		return false, ""
 	}
 	if hasNonCompletionBillingComponent(summary) {
-		return false
+		return false, ""
+	}
+	if operation_setting.GetQuotaSetting().RefundNoOutputExcludeUpstreamRefusal && isUpstreamRefusalReject(adminRejectReason) {
+		return false, refundDeniedUpstreamRefusal
 	}
 	if relayInfo.StreamStatus != nil && relayInfo.StreamStatus.EndReason() == relaycommon.StreamEndReasonShutdown {
-		return false
+		return false, refundDeniedShutdown
 	}
-	// client_gone：区分"被动久等的冤案"与"主动秒断刷 cache 的滥用"——仅当请求实际持续
-	// >= 阈值（客户确实在等慢上游）才免单。线上冤案 use_time 普遍 >60s，秒断必然极短。
 	if relayInfo.StreamStatus != nil && relayInfo.StreamStatus.EndReason() == relaycommon.StreamEndReasonClientGone {
 		if summary.UseTimeSeconds < operation_setting.GetQuotaSetting().RefundNoOutputClientGoneMinSeconds {
-			return false
+			return false, refundDeniedClientGoneQuick
 		}
 	}
-	return true
+	return true, ""
 }
 
 // hasNonCompletionBillingComponent 检查 summary 是否包含非 completion_tokens 计费
@@ -481,7 +512,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		extraContent = append(extraContent, fmt.Sprintf("Image Generation Call 花费 %s", decimal.NewFromFloat(summary.ImageGenerationCallPrice).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
 	}
 
-	noOutputRefunded := shouldRefundNoOutput(relayInfo, summary)
+	noOutputRefunded, refundDeniedReason := shouldRefundNoOutput(relayInfo, summary, adminRejectReason)
 	noOutputHadFirstChunk := noOutputRefunded && relayInfo.HasSendResponse()
 	if noOutputRefunded {
 		switch {
@@ -497,6 +528,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			relayInfo.RelayFormat, relayInfo.RelayMode, relayInfo.IsStream,
 			relayInfo.FinalPreConsumedQuota, summary.Quota, relayInfo.BillingSource, tieredBillingApplied, noOutputHadFirstChunk))
 		summary.Quota = 0
+	} else if refundDeniedReason == refundDeniedUpstreamRefusal {
+		// 文案不承诺"照常计费"：TotalTokens=0 时下方还会追加"无法扣费"，避免同一条日志自相矛盾
+		extraContent = append(extraContent, "上游模型拒绝生成（安全策略），不适用零输出免单")
+		// 仅上游拒绝拒退落 warn（低频且计费相关）；client_gone 秒断/shutdown 拒退是常规形态，
+		// 只落库 refund_denied_reason，不逐请求写日志以免稀释错误日志
+		logger.LogWarn(ctx, fmt.Sprintf("no-output refund denied, denied_reason=%s reject_reason=%s request_id=%s userId=%d channelId=%d tokenId=%d model=%s use_time=%ds quota=%d",
+			refundDeniedReason, adminRejectReason, relayInfo.RequestId, relayInfo.UserId, relayInfo.ChannelId,
+			relayInfo.TokenId, summary.ModelName, summary.UseTimeSeconds, summary.Quota))
 	}
 
 	if summary.TotalTokens == 0 {
@@ -619,9 +658,17 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		if !ok {
 			streamInfo = map[string]interface{}{}
 		}
+		// 覆写前保留真实结束原因（client_gone/eof/timeout...），免单原因分类审计要用；
+		// 空串（StreamStatus 建了但未 SetEndReason）无信息量，不写
+		if originReason, _ := streamInfo["end_reason"].(string); originReason != "" {
+			streamInfo["origin_end_reason"] = originReason
+		}
 		streamInfo["status"] = "error"
 		streamInfo["end_reason"] = "empty_stream"
 		other["stream_status"] = streamInfo
+	}
+	if refundDeniedReason != "" {
+		other["refund_denied_reason"] = refundDeniedReason
 	}
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{

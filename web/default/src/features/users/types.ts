@@ -46,6 +46,8 @@ export const userSchema = z.object({
   pinned: z.boolean().optional(),
   // 账号有效期 unix sec；0 = 永不过期。仅 admin 可设；登录时若已过期则拒绝。
   expires_at: z.number().optional(),
+  // 实际生效的管理员细粒度权限（后端已展开默认值）；普通用户为空数组
+  admin_perms: z.array(z.string()).optional(),
 })
 export type User = z.infer<typeof userSchema>
 

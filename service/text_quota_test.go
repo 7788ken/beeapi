@@ -598,8 +598,85 @@ func TestShouldRefundNoOutput(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			operation_setting.GetQuotaSetting().BillingRefundWhenNoOutput = c.setting
-			got := shouldRefundNoOutput(c.relay, c.summary)
+			got, _ := shouldRefundNoOutput(c.relay, c.summary, "")
 			require.Equal(t, c.want, got)
+		})
+	}
+}
+
+// TestShouldRefundNoOutputUpstreamRefusalAndDeniedReasons 覆盖"上游显式拒绝不免单"
+// 开关与 refund_denied_reason 落点：只认显式标记家族，无标记/无关标记不受影响；
+// 开关关闭时保持上线前行为（refusal 也免单）。
+func TestShouldRefundNoOutputUpstreamRefusalAndDeniedReasons(t *testing.T) {
+	qs := operation_setting.GetQuotaSetting()
+	originalEnabled := qs.BillingRefundWhenNoOutput
+	originalExclude := qs.RefundNoOutputExcludeUpstreamRefusal
+	t.Cleanup(func() {
+		qs.BillingRefundWhenNoOutput = originalEnabled
+		qs.RefundNoOutputExcludeUpstreamRefusal = originalExclude
+	})
+	qs.BillingRefundWhenNoOutput = true
+
+	startTime := time.Now()
+	newStreamStatus := func(reason relaycommon.StreamEndReason) *relaycommon.StreamStatus {
+		ss := relaycommon.NewStreamStatus()
+		ss.SetEndReason(reason, nil)
+		return ss
+	}
+	buildRelay := func(ss *relaycommon.StreamStatus) *relaycommon.RelayInfo {
+		return &relaycommon.RelayInfo{
+			IsStream:          true,
+			StartTime:         startTime,
+			FirstResponseTime: startTime.Add(time.Second),
+			StreamStatus:      ss,
+			RelayFormat:       types.RelayFormatClaude,
+		}
+	}
+	empty := textQuotaSummary{CompletionTokens: 0}
+
+	cases := []struct {
+		name           string
+		excludeRefusal bool
+		rejectReason   string
+		relay          *relaycommon.RelayInfo
+		summary        textQuotaSummary
+		wantRefund     bool
+		wantDenied     string
+	}{
+		// ── 开关开启：显式拒绝家族全部拒退 ─────────────────────────────
+		{"claude_refusal_denied", true, "claude_stop_reason=refusal", buildRelay(newStreamStatus(relaycommon.StreamEndReasonDone)), empty, false, refundDeniedUpstreamRefusal},
+		{"openai_content_filter_denied", true, "openai_finish_reason=content_filter", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, false, refundDeniedUpstreamRefusal},
+		{"gemini_block_reason_denied", true, "gemini_block_reason=SAFETY", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, false, refundDeniedUpstreamRefusal},
+		{"gemini_finish_reason_denied", true, "gemini_finish_reason=PROHIBITED_CONTENT", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, false, refundDeniedUpstreamRefusal},
+		{"gemini_image_prohibited_denied", true, "gemini_finish_reason=IMAGE_PROHIBITED_CONTENT", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, false, refundDeniedUpstreamRefusal},
+		// ── 非拒绝家族标记不影响免单 ──────────────────────────────────
+		// blockReason/finishReason 值白名单：OTHER/UNSPECIFIED（原因不明桶）与
+		// RECITATION（模型侧归因）不算客户触发的拒绝，照常免单
+		{"gemini_block_reason_other_still_refund", true, "gemini_block_reason=OTHER", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, true, ""},
+		{"gemini_block_reason_unspecified_still_refund", true, "gemini_block_reason=BLOCK_REASON_UNSPECIFIED", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, true, ""},
+		{"gemini_finish_reason_recitation_still_refund", true, "gemini_finish_reason=RECITATION", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, true, ""},
+		{"gemini_empty_candidates_still_refund", true, "gemini_empty_candidates", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, true, ""},
+		{"unrelated_reject_reason_still_refund", true, "some_admin_note", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, true, ""},
+		{"no_reject_reason_still_refund", true, "", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, true, ""},
+		// ── 门控顺序锁定：白名单外格式/混合计费组件先于 refusal 判定，不产出拒退标记 ──
+		{"refusal_with_image_component_no_denied_marker", true, "claude_stop_reason=refusal", buildRelay(newStreamStatus(relaycommon.StreamEndReasonEOF)), textQuotaSummary{CompletionTokens: 0, ImageTokens: 100}, false, ""},
+		// ── 开关关闭：refusal 仍免单（上线前行为）─────────────────────
+		{"claude_refusal_refund_when_disabled", false, "claude_stop_reason=refusal", buildRelay(newStreamStatus(relaycommon.StreamEndReasonDone)), empty, true, ""},
+		// ── completion>0：正常计费路径，无拒退标记 ─────────────────────
+		{"refusal_with_completion_normal_billing", true, "claude_stop_reason=refusal", buildRelay(newStreamStatus(relaycommon.StreamEndReasonDone)), textQuotaSummary{CompletionTokens: 9}, false, ""},
+		// ── 既有策略性拒退的 denied_reason 落点 ────────────────────────
+		{"client_gone_quick_denied_reason", false, "", buildRelay(newStreamStatus(relaycommon.StreamEndReasonClientGone)), textQuotaSummary{CompletionTokens: 0, UseTimeSeconds: 3}, false, refundDeniedClientGoneQuick},
+		{"shutdown_denied_reason", false, "", buildRelay(newStreamStatus(relaycommon.StreamEndReasonShutdown)), textQuotaSummary{CompletionTokens: 0, UseTimeSeconds: 120}, false, refundDeniedShutdown},
+		// ── refusal 优先于 client_gone 秒断 ────────────────────────────
+		{"refusal_takes_precedence_over_client_gone", true, "claude_stop_reason=refusal", buildRelay(newStreamStatus(relaycommon.StreamEndReasonClientGone)), textQuotaSummary{CompletionTokens: 0, UseTimeSeconds: 3}, false, refundDeniedUpstreamRefusal},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			qs.RefundNoOutputExcludeUpstreamRefusal = c.excludeRefusal
+			gotRefund, gotDenied := shouldRefundNoOutput(c.relay, c.summary, c.rejectReason)
+			require.Equal(t, c.wantRefund, gotRefund)
+			require.Equal(t, c.wantDenied, gotDenied)
 		})
 	}
 }

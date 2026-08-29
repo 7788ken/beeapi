@@ -37,6 +37,7 @@ const quotaSchema = z.object({
     enable_free_model_pre_consume: z.boolean(),
     billing_refund_when_no_output: z.boolean(),
     refund_no_output_client_gone_min_seconds: z.coerce.number().min(0),
+    refund_no_output_exclude_upstream_refusal: z.boolean(),
   }),
 })
 
@@ -370,6 +371,32 @@ export function QuotaSettingsSection({
                   )}
                 </FormDescription>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='quota_setting.refund_no_output_exclude_upstream_refusal'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                <div className='space-y-0.5'>
+                  <FormLabel className='text-base'>
+                    {t('Bill zero-output responses explicitly refused by upstream')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      'When enabled, zero-output responses carrying an explicit upstream refusal marker (Claude stop_reason=refusal, OpenAI finish_reason=content_filter, Gemini safety block) are billed normally instead of auto-refunded. Unmarked empty/aborted streams are still refunded. Only effective when the no-output refund switch above is on.'
+                    )}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={updateOption.isPending}
+                  />
+                </FormControl>
               </FormItem>
             )}
           />

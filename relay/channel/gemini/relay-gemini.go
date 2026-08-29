@@ -1093,6 +1093,26 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 	return nil
 }
 
+// maybeMarkGeminiBlockedFinishReason 与 promptFeedback.blockReason 检查互补：
+// blockReason 只覆盖"整个 prompt 被拦、candidates 为空"；这里覆盖"candidate 存在但
+// 生成被安全策略掐断"（finishReason=SAFETY 等）。candidates 为空时天然 no-op。
+// 家族取值与计费拒退共用 constant.GeminiRefusalDenyValues，勿在此另建清单。
+func maybeMarkGeminiBlockedFinishReason(c *gin.Context, geminiResponse *dto.GeminiChatResponse) {
+	if geminiResponse == nil {
+		return
+	}
+	for _, candidate := range geminiResponse.Candidates {
+		if candidate.FinishReason == nil {
+			continue
+		}
+		reason := strings.ToUpper(*candidate.FinishReason)
+		if constant.GeminiRefusalDenyValues[reason] {
+			relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiFinishPrefix+reason)
+			return
+		}
+	}
+}
+
 func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, *types.NewAPIError) {
 	var usage = &dto.Usage{}
 	var imageCount int
@@ -1107,8 +1127,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		}
 
 		if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
+			relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiBlockPrefix+*geminiResponse.PromptFeedback.BlockReason)
 		}
+		maybeMarkGeminiBlockedFinishReason(c, &geminiResponse)
 
 		// 统计图片数量
 		for _, candidate := range geminiResponse.Candidates {
@@ -1261,19 +1282,20 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	maybeMarkGeminiBlockedFinishReason(c, &geminiResponse)
 	if len(geminiResponse.Candidates) == 0 {
 		usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
 
 		var newAPIError *types.NewAPIError
 		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
+			relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiBlockPrefix+*geminiResponse.PromptFeedback.BlockReason)
 			newAPIError = types.NewOpenAIError(
 				errors.New("request blocked by Gemini API: "+*geminiResponse.PromptFeedback.BlockReason),
 				types.ErrorCodePromptBlocked,
 				http.StatusBadRequest,
 			)
 		} else {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_empty_candidates")
+			relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiEmptyCandidates)
 			newAPIError = types.NewOpenAIError(
 				errors.New("empty response from Gemini API"),
 				types.ErrorCodeEmptyResponse,

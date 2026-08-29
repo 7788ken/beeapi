@@ -10,6 +10,11 @@ type QuotaSetting struct {
 	// 仅当请求实际持续 >= 该值才免单，用于区分"被动久等慢上游的冤案"与"秒断刷 cache 的滥用"。
 	// 其它结束原因（EOF/timeout 等）不受此限。默认 60。
 	RefundNoOutputClientGoneMinSeconds int64 `json:"refund_no_output_client_gone_min_seconds"`
+	// 上游显式拒绝（Claude stop_reason=refusal / OpenAI finish_reason=content_filter /
+	// Gemini blockReason 及安全类 finishReason）的零产出不免单，按输入照常计费——
+	// 客户内容触发上游风控不属于链路故障。无显式标记的空流/断流/超时不受影响，仍按原规则免单。
+	// 默认 false（保持上线前行为），各实例在后台按需开启。
+	RefundNoOutputExcludeUpstreamRefusal bool `json:"refund_no_output_exclude_upstream_refusal"`
 	// 钱包信任旁路阈值（美元）。>0 时，余额扣除本次预估后仍不低于该值、且令牌为
 	// 无限额度的请求跳过预扣（不写 users 行、不落凭据），结算走批量聚合，消除
 	// 高频用户的 users.quota 单行热点。0 = 关闭（默认，保持逐请求预扣）。
@@ -18,10 +23,11 @@ type QuotaSetting struct {
 
 // 默认配置
 var quotaSetting = QuotaSetting{
-	EnableFreeModelPreConsume:          true,
-	BillingRefundWhenNoOutput:          true,
-	RefundNoOutputClientGoneMinSeconds: 60,
-	WalletTrustQuotaUsd:                0,
+	EnableFreeModelPreConsume:            true,
+	BillingRefundWhenNoOutput:            true,
+	RefundNoOutputClientGoneMinSeconds:   60,
+	RefundNoOutputExcludeUpstreamRefusal: false,
+	WalletTrustQuotaUsd:                  0,
 }
 
 func init() {

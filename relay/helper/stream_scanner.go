@@ -26,6 +26,10 @@ const (
 	InitialScannerBufferSize    = 64 << 10 // 64KB (64*1024)
 	DefaultMaxScannerBufferSize = 64 << 20 // 64MB (64*1024*1024) default SSE buffer size
 	DefaultPingInterval         = 10 * time.Second
+	// DefaultStreamingTimeout 与 common/init.go 里 STREAMING_TIMEOUT 的默认值一致。
+	// STREAMING_TIMEOUT=0 能通过 Atoi 且不走 GetEnvOrDefault 的默认分支，会一路传成
+	// time.NewTicker(0) / ticker.Reset(0)，二者对非正值都是 panic。
+	DefaultStreamingTimeout = 300 * time.Second
 )
 
 func getScannerBufferSize() int {
@@ -52,6 +56,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	info.StreamStatus = relaycommon.NewStreamStatus()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	if streamingTimeout <= 0 {
+		streamingTimeout = DefaultStreamingTimeout
+	}
 
 	var (
 		stopChan    = make(chan bool)

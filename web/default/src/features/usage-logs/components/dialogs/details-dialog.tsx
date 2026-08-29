@@ -680,6 +680,19 @@ export function DetailsDialog(props: DetailsDialogProps) {
               </DetailSection>
             )}
 
+            {/* Refund denied reason (admin only) */}
+            {props.isAdmin && other?.refund_denied_reason && (
+              <DetailSection
+                icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+                label={t('Refund Denied Reason')}
+                variant='danger'
+              >
+                <p className='text-xs break-words'>
+                  {other.refund_denied_reason}
+                </p>
+              </DetailSection>
+            )}
+
             {/* Violation fee info */}
             {isViolation && other && (
               <DetailSection
@@ -925,6 +938,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     <DetailRow
                       label={t('End Reason')}
                       value={other.stream_status.end_reason}
+                    />
+                  )}
+                  {other.stream_status.origin_end_reason && (
+                    <DetailRow
+                      label={t('Origin End Reason')}
+                      value={other.stream_status.origin_end_reason}
                     />
                   )}
                   {(other.stream_status.error_count ?? 0) > 0 && (

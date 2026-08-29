@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 import { isSidebarModuleEnabled } from '@/lib/nav-modules'
 import { cn } from '@/lib/utils'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -201,6 +202,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const params = route.useParams()
   const userRole = useAuthStore((state) => state.auth.user?.role)
+  const adminPerms = useAdminPerms()
   const activeSection = (params.section ??
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
 
@@ -287,18 +289,19 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
+  // 渠道分析 / 对账读的是 /api/channel/*，管理员被收回「查看渠道」权限后这两个 tab 会 403
+  const canViewChannels = isAdmin && adminPerms.channel_view
   const visibleSections = useMemo(
     () =>
-      DASHBOARD_SECTION_IDS.filter(
-        (section) =>
-          section !== 'overview' &&
-          ((section !== 'users' &&
-            section !== 'groups' &&
-            section !== 'channels' &&
-            section !== 'reconcile') ||
-            isAdmin)
-      ),
-    [isAdmin]
+      DASHBOARD_SECTION_IDS.filter((section) => {
+        if (section === 'overview') return false
+        if (section === 'channels' || section === 'reconcile') {
+          return canViewChannels
+        }
+        if (section === 'users' || section === 'groups') return isAdmin
+        return true
+      }),
+    [isAdmin, canViewChannels]
   )
   const handleSectionChange = useCallback(
     (section: string) => {

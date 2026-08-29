@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 )
 
 type readCloser struct {
@@ -38,6 +39,7 @@ func DecompressRequestMiddleware() gin.HandlerFunc {
 		wrapMaxBytes := func(body io.ReadCloser) io.ReadCloser {
 			return http.MaxBytesReader(c.Writer, body, maxBytes)
 		}
+		decompressed := false
 
 		switch c.GetHeader("Content-Encoding") {
 		case "gzip":
@@ -55,7 +57,7 @@ func DecompressRequestMiddleware() gin.HandlerFunc {
 					return origBody.Close()
 				},
 			})
-			c.Request.Header.Del("Content-Encoding")
+			decompressed = true
 		case "br":
 			reader := brotli.NewReader(origBody)
 			c.Request.Body = wrapMaxBytes(&readCloser{
@@ -64,10 +66,38 @@ func DecompressRequestMiddleware() gin.HandlerFunc {
 					return origBody.Close()
 				},
 			})
-			c.Request.Header.Del("Content-Encoding")
+			decompressed = true
+		case "zstd":
+			// WithDecoderConcurrency(1) keeps decoding synchronous and is deliberate.
+			// The default (GOMAXPROCS) makes zstd.NewReader spawn background
+			// goroutines that block on an output channel nobody drains and are only
+			// released by Close(). This middleware is registered before TokenAuth, so
+			// a request rejected by auth never reaches common.GetRequestBody — the
+			// only caller that closes the body — and strands three goroutines for
+			// good. Measured at 3 per aborted request once the body exceeds ~1MB
+			// decompressed, which a ~150-byte compressed payload achieves. Sync
+			// decoding keeps no such background state.
+			reader, err := zstd.NewReader(origBody, zstd.WithDecoderConcurrency(1))
+			if err != nil {
+				_ = origBody.Close()
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			c.Request.Body = wrapMaxBytes(&readCloser{
+				Reader: reader,
+				closeFn: func() error {
+					reader.Close()
+					return origBody.Close()
+				},
+			})
+			decompressed = true
 		default:
 			// Even for uncompressed bodies, enforce a max size to avoid huge request allocations.
 			c.Request.Body = wrapMaxBytes(origBody)
+		}
+
+		if decompressed {
+			c.Request.Header.Del("Content-Encoding")
 		}
 
 		// Continue processing the request

@@ -51,6 +51,7 @@ export type GeneralSettings = {
   'quota_setting.enable_free_model_pre_consume': boolean
   'quota_setting.billing_refund_when_no_output': boolean
   'quota_setting.refund_no_output_client_gone_min_seconds': number
+  'quota_setting.refund_no_output_exclude_upstream_refusal': boolean
   QuotaPerUnit: number
   USDExchangeRate: number
   'general_setting.quota_display_type': string

@@ -531,10 +531,13 @@ type safeUserResponse struct {
 	OriginalPassword string  `json:"original_password,omitempty"`
 	VerificationCode string  `json:"verification_code,omitempty"`
 	AccessToken      *string `json:"access_token,omitempty"`
+	// AdminPerms 是「实际生效」的管理员权限（未配置的管理员会展开成默认全开，
+	// root 展开成全部模块权限），前端权限弹窗直接按它渲染勾选状态。
+	AdminPerms []string `json:"admin_perms"`
 }
 
 func toSafeUserResponse(user *model.User) safeUserResponse {
-	return safeUserResponse{User: user}
+	return safeUserResponse{User: user, AdminPerms: user.EffectiveAdminPerms()}
 }
 
 func toSafeUserResponses(users []*model.User) []safeUserResponse {
@@ -764,7 +767,6 @@ func GetAffCode(c *gin.Context) {
 
 func GetSelf(c *gin.Context) {
 	id := c.GetInt("id")
-	userRole := c.GetInt("role")
 	user, err := model.GetUserById(id, false)
 	if err != nil {
 		common.ApiError(c, err)
@@ -774,7 +776,7 @@ func GetSelf(c *gin.Context) {
 	user.Remark = ""
 
 	// 计算用户权限信息
-	permissions := calculateUserPermissions(userRole)
+	permissions := calculateUserPermissions(user)
 
 	// 获取用户设置并提取sidebar_modules
 	userSetting := user.GetSetting()
@@ -806,6 +808,7 @@ func GetSelf(c *gin.Context) {
 		"stripe_customer":   user.StripeCustomer,
 		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
 		"permissions":       permissions,                // 新增权限字段
+		"admin_perms":       user.EffectiveAdminPerms(), // 管理员细粒度权限（普通用户为空）
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -816,9 +819,26 @@ func GetSelf(c *gin.Context) {
 	return
 }
 
+// adminPermFlags 把权限 key 列表摊平成前端好判断的布尔字段
+func adminPermFlags(user *model.User) map[string]bool {
+	return map[string]bool{
+		"channel_view":      user.HasAdminPerm(model.AdminPermChannelView),
+		"channel_edit":      user.HasAdminPerm(model.AdminPermChannelEdit),
+		"log_view":          user.HasAdminPerm(model.AdminPermLogView),
+		"quota_grant":       user.HasAdminPerm(model.AdminPermQuotaGrant),
+		"user_manage":       user.HasAdminPerm(model.AdminPermUserManage),
+		"quota_deduct_self": user.HasAdminPerm(model.AdminPermQuotaDeductSelf),
+	}
+}
+
 // 计算用户权限的辅助函数
-func calculateUserPermissions(userRole int) map[string]interface{} {
-	permissions := map[string]interface{}{}
+func calculateUserPermissions(user *model.User) map[string]interface{} {
+	userRole := user.Role
+	permissions := map[string]interface{}{
+		// admin 段是超级管理员给该管理员配置的细粒度权限，前端据此隐藏入口。
+		// 后端每个接口自己也会再校验一次，前端这层只负责别让人点到 403。
+		"admin": adminPermFlags(user),
+	}
 
 	// 根据用户角色计算权限
 	if userRole == common.RoleRootUser {
@@ -1287,6 +1307,27 @@ func ManageUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	// 细粒度权限：调额度走「调整额度」，其余动作走「管理用户」。
+	// root 直接放行，也不用读库——超级管理员恒有全部模块权限。
+	operatorPerms := ""
+	if myRole < common.RoleRootUser {
+		requiredPerm := model.AdminPermUserManage
+		if req.Action == "add_quota" {
+			requiredPerm = model.AdminPermQuotaGrant
+		}
+		operatorPerms, err = model.GetUserAdminPermsRaw(c.GetInt("id"))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if !model.HasAdminPermFor(myRole, operatorPerms, requiredPerm) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthAdminPermDenied),
+			})
+			return
+		}
+	}
 	switch req.Action {
 	case "disable":
 		user.Status = common.UserStatusDisabled
@@ -1368,18 +1409,45 @@ func ManageUser(c *gin.Context) {
 			"admin_id":       adminId,
 			"admin_username": adminName,
 		}
+		// 非超级管理员只能给普通用户「增加」额度：扣减和覆盖（含归零）一律拒绝
+		if myRole != common.RoleRootUser {
+			if user.Role != common.RoleCommonUser {
+				common.ApiErrorI18n(c, i18n.MsgUserQuotaAdjustCommonOnly)
+				return
+			}
+			if req.Mode != "add" {
+				common.ApiErrorI18n(c, i18n.MsgUserQuotaAdjustAddOnly)
+				return
+			}
+		}
 		switch req.Mode {
 		case "add":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
 			}
-			if err := model.IncreaseUserQuota(user.Id, req.Value); err != nil {
-				common.ApiError(c, err)
-				return
+			// 开了「充值扣自己额度」的管理员：本次增加的额度从他自己账户里划走，不足则整笔拒绝
+			if model.HasAdminPermFor(myRole, operatorPerms, model.AdminPermQuotaDeductSelf) && adminId != user.Id {
+				if err := model.TransferUserQuota(adminId, user.Id, req.Value); err != nil {
+					if errors.Is(err, model.ErrInsufficientUserQuota) {
+						common.ApiErrorI18n(c, i18n.MsgUserQuotaGrantSelfInsufficent)
+						return
+					}
+					common.ApiError(c, err)
+					return
+				}
+				model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
+					fmt.Sprintf("管理员增加用户额度 %s（从管理员 %s 的额度中扣除）", logger.LogQuota(req.Value), adminName), adminInfo)
+				model.RecordLogWithAdminInfo(adminId, model.LogTypeManage,
+					fmt.Sprintf("给用户 %s 充值，扣减自身额度 %s", user.Username, logger.LogQuota(req.Value)), adminInfo)
+			} else {
+				if err := model.IncreaseUserQuota(user.Id, req.Value); err != nil {
+					common.ApiError(c, err)
+					return
+				}
+				model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
+					fmt.Sprintf("管理员增加用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
 			}
-			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
-				fmt.Sprintf("管理员增加用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
 		case "subtract":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
@@ -1431,6 +1499,55 @@ func ManageUser(c *gin.Context) {
 		"data":    clearUser,
 	})
 	return
+}
+
+type updateAdminPermsRequest struct {
+	AdminPerms []string `json:"admin_perms"`
+}
+
+// UpdateUserAdminPerms 超级管理员给管理员配置细粒度权限（路由已挂 RootAuth）。
+// 权限判定每次现读库，因此这里不需要 bump auth version / 清用户缓存，改完即刻生效。
+func UpdateUserAdminPerms(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	var req updateAdminPermsRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	user, err := model.GetUserById(id, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// 只给管理员配：普通用户没有管理端入口，root 恒为全权限
+	if user.Role != common.RoleAdminUser {
+		common.ApiErrorI18n(c, i18n.MsgUserAdminPermsTargetInvalid)
+		return
+	}
+	raw, err := model.NormalizeAdminPerms(req.AdminPerms)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if err := model.UpdateUserAdminPerms(id, raw); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RecordLogWithAdminInfo(id, model.LogTypeManage,
+		fmt.Sprintf("超级管理员将该管理员权限设置为 [%s]", raw), map[string]interface{}{
+			"admin_id":       c.GetInt("id"),
+			"admin_username": c.GetString("username"),
+		})
+	user.AdminPerms = raw
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    user.EffectiveAdminPerms(),
+	})
 }
 
 type emailBindRequest struct {

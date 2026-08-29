@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
 import { Power, PowerOff, Tag, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -40,6 +41,8 @@ export function DataTableBulkActions<TData>({
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [tagValue, setTagValue] = useState('')
+  // 批量启停/打标签/删除全是写操作，没有「新建/修改渠道」权限就整条工具栏不渲染
+  const canEdit = useAdminPerms().channel_edit
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const selectedIds = selectedRows.reduce<number[]>((ids, row) => {
@@ -77,6 +80,10 @@ export function DataTableBulkActions<TData>({
       setTagValue('')
       handleClearSelection()
     })
+  }
+
+  if (!canEdit) {
+    return null
   }
 
   return (

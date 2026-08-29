@@ -4,7 +4,7 @@ import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { ChevronDown, Eye, EyeOff, Loader2, RotateCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { useIsAdmin } from '@/hooks/use-admin'
+import { useCanViewAllLogs } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { ComboboxInput } from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
@@ -45,7 +45,8 @@ export function CommonLogsFilterBar({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
-  const isAdmin = useIsAdmin()
+  // isAdmin 在日志模块的语义是「看全站日志」：管理员被收回 log.view 后退化为只看自己的
+  const isAdmin = useCanViewAllLogs()
   const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
   const { modelOptions, groupOptions } = useFilterOptions()

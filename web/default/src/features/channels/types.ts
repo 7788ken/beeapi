@@ -459,7 +459,7 @@ export interface GetVerifyReportResponse {
 }
 
 // SSE events emitted by POST /api/channel/:id/verify
-// (透传测评网关 上游事件 + 后端注入的 queued/acquired/report_created)
+// (透传测评网关上游事件 + 后端注入的 queued/acquired/report_created)
 export type VerifySSEEvent =
   | { type: 'queued'; data: { position: number } }
   | { type: 'acquired'; data: { position: number } }

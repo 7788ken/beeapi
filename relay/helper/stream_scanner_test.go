@@ -688,3 +688,41 @@ func TestStreamScannerHandler_PingInterleavesWithSlowUpstream(t *testing.T) {
 	assert.GreaterOrEqual(t, pingCount, 3,
 		"expected at least 3 pings during 5s stream with 1s ping interval; got %d", pingCount)
 }
+
+// STREAMING_TIMEOUT=0 能通过 Atoi 且不走 GetEnvOrDefault 的默认分支，会一路传成
+// time.NewTicker(0) 与 ticker.Reset(0)，二者对非正值都直接 panic。这既是生产上
+// 「把超时设成 0 表示禁用」这一常见运维直觉的雷，也是本包并行用例 flaky 的真根因：
+// 测试二进制不跑 common/init.go 的 env 加载，全局初值即为 0，任一用例的 Cleanup
+// 把它还原成 0 后，并行运行的其它用例就会读到 0。
+// Not parallel: modifies global constant.StreamingTimeout
+func TestStreamScannerHandlerToleratesNonPositiveTimeout(t *testing.T) {
+	for _, timeout := range []int{0, -1} {
+		t.Run(fmt.Sprintf("timeout_%d", timeout), func(t *testing.T) {
+			oldTimeout := constant.StreamingTimeout
+			constant.StreamingTimeout = timeout
+			t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			resp := &http.Response{Body: io.NopCloser(strings.NewReader(buildSSEBody(3)))}
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+
+			var count atomic.Int64
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+					count.Add(1)
+				})
+			}()
+
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out")
+			}
+			assert.Equal(t, int64(3), count.Load(), "非正超时应回退到默认值并正常读完流")
+		})
+	}
+}

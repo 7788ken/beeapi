@@ -32,6 +32,7 @@ auth.user_id_format_error: "Unauthorized, New-Api-User header format error"
 auth.user_id_mismatch: "Unauthorized, New-Api-User does not match logged in user"
 auth.user_banned: "User has been banned"
 auth.insufficient_privilege: "Unauthorized, insufficient privileges"
+auth.admin_perm_denied: "Unauthorized, this permission has not been granted to your account"
 
 # Token messages
 token.name_too_long: "Token name is too long"
@@ -110,6 +111,10 @@ user.telegram_id_empty: "Telegram ID is empty!"
 user.telegram_not_bound: "This Telegram account is not bound"
 user.linux_do_id_empty: "Linux DO ID is empty!"
 user.quota_change_zero: "Quota change amount cannot be zero"
+user.quota_adjust_add_only: "Only the super admin can subtract or override user quota"
+user.quota_adjust_common_only: "Only regular users' quota can be adjusted"
+user.quota_grant_self_insufficient: "Your own quota is not enough for this top-up"
+user.admin_perms_target_invalid: "Permissions can only be configured for admin accounts"
 
 # Quota messages
 quota.negative: "Quota cannot be negative!"

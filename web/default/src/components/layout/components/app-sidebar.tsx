@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 import { useLayout } from '@/context/layout-provider'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
 import { useSidebarData } from '@/hooks/use-sidebar-data'
 import {
@@ -29,6 +30,7 @@ export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const { pathname } = useLocation()
   const userRole = useAuthStore((state) => state.auth.user?.role)
+  const adminPerms = useAdminPerms()
   const sidebarData = useSidebarData()
 
   // Get navigation group configuration corresponding to current path from workspace registry
@@ -43,15 +45,30 @@ export function AppSidebar() {
 
   // Filter navigation groups based on user role
   // Non-Admin users cannot see Admin navigation group
+  // 管理员再按超级管理员配置的细粒度权限收窄入口（后端接口自己也会校验一次）
   const currentNavGroups = useMemo(() => {
-    const isAdmin = userRole && userRole >= ROLE.ADMIN
-    return configFilteredNavGroups.filter((group) => {
-      if (group.id === 'admin') {
-        return isAdmin
-      }
-      return true
-    })
-  }, [configFilteredNavGroups, userRole])
+    const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
+    return configFilteredNavGroups
+      .map((group) => {
+        if (group.id !== 'admin' || !isAdmin) return group
+        return {
+          ...group,
+          items: group.items.filter((item) => {
+            const url = 'url' in item ? item.url : undefined
+            if (url === '/channels') return adminPerms.channel_view
+            if (url === '/users')
+              return adminPerms.user_manage || adminPerms.quota_grant
+            return true
+          }),
+        }
+      })
+      .filter((group) => {
+        if (group.id === 'admin') {
+          return isAdmin && group.items.length > 0
+        }
+        return true
+      })
+  }, [configFilteredNavGroups, userRole, adminPerms])
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>

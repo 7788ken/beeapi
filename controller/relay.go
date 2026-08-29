@@ -278,6 +278,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		// 每轮渠道重试先清空，避免在进入 HTTP 请求前失败时沿用上一轮上游请求 ID。
 		c.Set(common.UpstreamRequestIdKey, "")
+		// 上游拒绝标记同理必须按轮清空：渠道A写入 refusal/content_filter 后失败重试，
+		// 渠道B的零产出若继承陈旧标记会被错误拒退（免单判定读该键）。
+		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "")
 
 		// 总 deadline 触发：直接退出，返回 504 + relay_deadline_exceeded
 		if err := totalCtx.Err(); err != nil {
@@ -357,6 +360,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		callHandler := func() *types.NewAPIError {
 			// 多 base_url 会在同一渠道重入 handler；转换/组装阶段也必须从空 ID 开始。
 			c.Set(common.UpstreamRequestIdKey, "")
+			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "")
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
 				return relay.WssHelper(c, relayInfo)

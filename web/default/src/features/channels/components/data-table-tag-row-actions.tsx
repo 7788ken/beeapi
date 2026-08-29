@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type Row } from '@tanstack/react-table'
 import { MoreHorizontal, Power, PowerOff, Pencil, Edit } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -20,6 +21,7 @@ interface DataTableTagRowActionsProps {
 }
 
 export function DataTableTagRowActions({ row }: DataTableTagRowActionsProps) {
+  const canEdit = useAdminPerms().channel_edit
   const { t } = useTranslation()
   const tag = row.original.tag
   const { setOpen, setCurrentTag } = useChannels()
@@ -43,6 +45,11 @@ export function DataTableTagRowActions({ row }: DataTableTagRowActionsProps) {
   const handleEditTag = () => {
     setCurrentTag(tag)
     setOpen('edit-tag')
+  }
+
+  // tag 行的四个动作（改标签/批量编辑/全部启用/全部禁用）全是渠道写操作
+  if (!canEdit) {
+    return null
   }
 
   return (

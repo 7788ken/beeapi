@@ -19,6 +19,7 @@ import {
 } from '@/lib/format'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn, truncateText } from '@/lib/utils'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -214,10 +215,16 @@ function UpstreamUpdateTags({ channel }: { channel: Channel }) {
 function PriorityCell({ channel }: { channel: Channel }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  // 内联改 priority 走 PUT /api/channel(/tag)，属渠道写操作；没权限就渲染成纯文本
+  const canEdit = useAdminPerms().channel_edit
   const isTagRow = isTagAggregateRow(channel)
   const priority = channel.priority
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingValue, setPendingValue] = useState<number | null>(null)
+
+  if (!canEdit) {
+    return <span className='tabular-nums'>{priority ?? 0}</span>
+  }
 
   // Tag row - editable with confirmation for all tag channels
   if (isTagRow) {
@@ -269,10 +276,16 @@ function PriorityCell({ channel }: { channel: Channel }) {
 function WeightCell({ channel }: { channel: Channel }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  // 内联改 weight 走 PUT /api/channel(/tag)，属渠道写操作；没权限就渲染成纯文本
+  const canEdit = useAdminPerms().channel_edit
   const isTagRow = isTagAggregateRow(channel)
   const weight = channel.weight
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingValue, setPendingValue] = useState<number | null>(null)
+
+  if (!canEdit) {
+    return <span className='tabular-nums'>{weight ?? 0}</span>
+  }
 
   // Tag row - editable with confirmation for all tag channels
   if (isTagRow) {
@@ -348,9 +361,7 @@ function RoutingModeCell({ channel }: { channel: Channel }) {
       <StatusBadge label={label} variant='amber' size='sm' copyable={false} />
     )
   }
-  return (
-    <span className='text-muted-foreground text-xs'>{t('Inherit')}</span>
-  )
+  return <span className='text-muted-foreground text-xs'>{t('Inherit')}</span>
 }
 
 /**
@@ -588,10 +599,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
             <Tooltip>
               <TooltipTrigger asChild>
                 <span
-                  className={cn(
-                    'tabular-nums font-medium text-xs',
-                    textTone
-                  )}
+                  className={cn('text-xs font-medium tabular-nums', textTone)}
                 >
                   {score}
                 </span>
@@ -627,7 +635,9 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                     </span>
                   </div>
                 ) : (
-                  t('Composite score 0-100 based on success rate, TTFT, response time, and error patterns over the past 24h.')
+                  t(
+                    'Composite score 0-100 based on success rate, TTFT, response time, and error patterns over the past 24h.'
+                  )
                 )}
                 {updatedAt > 0 && (
                   <div className='text-background/70 mt-1 text-xs'>
@@ -677,7 +687,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
       size: 160,
     },
 
-    // Verify Score column (外部测评分数，来自 测评网关 /api/verify/claude)
+    // Verify Score column (外部测评分数，来自外部测评网关 /api/verify/claude)
     {
       accessorKey: 'verify_score',
       meta: { label: t('Verify Score'), mobileHidden: true },
@@ -719,7 +729,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                 setCurrentRow(row.original)
                 setOpen('channel-verify')
               }}
-              className='inline-flex items-center px-2 py-0.5 rounded text-xs border border-dashed text-muted-foreground hover:bg-muted hover:text-foreground transition'
+              className='text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center rounded border border-dashed px-2 py-0.5 text-xs transition'
             >
               {t('Pending test')}
             </button>
@@ -737,9 +747,9 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                     setOpen('channel-verify')
                   }}
                   className={cn(
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition cursor-pointer',
+                    'inline-flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition',
                     dropped
-                      ? 'bg-rose-600 text-white hover:bg-rose-700 ring-2 ring-rose-300 font-bold'
+                      ? 'bg-rose-600 font-bold text-white ring-2 ring-rose-300 hover:bg-rose-700'
                       : tone || 'bg-muted'
                   )}
                 >
@@ -750,8 +760,9 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
               </TooltipTrigger>
               <TooltipContent side='top'>
                 {dropped && (
-                  <div className='text-rose-400 mb-1 text-xs font-medium'>
-                    {t('Score dropped vs last test')}: {prevScore} → {score} (-{(prevScore ?? 0) - (score ?? 0)})
+                  <div className='mb-1 text-xs font-medium text-rose-400'>
+                    {t('Score dropped vs last test')}: {prevScore} → {score} (-
+                    {(prevScore ?? 0) - (score ?? 0)})
                   </div>
                 )}
                 {t('External health verification via the external verification gateway.')}
@@ -827,9 +838,12 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                 {effective2}
               </span>,
               <>
-                {t('Measured actual ratio {{v}} (derived from upstream billing)', {
-                  v: effective2,
-                })}
+                {t(
+                  'Measured actual ratio {{v}} (derived from upstream billing)',
+                  {
+                    v: effective2,
+                  }
+                )}
                 <div className='text-background/70 mt-1 text-xs'>
                   {t('This upstream does not support ratio query')}
                 </div>
@@ -837,7 +851,9 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
             )
           }
           return withTooltip(
-            <span className='text-muted-foreground cursor-help text-xs'>—</span>,
+            <span className='text-muted-foreground cursor-help text-xs'>
+              —
+            </span>,
             <>
               {t('This upstream does not support ratio query')}
               {msg && (
@@ -919,7 +935,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
             <span
               className={
                 overPaying
-                  ? 'font-medium tabular-nums text-rose-600'
+                  ? 'font-medium text-rose-600 tabular-nums'
                   : summary.g || hasEffective
                     ? 'font-medium tabular-nums'
                     : 'text-muted-foreground tabular-nums'
@@ -928,10 +944,10 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
               {displayValue}
             </span>
             {hasBadge && up > 0 && (
-              <span className='tabular-nums text-rose-600'>↑{up}</span>
+              <span className='text-rose-600 tabular-nums'>↑{up}</span>
             )}
             {hasBadge && down > 0 && (
-              <span className='tabular-nums text-emerald-600'>↓{down}</span>
+              <span className='text-emerald-600 tabular-nums'>↓{down}</span>
             )}
           </button>,
           <>
@@ -941,15 +957,18 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                   v: summary.min,
                 })
               : hasEffective
-                ? t('Measured actual ratio {{v}} (derived from upstream billing)', {
-                    v: effective2,
-                  })
-              : summary.n > 1
                 ? t(
-                    'Upstream group for this key is undetermined; showing the range across {{n}} groups ({{min}}~{{max}}). Set it on the channel to pin the exact ratio.',
-                    { n: summary.n, min: summary.min, max: summary.max }
+                    'Measured actual ratio {{v}} (derived from upstream billing)',
+                    {
+                      v: effective2,
+                    }
                   )
-                : t('Current upstream ratio {{v}}', { v: summary.min })}
+                : summary.n > 1
+                  ? t(
+                      'Upstream group for this key is undetermined; showing the range across {{n}} groups ({{min}}~{{max}}). Set it on the channel to pin the exact ratio.',
+                      { n: summary.n, min: summary.min, max: summary.max }
+                    )
+                  : t('Current upstream ratio {{v}}', { v: summary.min })}
             {hasEffective && summary.g && (
               <div className='text-background/70 mt-1 text-xs'>
                 {t('Measured actual ratio ≈ {{v}}', { v: effective2 })}
@@ -1007,7 +1026,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className='font-mono text-xs tabular-nums cursor-help'>
+                <span className='cursor-help font-mono text-xs tabular-nums'>
                   {display}
                 </span>
               </TooltipTrigger>

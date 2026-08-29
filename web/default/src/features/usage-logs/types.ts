@@ -146,6 +146,8 @@ export interface LogOtherData {
   stream_status?: {
     status?: string
     end_reason?: string
+    // Real end reason before it was overwritten to empty_stream (admin only)
+    origin_end_reason?: string
     error_count?: number
     end_error?: string
     errors?: string[]
@@ -157,6 +159,8 @@ export interface LogOtherData {
   fee_quota?: number
   // Reject / intercept reason (admin)
   reject_reason?: string
+  // Why the no-output refund was denied (admin): upstream_refusal / client_gone_quick / shutdown
+  refund_denied_reason?: string
   // Task-related fields (for refund logs, type=6)
   is_task?: boolean
   task_id?: string

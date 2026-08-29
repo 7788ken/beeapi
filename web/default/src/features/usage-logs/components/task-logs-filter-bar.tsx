@@ -3,7 +3,7 @@ import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { Loader2, RotateCcw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useIsAdmin } from '@/hooks/use-admin'
+import { useCanViewAllLogs } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { buildSearchParams } from '../lib/filter'
@@ -51,7 +51,8 @@ export function TaskLogsFilterBar(props: TaskLogsFilterBarProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
-  const isAdmin = useIsAdmin()
+  // isAdmin 在日志模块的语义是「看全站日志」：管理员被收回 log.view 后退化为只看自己的
+  const isAdmin = useCanViewAllLogs()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const [filters, setFilters] = useState<TaskLogsFilters>(() => {

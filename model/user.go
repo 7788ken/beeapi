@@ -29,6 +29,9 @@ type User struct {
 	OriginalPassword string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
 	DisplayName      string         `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int            `json:"role" gorm:"type:int;default:1"`   // admin, common
+	// AdminPerms 管理员细粒度权限，逗号分隔（见 user_admin_perm.go）。仅 root 可改；
+	// json:"-" 是为了防止 PUT /api/user/ 的请求体夹带提权。
+	AdminPerms       string         `json:"-" gorm:"type:varchar(255);not null;default:''"`
 	Status           int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
 	Email            string         `json:"email" gorm:"index" validate:"max=50"`
 	GitHubId         string         `json:"github_id" gorm:"column:github_id;index"`
@@ -1687,6 +1690,54 @@ func decreaseUserQuota(id int, quota int) error {
 		return ErrInsufficientUserQuota
 	}
 	return nil
+}
+
+// TransferUserQuota 在一个事务里把额度从 fromUserId 划到 toUserId，用于
+// 「管理员给普通用户增加额度时扣自己额度」。余额不足直接整笔失败，不做部分划转。
+// 两条 UPDATE 固定按 user id 升序执行：反向划转并发时锁序一致，不会形成 AB-BA 死锁。
+func TransferUserQuota(fromUserId int, toUserId int, quota int) error {
+	if quota <= 0 {
+		return errors.New("transfer quota must be positive")
+	}
+	if fromUserId == toUserId {
+		return errors.New("cannot transfer quota to self")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		debit := func() error {
+			result := tx.Model(&User{}).
+				Where("id = ? AND quota >= ?", fromUserId, quota).
+				Update("quota", gorm.Expr("quota - ?", quota))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return ErrInsufficientUserQuota
+			}
+			return nil
+		}
+		credit := func() error {
+			result := tx.Model(&User{}).
+				Where("id = ?", toUserId).
+				Update("quota", gorm.Expr("quota + ?", quota))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("transfer user quota: user %d not found", toUserId)
+			}
+			return nil
+		}
+		ops := []func() error{debit, credit}
+		if fromUserId > toUserId {
+			ops[0], ops[1] = credit, debit
+		}
+		for _, op := range ops {
+			if err := op(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func DeltaUpdateUserQuota(id int, delta int) (err error) {

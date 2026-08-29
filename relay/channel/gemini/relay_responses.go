@@ -31,17 +31,18 @@ func GeminiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	if err := common.Unmarshal(responseBody, &geminiResponse); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	maybeMarkGeminiBlockedFinishReason(c, &geminiResponse)
 	if len(geminiResponse.Candidates) == 0 {
 		usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
 		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
+			relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiBlockPrefix+*geminiResponse.PromptFeedback.BlockReason)
 			return &usage, types.NewOpenAIError(
 				errors.New("request blocked by Gemini API: "+*geminiResponse.PromptFeedback.BlockReason),
 				types.ErrorCodePromptBlocked,
 				http.StatusBadRequest,
 			)
 		}
-		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_empty_candidates")
+		relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiEmptyCandidates)
 		return &usage, types.NewOpenAIError(
 			errors.New("empty response from Gemini API"),
 			types.ErrorCodeEmptyResponse,

@@ -33,6 +33,7 @@ auth.user_id_format_error: "無權進行此操作，New-Api-User 格式錯誤"
 auth.user_id_mismatch: "無權進行此操作，New-Api-User 與登入使用者不匹配"
 auth.user_banned: "使用者已被封禁"
 auth.insufficient_privilege: "無權進行此操作，權限不足"
+auth.admin_perm_denied: "無權存取，超級管理員未為你的帳號開通該權限"
 
 # Token messages
 token.name_too_long: "令牌名稱過長"
@@ -111,6 +112,10 @@ user.telegram_id_empty: "Telegram id 為空！"
 user.telegram_not_bound: "該 Telegram 帳號未綁定"
 user.linux_do_id_empty: "Linux DO id 為空！"
 user.quota_change_zero: "額度變更量不能為0"
+user.quota_adjust_add_only: "只有超級管理員可以扣減或覆蓋使用者額度"
+user.quota_adjust_common_only: "只能調整一般使用者的額度"
+user.quota_grant_self_insufficient: "你自己的額度不足，無法完成本次儲值"
+user.admin_perms_target_invalid: "只能為管理員帳號設定權限"
 
 # Quota messages
 quota.negative: "額度不能為負數！"

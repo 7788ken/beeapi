@@ -33,11 +33,8 @@ func stopReasonClaude2OpenAI(reason string) string {
 }
 
 func maybeMarkClaudeRefusal(c *gin.Context, stopReason string) {
-	if c == nil {
-		return
-	}
 	if strings.EqualFold(stopReason, "refusal") {
-		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "claude_stop_reason=refusal")
+		relaycommon.MarkAdminRejectReason(c, constant.RejectReasonClaudeRefusal)
 	}
 }
 

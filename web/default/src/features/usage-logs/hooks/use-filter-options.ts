@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getUserModels, getUserGroups } from '@/lib/api'
-import { useIsAdmin } from '@/hooks/use-admin'
+import { useCanViewAllLogs } from '@/hooks/use-admin'
 import { useDebounce } from '@/hooks'
 import { getGroups as getAllGroups, searchUsers } from '@/features/users/api'
 import type { ComboboxInputOption } from '@/components/ui/combobox-input'
@@ -9,7 +9,8 @@ import type { ComboboxInputOption } from '@/components/ui/combobox-input'
 const STALE = 5 * 60 * 1000
 
 export function useFilterOptions() {
-  const isAdmin = useIsAdmin()
+  // isAdmin 在日志模块的语义是「看全站日志」：管理员被收回 log.view 后退化为只看自己的
+  const isAdmin = useCanViewAllLogs()
 
   const { data: modelsResp } = useQuery({
     queryKey: ['usage-logs', 'filter-options', 'models'],
@@ -61,7 +62,8 @@ export function useFilterOptions() {
  * 调用方维护输入态（filter value），把它原样传进来即可。
  */
 export function useUsernameSearch(keyword: string) {
-  const isAdmin = useIsAdmin()
+  // isAdmin 在日志模块的语义是「看全站日志」：管理员被收回 log.view 后退化为只看自己的
+  const isAdmin = useCanViewAllLogs()
   const debounced = useDebounce(keyword.trim(), 300)
   const enabled = isAdmin && debounced.length > 0
 

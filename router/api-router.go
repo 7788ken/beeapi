@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/model"
 
 	// Import oauth package to register providers via init()
 	_ "github.com/QuantumNous/new-api/oauth"
@@ -148,26 +149,45 @@ func SetApiRouter(router *gin.Engine) {
 			adminRoute := userRoute.Group("/")
 			adminRoute.Use(middleware.AdminAuth())
 			{
-				adminRoute.GET("/", controller.GetAllUsers)
-				adminRoute.GET("/pinned", controller.GetPinnedUsers)
-				// 手动触发用户 RPM 重算（admin-only，CriticalRateLimit 防刷）
-				adminRoute.POST("/recompute_metrics", middleware.CriticalRateLimit(), controller.RecomputeUserMetrics)
-				adminRoute.GET("/topup", controller.GetAllTopUps)
-				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
-				adminRoute.GET("/search", controller.SearchUsers)
-				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
-				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
-				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
-				adminRoute.GET("/:id", controller.GetUser)
-				adminRoute.POST("/", controller.CreateUser)
-				adminRoute.POST("/manage", controller.ManageUser)
-				adminRoute.PUT("/", controller.UpdateUser)
-				adminRoute.DELETE("/:id", controller.DeleteUser)
-				adminRoute.DELETE("/:id/reset_passkey", controller.AdminResetPasskey)
+				// 只读：有「管理用户」或「调整额度」任一权限即可 —— 给用户充值也得先看得到用户列表
+				userReadRoute := adminRoute.Group("")
+				userReadRoute.Use(middleware.RequireAdminPerm(model.AdminPermUserManage, model.AdminPermQuotaGrant))
+				{
+					userReadRoute.GET("/", controller.GetAllUsers)
+					userReadRoute.GET("/pinned", controller.GetPinnedUsers)
+					userReadRoute.GET("/search", controller.SearchUsers)
+					userReadRoute.GET("/:id", controller.GetUser)
+					// add_quota 走「调整额度」权限、其余动作走「管理用户」权限，
+					// 两者在 controller.ManageUser 内部按 action 分别校验
+					userReadRoute.POST("/manage", controller.ManageUser)
+				}
 
-				// Admin 2FA routes
-				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
-				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
+				userManageRoute := adminRoute.Group("")
+				userManageRoute.Use(middleware.RequireAdminPerm(model.AdminPermUserManage))
+				{
+					// 手动触发用户 RPM 重算（admin-only，CriticalRateLimit 防刷）
+					userManageRoute.POST("/recompute_metrics", middleware.CriticalRateLimit(), controller.RecomputeUserMetrics)
+					userManageRoute.GET("/topup", controller.GetAllTopUps)
+					userManageRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
+					userManageRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
+					userManageRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
+					userManageRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
+					userManageRoute.POST("/", controller.CreateUser)
+					userManageRoute.PUT("/", controller.UpdateUser)
+					userManageRoute.DELETE("/:id", controller.DeleteUser)
+					userManageRoute.DELETE("/:id/reset_passkey", controller.AdminResetPasskey)
+
+					// Admin 2FA routes
+					userManageRoute.GET("/2fa/stats", controller.Admin2FAStats)
+					userManageRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
+				}
+
+				// 管理员权限配置只有超级管理员能读写
+				userRootRoute := adminRoute.Group("")
+				userRootRoute.Use(middleware.RootAuth())
+				{
+					userRootRoute.PUT("/:id/admin_perms", controller.UpdateUserAdminPerms)
+				}
 			}
 		}
 
@@ -264,7 +284,12 @@ func SetApiRouter(router *gin.Engine) {
 			subSiteRoute.POST("/:id/create_channels", middleware.CriticalRateLimit(), controller.CreateSubSiteChannels)
 		}
 		channelRoute := apiRouter.Group("/channel")
-		channelRoute.Use(middleware.AdminAuth())
+		// 进渠道模块：有「查看渠道」或「新建/修改渠道」任一即可（只给 edit 不给 view 时也能用）
+		channelRoute.Use(middleware.AdminAuth(), middleware.RequireAdminPerm(model.AdminPermChannelView, model.AdminPermChannelEdit))
+		// 会改渠道配置的写操作再单独收一道「新建/修改渠道」（默认关）。
+		// 只读 + 诊断类（列表/详情/统计/对账/测试/拉余额/重算/探测更新/外部测评）留在「查看渠道」，
+		// 否则只读管理员连排障都做不了。
+		channelEditPerm := middleware.RequireAdminPerm(model.AdminPermChannelEdit)
 		{
 			channelRoute.GET("/", controller.GetAllChannels)
 			channelRoute.GET("/search", controller.SearchChannels)
@@ -284,39 +309,39 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/models_enabled", controller.EnabledListModels)
 			channelRoute.GET("/:id", controller.GetChannel)
 			channelRoute.GET("/:id/health/events", controller.GetChannelHealthEvents)
-			channelRoute.POST("/:id/health/recover", controller.RecoverChannelHealth)
+			channelRoute.POST("/:id/health/recover", channelEditPerm, controller.RecoverChannelHealth)
 			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecurityProofRequired("channel.key.read", []string{"2fa", "passkey"}), controller.GetChannelKey)
 			channelRoute.GET("/test", controller.TestAllChannels)
 			channelRoute.GET("/test/:id", controller.TestChannel)
 			channelRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", controller.UpdateChannelBalance)
-			channelRoute.POST("/", controller.AddChannel)
-			channelRoute.PUT("/", controller.UpdateChannel)
-			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
-			channelRoute.POST("/tag/disabled", controller.DisableTagChannels)
-			channelRoute.POST("/tag/enabled", controller.EnableTagChannels)
-			channelRoute.PUT("/tag", controller.EditTagChannels)
-			channelRoute.DELETE("/:id", controller.DeleteChannel)
-			channelRoute.POST("/batch", controller.DeleteChannelBatch)
-			channelRoute.POST("/fix", controller.FixChannelsAbilities)
+			channelRoute.POST("/", channelEditPerm, controller.AddChannel)
+			channelRoute.PUT("/", channelEditPerm, controller.UpdateChannel)
+			channelRoute.DELETE("/disabled", channelEditPerm, controller.DeleteDisabledChannel)
+			channelRoute.POST("/tag/disabled", channelEditPerm, controller.DisableTagChannels)
+			channelRoute.POST("/tag/enabled", channelEditPerm, controller.EnableTagChannels)
+			channelRoute.PUT("/tag", channelEditPerm, controller.EditTagChannels)
+			channelRoute.DELETE("/:id", channelEditPerm, controller.DeleteChannel)
+			channelRoute.POST("/batch", channelEditPerm, controller.DeleteChannelBatch)
+			channelRoute.POST("/fix", channelEditPerm, controller.FixChannelsAbilities)
 			channelRoute.GET("/fetch_models/:id", controller.FetchUpstreamModels)
 			channelRoute.POST("/fetch_models", middleware.RootAuth(), controller.FetchModels)
-			channelRoute.POST("/codex/oauth/start", controller.StartCodexOAuth)
-			channelRoute.POST("/codex/oauth/complete", controller.CompleteCodexOAuth)
-			channelRoute.POST("/:id/codex/oauth/start", controller.StartCodexOAuthForChannel)
-			channelRoute.POST("/:id/codex/oauth/complete", controller.CompleteCodexOAuthForChannel)
-			channelRoute.POST("/:id/codex/refresh", controller.RefreshCodexChannelCredential)
+			channelRoute.POST("/codex/oauth/start", channelEditPerm, controller.StartCodexOAuth)
+			channelRoute.POST("/codex/oauth/complete", channelEditPerm, controller.CompleteCodexOAuth)
+			channelRoute.POST("/:id/codex/oauth/start", channelEditPerm, controller.StartCodexOAuthForChannel)
+			channelRoute.POST("/:id/codex/oauth/complete", channelEditPerm, controller.CompleteCodexOAuthForChannel)
+			channelRoute.POST("/:id/codex/refresh", channelEditPerm, controller.RefreshCodexChannelCredential)
 			channelRoute.GET("/:id/codex/usage", controller.GetCodexChannelUsage)
-			channelRoute.POST("/ollama/pull", controller.OllamaPullModel)
-			channelRoute.POST("/ollama/pull/stream", controller.OllamaPullModelStream)
-			channelRoute.DELETE("/ollama/delete", controller.OllamaDeleteModel)
+			channelRoute.POST("/ollama/pull", channelEditPerm, controller.OllamaPullModel)
+			channelRoute.POST("/ollama/pull/stream", channelEditPerm, controller.OllamaPullModelStream)
+			channelRoute.DELETE("/ollama/delete", channelEditPerm, controller.OllamaDeleteModel)
 			channelRoute.GET("/ollama/version/:id", controller.OllamaVersion)
-			channelRoute.POST("/batch/tag", controller.BatchSetChannelTag)
+			channelRoute.POST("/batch/tag", channelEditPerm, controller.BatchSetChannelTag)
 			channelRoute.GET("/tag/models", controller.GetTagModels)
-			channelRoute.POST("/copy/:id", controller.CopyChannel)
-			channelRoute.POST("/multi_key/manage", controller.ManageMultiKeys)
-			channelRoute.POST("/upstream_updates/apply", controller.ApplyChannelUpstreamModelUpdates)
-			channelRoute.POST("/upstream_updates/apply_all", controller.ApplyAllChannelUpstreamModelUpdates)
+			channelRoute.POST("/copy/:id", channelEditPerm, controller.CopyChannel)
+			channelRoute.POST("/multi_key/manage", channelEditPerm, controller.ManageMultiKeys)
+			channelRoute.POST("/upstream_updates/apply", channelEditPerm, controller.ApplyChannelUpstreamModelUpdates)
+			channelRoute.POST("/upstream_updates/apply_all", channelEditPerm, controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", controller.DetectChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect_all", controller.DetectAllChannelUpstreamModelUpdates)
 			// 外部测评（外部测评网关 /api/verify/claude SSE 透传），管理员可触发
@@ -331,9 +356,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/verify/report/:report_id/cancel", controller.CancelChannelVerifyReport)
 			// 软 RPM 限流规则（per user_id × channel_id），admin-only，CRUD
 			channelRoute.GET("/:id/user_rpm", controller.ListChannelUserRpmRules)
-			channelRoute.POST("/:id/user_rpm", controller.CreateChannelUserRpmRule)
-			channelRoute.PUT("/:id/user_rpm/:rule_id", controller.UpdateChannelUserRpmRule)
-			channelRoute.DELETE("/:id/user_rpm/:rule_id", controller.DeleteChannelUserRpmRule)
+			channelRoute.POST("/:id/user_rpm", channelEditPerm, controller.CreateChannelUserRpmRule)
+			channelRoute.PUT("/:id/user_rpm/:rule_id", channelEditPerm, controller.UpdateChannelUserRpmRule)
+			channelRoute.DELETE("/:id/user_rpm/:rule_id", channelEditPerm, controller.DeleteChannelUserRpmRule)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
@@ -371,13 +396,15 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
-		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
-		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
-		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
-		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
+		// 全站日志受「查看日志」权限约束；/self* 是用户看自己的日志，不受影响
+		logViewPerm := middleware.RequireAdminPerm(model.AdminPermLogView)
+		logRoute.GET("/", middleware.AdminAuth(), logViewPerm, controller.GetAllLogs)
+		logRoute.GET("/export", middleware.AdminAuth(), logViewPerm, controller.ExportAllLogs)
+		logRoute.DELETE("/", middleware.AdminAuth(), logViewPerm, controller.DeleteHistoryLogs)
+		logRoute.GET("/stat", middleware.AdminAuth(), logViewPerm, controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
-		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
-		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
+		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), logViewPerm, controller.GetChannelAffinityUsageCacheStats)
+		logRoute.GET("/search", middleware.AdminAuth(), logViewPerm, controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/export", middleware.UserAuth(), middleware.SearchRateLimit(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)

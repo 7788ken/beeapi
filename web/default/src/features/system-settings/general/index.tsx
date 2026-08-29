@@ -32,6 +32,7 @@ const defaultGeneralSettings: GeneralSettings = {
   'quota_setting.enable_free_model_pre_consume': true,
   'quota_setting.billing_refund_when_no_output': true,
   'quota_setting.refund_no_output_client_gone_min_seconds': 60,
+  'quota_setting.refund_no_output_exclude_upstream_refusal': false,
   QuotaPerUnit: 500000,
   USDExchangeRate: 7,
   'general_setting.quota_display_type': 'USD',

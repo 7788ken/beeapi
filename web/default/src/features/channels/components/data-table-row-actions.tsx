@@ -19,6 +19,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -59,6 +60,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  // 「新建/修改渠道」权限：没有就只留只读+诊断入口（编辑/复制/删除/多key/Ollama/应用更新/启停）
+  const canEdit = useAdminPerms().channel_edit
 
   const isEnabled = isChannelEnabled(channel)
   const isMultiKey = isMultiKeyChannel(channel)
@@ -148,33 +151,35 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         <TooltipContent>{t('Test Connection')}</TooltipContent>
       </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            onClick={handleToggleStatus}
-            disabled={isTogglingStatus}
-            aria-label={isEnabled ? t('Disable') : t('Enable')}
-            className={
-              isEnabled
-                ? 'text-destructive hover:text-destructive'
-                : 'text-emerald-600 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400'
-            }
-          >
-            {isTogglingStatus ? (
-              <Loader2 className='size-4 animate-spin' />
-            ) : isEnabled ? (
-              <PowerOff className='size-4' />
-            ) : (
-              <Power className='size-4' />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {isEnabled ? t('Disable') : t('Enable')}
-        </TooltipContent>
-      </Tooltip>
+      {canEdit && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={handleToggleStatus}
+              disabled={isTogglingStatus}
+              aria-label={isEnabled ? t('Disable') : t('Enable')}
+              className={
+                isEnabled
+                  ? 'text-destructive hover:text-destructive'
+                  : 'text-emerald-600 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400'
+              }
+            >
+              {isTogglingStatus ? (
+                <Loader2 className='size-4 animate-spin' />
+              ) : isEnabled ? (
+                <PowerOff className='size-4' />
+              ) : (
+                <Power className='size-4' />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isEnabled ? t('Disable') : t('Enable')}
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -188,12 +193,14 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
           {/* Edit */}
-          <DropdownMenuItem onClick={handleEdit}>
-            {t('Edit')}
-            <DropdownMenuShortcut>
-              <Pencil size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
+          {canEdit && (
+            <DropdownMenuItem onClick={handleEdit}>
+              {t('Edit')}
+              <DropdownMenuShortcut>
+                <Pencil size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
 
           {/* Test Connection */}
           <DropdownMenuItem onClick={handleTest}>
@@ -228,7 +235,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuItem>
 
           {/* Detect Upstream Updates (only for fetchable channel types) */}
-          {MODEL_FETCHABLE_TYPES.has(channel.type) && (
+          {/* 这个入口有 pending 时直接开"应用更新"弹窗（写操作），所以整项跟着 canEdit；
+              只读管理员仍可用主菜单的"探测全部上游更新" */}
+          {canEdit && MODEL_FETCHABLE_TYPES.has(channel.type) && (
             <DropdownMenuItem
               onClick={() => {
                 const meta = parseUpstreamUpdateMeta(channel.settings)
@@ -255,7 +264,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           )}
 
           {/* Ollama Models (only for Ollama channels) */}
-          {channel.type === 4 && (
+          {canEdit && channel.type === 4 && (
             <DropdownMenuItem onClick={handleManageOllamaModels}>
               {t('Manage Ollama Models')}
               <DropdownMenuShortcut>
@@ -264,41 +273,45 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
-          <DropdownMenuSeparator />
+          {canEdit && (
+            <>
+              <DropdownMenuSeparator />
 
-          {/* Copy Channel */}
-          <DropdownMenuItem onClick={handleCopy}>
-            {t('Copy Channel')}
-            <DropdownMenuShortcut>
-              <Copy size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
+              {/* Copy Channel */}
+              <DropdownMenuItem onClick={handleCopy}>
+                {t('Copy Channel')}
+                <DropdownMenuShortcut>
+                  <Copy size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
 
-          {/* Manage Keys (only for multi-key channels) */}
-          {isMultiKey && (
-            <DropdownMenuItem onClick={handleManageKeys}>
-              {t('Manage Keys')}
-              <DropdownMenuShortcut>
-                <Key size={16} />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+              {/* Manage Keys (only for multi-key channels) */}
+              {isMultiKey && (
+                <DropdownMenuItem onClick={handleManageKeys}>
+                  {t('Manage Keys')}
+                  <DropdownMenuShortcut>
+                    <Key size={16} />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+
+              {/* Delete */}
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  setDeleteConfirmOpen(true)
+                }}
+                className='text-destructive focus:text-destructive'
+              >
+                {t('Delete')}
+                <DropdownMenuShortcut>
+                  <Trash2 size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </>
           )}
-
-          <DropdownMenuSeparator />
-
-          {/* Delete */}
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
-              setDeleteConfirmOpen(true)
-            }}
-            className='text-destructive focus:text-destructive'
-          >
-            {t('Delete')}
-            <DropdownMenuShortcut>
-              <Trash2 size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

@@ -140,7 +140,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 
 			lastStreamData = data
-			if err := processToken(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
+			if err := processToken(c, info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
 				logger.LogError(c, "error processing stream token: "+err.Error())
 			}
 		}
@@ -226,10 +226,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	for _, choice := range simpleResponse.Choices {
-		if choice.FinishReason == constant.FinishReasonContentFilter {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "openai_finish_reason=content_filter")
-			break
-		}
+		maybeMarkOpenAIContentFilter(c, choice.FinishReason)
 	}
 
 	forceFormat := false

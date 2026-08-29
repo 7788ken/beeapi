@@ -14,6 +14,7 @@ import {
   CloudDownload,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -47,6 +48,8 @@ export function ChannelsPrimaryButtons() {
   } = useChannels()
   const queryClient = useQueryClient()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  // 没有「新建/修改渠道」权限的管理员只看不改，写操作入口一律不渲染（后端也会 403）
+  const canEdit = useAdminPerms().channel_edit
 
   const handleTagModeToggle = (checked: boolean) => {
     localStorage.setItem('enable-tag-mode', String(checked))
@@ -86,23 +89,27 @@ export function ChannelsPrimaryButtons() {
           />
         </div>
 
-        {/* Create Channel */}
-        <Button onClick={() => setOpen('create-channel')} size='sm'>
-          <Plus className='h-4 w-4' />
-          <span className='max-sm:hidden'>{t('Create Channel')}</span>
-          <span className='sm:hidden'>{t('Create')}</span>
-        </Button>
+        {canEdit && (
+          <>
+            {/* Create Channel */}
+            <Button onClick={() => setOpen('create-channel')} size='sm'>
+              <Plus className='h-4 w-4' />
+              <span className='max-sm:hidden'>{t('Create Channel')}</span>
+              <span className='sm:hidden'>{t('Create')}</span>
+            </Button>
 
-        {/* Upstream Sync (从分站同步分组建渠道) */}
-        <Button
-          onClick={() => setOpen('upstream-sync')}
-          size='sm'
-          variant='outline'
-          title={t('Create channels from a configured sub-site')}
-        >
-          <CloudDownload className='h-4 w-4' />
-          <span className='max-sm:hidden'>{t('Upstream Sync')}</span>
-        </Button>
+            {/* Upstream Sync (从分站同步分组建渠道) */}
+            <Button
+              onClick={() => setOpen('upstream-sync')}
+              size='sm'
+              variant='outline'
+              title={t('Create channels from a configured sub-site')}
+            >
+              <CloudDownload className='h-4 w-4' />
+              <span className='max-sm:hidden'>{t('Upstream Sync')}</span>
+            </Button>
+          </>
+        )}
 
         {/* More Actions */}
         <DropdownMenu>
@@ -167,46 +174,56 @@ export function ChannelsPrimaryButtons() {
               </DropdownMenuShortcut>
             </DropdownMenuItem>
 
-            <DropdownMenuItem
-              onClick={() => upstream.applyAllUpdates()}
-              disabled={upstream.applyAllLoading}
-            >
-              {t('Apply All Upstream Updates')}
-              <DropdownMenuShortcut>
-                <ArrowUpFromLine className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+            {canEdit && (
+              <DropdownMenuItem
+                onClick={() => upstream.applyAllUpdates()}
+                disabled={upstream.applyAllLoading}
+              >
+                {t('Apply All Upstream Updates')}
+                <DropdownMenuShortcut>
+                  <ArrowUpFromLine className='h-4 w-4' />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+            )}
 
-            <DropdownMenuSeparator />
+            {canEdit && (
+              <>
+                <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onClick={() => {
-                handleFixAbilities(queryClient, (_result) => {
-                  // eslint-disable-next-line no-console
-                  console.log('Fix abilities result:', _result)
-                })
-              }}
-            >
-              {t('Fix Abilities')}
-              <DropdownMenuShortcut>
-                <Settings2 className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    handleFixAbilities(queryClient, (_result) => {
+                      // eslint-disable-next-line no-console
+                      console.log('Fix abilities result:', _result)
+                    })
+                  }}
+                >
+                  {t('Fix Abilities')}
+                  <DropdownMenuShortcut>
+                    <Settings2 className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </>
+            )}
 
-            <DropdownMenuSeparator />
+            {canEdit && (
+              <>
+                <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault()
-                setShowDeleteDialog(true)
-              }}
-              className='text-destructive focus:text-destructive'
-            >
-              {t('Delete All Disabled')}
-              <DropdownMenuShortcut>
-                <Trash2 className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    setShowDeleteDialog(true)
+                  }}
+                  className='text-destructive focus:text-destructive'
+                >
+                  {t('Delete All Disabled')}
+                  <DropdownMenuShortcut>
+                    <Trash2 className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -71,7 +71,7 @@ func runVerifyScheduleOnce() {
 	}
 
 	now := time.Now().Unix()
-	// 熔断：单轮自动禁用上限，防测评网关 异常返低分批量误禁生产渠道
+	// 熔断：单轮自动禁用上限，防测评网关异常返低分批量误禁生产渠道
 	maxDisables := len(channels) / 5
 	if maxDisables < 5 {
 		maxDisables = 5

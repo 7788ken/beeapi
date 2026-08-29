@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 
@@ -38,8 +37,9 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 	}
 
 	if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
+		relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiBlockPrefix+*geminiResponse.PromptFeedback.BlockReason)
 	}
+	maybeMarkGeminiBlockedFinishReason(c, &geminiResponse)
 
 	// 计算使用量（优先上游 UsageMetadata，缺失时本地估算并保留 Gemini 计费语义）
 	usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)

@@ -31,9 +31,15 @@ export async function getUsers(
   return res.data
 }
 
-/** 手动触发用户 RPM 重算（admin-only，CriticalRateLimit）。 */
+/**
+ * 手动触发用户 RPM 重算（需「管理用户」权限，CriticalRateLimit）。
+ * 调用方按 best-effort 处理；只有「调整额度」权限的管理员会 403，
+ * 所以跳过全局错误 toast，别为一个刷新副作用弹红条。
+ */
 export async function recomputeUserMetrics(): Promise<ApiResponse> {
-  const res = await api.post(`/api/user/recompute_metrics`)
+  const res = await api.post(`/api/user/recompute_metrics`, undefined, {
+    skipErrorHandler: true,
+  } as Parameters<typeof api.post>[2])
   return res.data
 }
 
@@ -112,6 +118,19 @@ export async function adjustUserQuota(
   payload: ManageUserQuotaPayload
 ): Promise<ApiResponse<Partial<User>>> {
   const res = await api.post('/api/user/manage', payload)
+  return res.data
+}
+
+/**
+ * Update an admin's fine-grained permissions (super admin only)
+ */
+export async function updateUserAdminPerms(
+  id: number,
+  adminPerms: string[]
+): Promise<ApiResponse<string[]>> {
+  const res = await api.put(`/api/user/${id}/admin_perms`, {
+    admin_perms: adminPerms,
+  })
   return res.data
 }
 

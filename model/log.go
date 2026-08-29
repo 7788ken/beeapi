@@ -173,6 +173,9 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "admin_info")
 			// delete(otherMap, "reject_reason")
 			delete(otherMap, "stream_status")
+			// 拒退分类（upstream_refusal/client_gone_quick/shutdown）是内部反滥用口径，
+			// 用户侧解释走 Content 文案，字段仅管理端可见
+			delete(otherMap, "refund_denied_reason")
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
 	}

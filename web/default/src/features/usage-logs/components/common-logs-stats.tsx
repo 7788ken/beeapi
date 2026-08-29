@@ -3,7 +3,7 @@ import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { formatLogQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { useIsAdmin } from '@/hooks/use-admin'
+import { useCanViewAllLogs } from '@/hooks/use-admin'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
@@ -30,7 +30,8 @@ function StatBadge(props: {
 
 export function CommonLogsStats() {
   const { t } = useTranslation()
-  const isAdmin = useIsAdmin()
+  // isAdmin 在日志模块的语义是「看全站日志」：管理员被收回 log.view 后退化为只看自己的
+  const isAdmin = useCanViewAllLogs()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
 

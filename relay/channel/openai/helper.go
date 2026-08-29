@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -40,6 +41,8 @@ func handleClaudeFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 	if err := common.Unmarshal(common.StringToByteSlice(data), &streamResponse); err != nil {
 		return err
 	}
+	// Claude 格式客户端打 OpenAI 兼容渠道不经 processToken（relayMode 非 chat），在此补拒绝标记
+	markStreamChoicesContentFilter(c, streamResponse.Choices)
 
 	if streamResponse.Usage != nil {
 		info.ClaudeConvertInfo.Usage = streamResponse.Usage
@@ -64,6 +67,8 @@ func handleGeminiFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 		logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 		return err
 	}
+	// Gemini 格式客户端打 OpenAI 兼容渠道不经 processToken（relayMode 非 chat），在此补拒绝标记
+	markStreamChoicesContentFilter(c, streamResponse.Choices)
 
 	result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatGemini, &streamResponse)
 	if err != nil {
@@ -91,8 +96,29 @@ func handleGeminiFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 	return nil
 }
 
-func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, responseTextBuilder *strings.Builder, toolCount *int) error {
+// maybeMarkOpenAIContentFilter 上游明确的内容过滤拒绝 → 写计费拒退标记。
+// EqualFold+TrimSpace 容忍非官方兼容实现的大小写/空白变体，与 Claude/Gemini 侧归一策略对齐。
+func maybeMarkOpenAIContentFilter(c *gin.Context, finishReason string) {
+	if strings.EqualFold(strings.TrimSpace(finishReason), constant.FinishReasonContentFilter) {
+		relaycommon.MarkAdminRejectReason(c, constant.RejectReasonOpenAIContentFilter)
+	}
+}
+
+// markStreamChoicesContentFilter 流式 choices 级检查，供不经 ProcessStreamResponse 的
+// 格式转换路径（Claude/Gemini 格式客户端打 OpenAI 兼容渠道）复用。
+func markStreamChoicesContentFilter(c *gin.Context, choices []dto.ChatCompletionsStreamResponseChoice) {
+	for _, choice := range choices {
+		if choice.FinishReason != nil {
+			maybeMarkOpenAIContentFilter(c, *choice.FinishReason)
+		}
+	}
+}
+
+func ProcessStreamResponse(c *gin.Context, streamResponse dto.ChatCompletionsStreamResponse, responseTextBuilder *strings.Builder, toolCount *int) error {
 	for _, choice := range streamResponse.Choices {
+		if choice.FinishReason != nil {
+			maybeMarkOpenAIContentFilter(c, *choice.FinishReason)
+		}
 		responseTextBuilder.WriteString(choice.Delta.GetContentString())
 		responseTextBuilder.WriteString(choice.Delta.GetReasoningContent())
 		if choice.Delta.ToolCalls != nil {
@@ -108,33 +134,35 @@ func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, res
 	return nil
 }
 
-func processToken(relayMode int, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
+func processToken(c *gin.Context, relayMode int, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
 	if streamItem == "" || streamItem == "[DONE]" {
 		return nil
 	}
 	switch relayMode {
 	case relayconstant.RelayModeChatCompletions:
-		return processChatCompletionToken(streamItem, responseTextBuilder, toolCount)
+		return processChatCompletionToken(c, streamItem, responseTextBuilder, toolCount)
 	case relayconstant.RelayModeCompletions:
-		return processCompletionToken(streamItem, responseTextBuilder)
+		return processCompletionToken(c, streamItem, responseTextBuilder)
 	}
 	return nil
 }
 
-func processChatCompletionToken(streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
+func processChatCompletionToken(c *gin.Context, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
 	var streamResponse dto.ChatCompletionsStreamResponse
 	if err := json.Unmarshal(common.StringToByteSlice(streamItem), &streamResponse); err != nil {
 		return err
 	}
-	return ProcessStreamResponse(streamResponse, responseTextBuilder, toolCount)
+	// content_filter 拒绝标记在 ProcessStreamResponse 内完成（xai 等直调方共用同一入口）
+	return ProcessStreamResponse(c, streamResponse, responseTextBuilder, toolCount)
 }
 
-func processCompletionToken(streamItem string, responseTextBuilder *strings.Builder) error {
+func processCompletionToken(c *gin.Context, streamItem string, responseTextBuilder *strings.Builder) error {
 	var streamResponse dto.CompletionsStreamResponse
 	if err := json.Unmarshal(common.StringToByteSlice(streamItem), &streamResponse); err != nil {
 		return err
 	}
 	for _, choice := range streamResponse.Choices {
+		maybeMarkOpenAIContentFilter(c, choice.FinishReason)
 		responseTextBuilder.WriteString(choice.Text)
 	}
 	return nil

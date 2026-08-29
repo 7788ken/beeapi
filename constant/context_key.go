@@ -67,6 +67,9 @@ const (
 
 	// ContextKeyAdminRejectReason stores an admin-only reject/block reason extracted from upstream responses.
 	// It is not returned to end users, but can be persisted into consume/error logs for debugging.
+	// ⚠️ 该键已参与计费：service.isUpstreamRefusalReject 据其值决定零输出免单是否拒退。
+	// 取值必须来自 constant/reject_reason.go 的常量，写入必须走 relaycommon.MarkAdminRejectReason
+	// （first-write-wins），不得随意写入自由文本，否则可能静默改变账单行为。
 	ContextKeyAdminRejectReason ContextKey = "admin_reject_reason"
 
 	// ContextKeyLanguage stores the user's language preference for i18n

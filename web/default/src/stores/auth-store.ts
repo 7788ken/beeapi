@@ -3,6 +3,14 @@ import { create } from 'zustand'
 export type UserPermissions = {
   sidebar_settings?: boolean
   sidebar_modules?: Record<string, unknown>
+  /** 超级管理员给该管理员配置的细粒度权限，见 lib/admin-perms.ts */
+  admin?: {
+    channel_view?: boolean
+    log_view?: boolean
+    quota_grant?: boolean
+    user_manage?: boolean
+    quota_deduct_self?: boolean
+  }
 }
 
 export interface AuthUser {
@@ -30,6 +38,8 @@ export interface AuthUser {
   stripe_customer?: string
   sidebar_modules?: string
   permissions?: UserPermissions
+  /** 实际生效的管理员权限 key 列表（普通用户为空） */
+  admin_perms?: string[]
 }
 
 interface AuthState {
