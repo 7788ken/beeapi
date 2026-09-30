@@ -177,8 +177,23 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			}
 			continue
 		}
-		// done frame
-		// finalize once and break loop
+		// done frame. Ollama often puts tool_calls only on this last frame.
+		if chunk.Message != nil && len(chunk.Message.ToolCalls) > 0 {
+			delta := dto.ChatCompletionsStreamResponse{
+				Id:      responseId,
+				Object:  "chat.completion.chunk",
+				Created: created,
+				Model:   model,
+				Choices: []dto.ChatCompletionsStreamResponseChoice{{
+					Index: 0,
+					Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Role: "assistant"},
+				}},
+			}
+			delta.Choices[0].Delta.ToolCalls, toolCallIndex = ollamaToolCallsToOpenAI(chunk.Message.ToolCalls, toolCallIndex, true)
+			if data, err := common.Marshal(delta); err == nil {
+				_ = helper.StringData(c, string(data))
+			}
+		}
 		usage.PromptTokens = chunk.PromptEvalCount
 		usage.CompletionTokens = chunk.EvalCount
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens

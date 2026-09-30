@@ -4,9 +4,6 @@ import {
   Layers,
   Gauge,
   Zap,
-  Wallet,
-  TrendingUp,
-  Activity,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -60,44 +57,6 @@ export function useModelStatCardsConfig(): StatCardConfig[] {
       icon: Zap,
       getValue: (stat, timeRangeMinutes = 1) =>
         safeDivide(stat?.tpm ?? 0, timeRangeMinutes),
-    },
-  ]
-}
-
-export function useSummaryCardsConfig(totals: {
-  remainDisplay: string
-  usedDisplay: string
-  requestCountDisplay: string
-  currencyLabel: string
-  currencyEnabled: boolean
-}) {
-  const { t } = useTranslation()
-
-  return [
-    {
-      key: 'balance',
-      title: t('Current Balance'),
-      value: totals.remainDisplay,
-      description: totals.currencyEnabled
-        ? `${t('Remaining quota')} (${totals.currencyLabel})`
-        : t('Remaining quota units'),
-      icon: Wallet,
-    },
-    {
-      key: 'usage',
-      title: t('Historical Usage'),
-      value: totals.usedDisplay,
-      description: totals.currencyEnabled
-        ? `${t('Total consumed')} (${totals.currencyLabel})`
-        : t('Total consumed quota'),
-      icon: TrendingUp,
-    },
-    {
-      key: 'requests',
-      title: t('Request Count'),
-      value: totals.requestCountDisplay,
-      description: t('Total requests made'),
-      icon: Activity,
     },
   ]
 }

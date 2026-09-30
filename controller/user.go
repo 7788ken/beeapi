@@ -824,10 +824,18 @@ func adminPermFlags(user *model.User) map[string]bool {
 	return map[string]bool{
 		"channel_view":      user.HasAdminPerm(model.AdminPermChannelView),
 		"channel_edit":      user.HasAdminPerm(model.AdminPermChannelEdit),
+		"channel_metrics":   user.HasAdminPerm(model.AdminPermChannelMetrics),
+		"model_view":        user.HasAdminPerm(model.AdminPermModelView),
+		"redemption_manage": user.HasAdminPerm(model.AdminPermRedemptionManage),
+		"subscription_manage": user.HasAdminPerm(model.AdminPermSubscriptionManage),
 		"log_view":          user.HasAdminPerm(model.AdminPermLogView),
 		"quota_grant":       user.HasAdminPerm(model.AdminPermQuotaGrant),
 		"user_manage":       user.HasAdminPerm(model.AdminPermUserManage),
 		"quota_deduct_self": user.HasAdminPerm(model.AdminPermQuotaDeductSelf),
+		// 内容备份权限：前端 resolveAdminPermFlags 优先用这份 flags（缺键即 false），
+		// 不在此处摊平的话，被授予 content_backup.* 的普通管理员在 UI 上看不到入口且被路由 403。
+		"content_backup_view":   user.HasAdminPerm(model.AdminPermContentBackupView),
+		"content_backup_manage": user.HasAdminPerm(model.AdminPermContentBackupManage),
 	}
 }
 

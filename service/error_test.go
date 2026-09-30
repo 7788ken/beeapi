@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -58,6 +59,17 @@ func TestResetStatusCode(t *testing.T) {
 			require.Equal(t, tc.expectedCode, newAPIError.StatusCode)
 		})
 	}
+
+	t.Run("keep quality filter status", func(t *testing.T) {
+		t.Parallel()
+		err := types.NewErrorWithStatusCode(
+			errors.New("apology"),
+			types.ErrorCodeResponseQualityApology,
+			http.StatusServiceUnavailable,
+		)
+		ResetStatusCode(err, `{"503":200}`)
+		require.Equal(t, http.StatusServiceUnavailable, err.StatusCode)
+	})
 }
 
 func TestRelayErrorHandlerShowBodyWhenFailKeepsFullBody(t *testing.T) {

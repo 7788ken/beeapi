@@ -1,0 +1,25 @@
+@import '@fontsource-variable/archivo/wght.css';
+@import '@fontsource-variable/manrope/wght.css';
+
+.home-type {
+  font-family:
+    'Manrope Variable', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC',
+    'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+
+  /* 首页主色是品牌深藏蓝，控制台那套 Stripe 紫按钮在这里是异物。
+     只在首页树内改写 primary，其余页面不受影响。 */
+  --primary: #0b1c47;
+  --primary-foreground: #ffffff;
+}
+
+.dark .home-type {
+  --primary: #eef1f6;
+  --primary-foreground: #0b1c47;
+}
+
+.home-type :is(h1, h2, h3, .home-display) {
+  font-family:
+    'Archivo Variable', 'Manrope Variable', 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+}

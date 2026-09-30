@@ -6,6 +6,8 @@ import { getRollingDateRange, formatChartTime } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useTheme } from '@/context/theme-provider'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 import { renderQuotaCompat } from '@/features/dashboard/lib'
 import { getUserQuotaDataByGroups } from '@/features/dashboard/api'
 import { getSubscriptionGroupBudget } from '../api'
@@ -195,7 +197,7 @@ export function GroupBudgetStats() {
   return (
     <div className='space-y-4'>
       <div className='flex flex-wrap items-center gap-1.5 sm:gap-2'>
-        <div className='flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
+        <div className='bg-card flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
           {RANGE_OPTIONS.map((opt) => (
             <button
               key={opt.days}
@@ -227,7 +229,7 @@ export function GroupBudgetStats() {
             ))
           : trackedGroups.length === 0
             ? (
-                <div className='text-muted-foreground col-span-full rounded-lg border p-6 text-center text-sm'>
+                <div className={cn(surfaceClass, 'text-muted-foreground col-span-full p-6 text-center text-sm')}>
                   当前没有 active 订阅绑定到任何分组
                 </div>
               )
@@ -246,7 +248,7 @@ export function GroupBudgetStats() {
                 return (
                   <div
                     key={g}
-                    className='space-y-2 rounded-lg border p-4'
+                    className={cn(surfaceClass, 'space-y-2 p-4')}
                   >
                     <div className='flex items-center gap-2'>
                       <div className='truncate text-sm font-semibold'>{g}</div>
@@ -298,14 +300,14 @@ export function GroupBudgetStats() {
       </div>
 
       {/* 折线图：每日实际消耗趋势 */}
-      <div className='overflow-hidden rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='border-b px-3 py-2 sm:px-5 sm:py-3'>
           <div className='text-sm font-semibold'>订阅分组每日消耗趋势</div>
           <div className='text-muted-foreground text-xs'>
             横轴：日期 · 纵轴：实际消耗（仅 billing_source=subscription）
           </div>
         </div>
-        <div className='h-[340px] p-1.5 sm:h-96 sm:p-2'>
+        <div className={cn('p-1.5 sm:p-2', !isLoading && trendValues.length === 0 ? 'h-40' : 'h-[340px] sm:h-96')}>
           {isLoading ? (
             <Skeleton className='h-full w-full' />
           ) : trendValues.length === 0 ? (

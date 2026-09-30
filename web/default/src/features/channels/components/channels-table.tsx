@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { RefreshCw } from 'lucide-react'
@@ -18,6 +18,7 @@ import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -37,7 +38,7 @@ import {
 } from '@/components/data-table'
 import { DataTablePagination } from '@/components/data-table/pagination'
 import { PageFooterPortal } from '@/components/layout'
-import { getChannels, searchChannels, getGroups } from '../api'
+import { getChannels, searchChannels, getGroups, getChannelUptime } from '../api'
 import {
   DEFAULT_PAGE_SIZE,
   CHANNEL_STATUS,
@@ -55,6 +56,7 @@ import { ChannelGroupPricingDialog } from './channel-group-pricing-dialog'
 import { useChannelsColumns } from './channels-columns'
 import { useChannels } from './channels-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
+import { CHANNEL_UPTIME_HOURS } from '../hooks/use-channel-uptime'
 
 const route = getRouteApi('/_authenticated/channels/')
 
@@ -79,8 +81,26 @@ export function ChannelsTable() {
   const queryClient = useQueryClient()
 
   // 刷新按钮：invalidate 渠道列表 query，立即重拉当前页（含 Redis 实时 RPM 覆盖值）。
+  // 「可用性」图表走后台异步强制刷新：带 refresh=1 绕过后端 5 分钟进程内缓存重拉，
+  // 结果写回 useChannelUptime 订阅的同一个 query key，图表几秒后自动更新。
+  // 该强制查询要对生产大 logs 表做全表按小时聚合，较慢，故不阻塞刷新按钮（按钮只反映列表拉取）。
+  // 用 ref 做并发保护：上一次强制查询未回来时跳过本次，避免连点在大表上堆叠重查询。
+  const uptimeRefreshingRef = useRef(false)
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+    if (uptimeRefreshingRef.current) return
+    uptimeRefreshingRef.current = true
+    const uptimeKey = channelsQueryKeys.uptime(CHANNEL_UPTIME_HOURS)
+    getChannelUptime(CHANNEL_UPTIME_HOURS, true)
+      .then((uptime) => {
+        queryClient.setQueryData(uptimeKey, uptime)
+      })
+      .catch(() => {
+        // 后台强制刷新失败不影响列表；保留旧图表数据即可
+      })
+      .finally(() => {
+        uptimeRefreshingRef.current = false
+      })
   }, [queryClient])
 
   // Table state
@@ -167,10 +187,11 @@ export function ChannelsTable() {
   )
 
   // 把 tanstack sorting 翻译成后端 order_by / order；仅白名单字段生效。
-  // search 端与 tag_mode 路径不支持 ORDER BY，这两种模式下不带排序参数。
+  // list 端(GetAllChannels)与 search 端(SearchChannels)均已支持 rpm_24h/used_quota 排序，
+  // 故带分组/关键词过滤（走 search）时排序照常生效；仅 tag_mode（标签聚合）路径不支持 ORDER BY。
   const firstSort = sorting[0]
   const backendOrderBy =
-    firstSort && !shouldSearch && !enableTagMode
+    firstSort && !enableTagMode
       ? BACKEND_SORTABLE_CHANNEL_COLUMNS[firstSort.id]
       : undefined
   const backendOrder: 'asc' | 'desc' | undefined = backendOrderBy
@@ -238,6 +259,8 @@ export function ChannelsTable() {
               : undefined,
           tag_mode: enableTagMode,
           id_sort: idSort,
+          order_by: backendOrderBy,
+          order: backendOrder,
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
@@ -390,7 +413,7 @@ export function ChannelsTable() {
                   placeholder={t('Filter by model...')}
                   value={modelFilterInput}
                   onChange={(e) => setModelFilterInput(e.target.value)}
-                  className='h-8 w-full sm:w-[150px] lg:w-[200px]'
+                  className='bg-card h-8 w-full sm:w-[150px] lg:w-[200px]'
                 />
               }
               filters={[
@@ -449,7 +472,8 @@ export function ChannelsTable() {
           <>
             <div
               className={cn(
-                'overflow-hidden rounded-md border transition-opacity duration-150',
+                surfaceClass,
+                'overflow-hidden transition-opacity duration-150',
                 isFetching && !isLoading && 'pointer-events-none opacity-50'
               )}
             >
@@ -466,7 +490,7 @@ export function ChannelsTable() {
                             // actions 列固定在右侧，横向滚动时不被其它列推走
                             className={cn(
                               isActions &&
-                                'sticky right-0 z-20 border-l bg-background'
+                                'sticky right-0 z-20 border-l bg-card'
                             )}
                           >
                             {header.isPlaceholder
@@ -511,7 +535,7 @@ export function ChannelsTable() {
                               key={cell.id}
                               className={cn(
                                 isActions &&
-                                  'sticky right-0 z-10 border-l bg-background group-hover:bg-muted/50 group-data-[state=selected]:bg-muted'
+                                  'sticky right-0 z-10 border-l bg-card group-hover:bg-muted/50 group-data-[state=selected]:bg-muted'
                               )}
                             >
                               {flexRender(

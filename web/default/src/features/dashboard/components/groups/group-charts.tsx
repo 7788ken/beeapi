@@ -3,8 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import { ChevronDown, ChevronRight, Layers, Loader2 } from 'lucide-react'
 import { getRollingDateRange } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useTheme } from '@/context/theme-provider'
+import { surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   getGroupTopUsers,
@@ -18,6 +20,7 @@ import type {
   GroupDashboardFilters,
   QuotaDataItem,
 } from '@/features/dashboard/types'
+import { dashRankTone } from '../overview/dash-emphasis'
 
 const GROUP_MEMBER_TOP_N = 10
 
@@ -78,7 +81,7 @@ function GroupMembersRow(props: GroupMembersRowProps) {
   }, [members])
 
   return (
-    <tr className='border-l-4 border-l-primary/40 border-t bg-muted/50'>
+    <tr className='bg-foreground/[0.03] border-t'>
       <td className='px-3 py-2 sm:px-5' colSpan={6}>
         {isLoading ? (
           <div className='space-y-1'>
@@ -94,7 +97,7 @@ function GroupMembersRow(props: GroupMembersRowProps) {
           <table className='w-full text-xs'>
             <thead className='text-muted-foreground'>
               <tr className='text-left'>
-                <th className='w-10 py-1 pl-1 pr-2 text-center'>#</th>
+                <th className='w-10 py-1 pr-2 pl-1 text-center'>#</th>
                 <th className='py-1 pr-2'>用户</th>
                 <th className='hidden w-32 py-1 pr-2 sm:table-cell'>占比</th>
                 <th className='py-1 pr-2 text-right'>调用次数</th>
@@ -112,14 +115,14 @@ function GroupMembersRow(props: GroupMembersRowProps) {
                 return (
                   <tr
                     key={`${m.user_id ?? 0}-${m.username ?? ''}`}
-                    className='border-t border-border/40'
+                    className='border-border/40 border-t'
                   >
-                    <td className='py-1 pl-1 pr-2 text-center text-muted-foreground'>
+                    <td className='text-muted-foreground py-1 pr-2 pl-1 text-center'>
                       {i + 1}
                     </td>
                     <td className='py-1 pr-2'>{m.username || '(未知)'}</td>
                     <td className='hidden py-1 pr-2 sm:table-cell'>
-                      <div className='bg-background/60 h-1.5 w-full overflow-hidden rounded-full'>
+                      <div className='bg-foreground/10 h-1.5 w-full overflow-hidden rounded-full'>
                         <div
                           className='bg-primary/70 h-full rounded-full transition-all'
                           style={{
@@ -279,26 +282,28 @@ export function GroupCharts(props: GroupChartsProps) {
     [rankRows]
   )
 
+  const isEmpty = !isLoading && filteredData.length === 0
+
   return (
-    <div className='space-y-3'>
+    <div className='space-y-6'>
       <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
         <span>当前维度：</span>
-        <span className='bg-muted text-foreground rounded px-2 py-0.5'>
+        <span className='bg-card text-foreground rounded-lg border px-2 py-0.5'>
           {billingHint}
         </span>
         {filters.username ? (
-          <span className='bg-muted text-foreground rounded px-2 py-0.5'>
+          <span className='bg-card text-foreground rounded-lg border px-2 py-0.5'>
             用户：{filters.username}
           </span>
         ) : null}
-        <span className='bg-muted text-foreground rounded px-2 py-0.5'>
+        <span className='bg-card text-foreground rounded-lg border px-2 py-0.5'>
           Top {topN}
         </span>
         {isLoading ? <Loader2 className='size-3.5 animate-spin' /> : null}
       </div>
 
       {/* 分组消耗排行：列表 */}
-      <div className='overflow-hidden rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='flex w-full items-center justify-between gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
           <div className='flex items-center gap-2'>
             <Layers className='text-muted-foreground/60 size-4' />
@@ -311,7 +316,7 @@ export function GroupCharts(props: GroupChartsProps) {
 
         <div className='overflow-x-auto'>
           <table className='w-full text-sm'>
-            <thead className='bg-muted/40 text-muted-foreground'>
+            <thead className='bg-foreground/[0.03] text-muted-foreground'>
               <tr className='text-left text-xs'>
                 <th className='w-12 px-3 py-2 text-center sm:px-5'>#</th>
                 <th className='px-3 py-2 sm:px-5'>分组</th>
@@ -349,16 +354,15 @@ export function GroupCharts(props: GroupChartsProps) {
                   return (
                     <Fragment key={row.group}>
                       <tr
-                        className='hover:bg-muted/40 cursor-pointer border-t transition-colors'
+                        className='hover:bg-foreground/[0.04] cursor-pointer border-t transition-colors'
                         onClick={() => toggleGroupExpansion(row.group)}
                       >
                         <td className='px-3 py-2 text-center sm:px-5'>
                           <span
-                            className={
-                              idx < 3
-                                ? 'inline-flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold'
-                                : 'text-muted-foreground text-xs'
-                            }
+                            className={cn(
+                              'inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold tabular-nums',
+                              dashRankTone(idx + 1)
+                            )}
                           >
                             {idx + 1}
                           </span>
@@ -383,7 +387,7 @@ export function GroupCharts(props: GroupChartsProps) {
                           {renderQuotaCompat(row.quota, 2)}
                         </td>
                         <td className='hidden px-3 py-2 sm:table-cell sm:px-5'>
-                          <div className='bg-muted h-1.5 w-full overflow-hidden rounded-full'>
+                          <div className='bg-foreground/10 h-1.5 w-full overflow-hidden rounded-full'>
                             <div
                               className='bg-primary h-full rounded-full transition-all'
                               style={{
@@ -411,15 +415,25 @@ export function GroupCharts(props: GroupChartsProps) {
       </div>
 
       {/* 分组消耗趋势：保留图表 */}
-      <div className='overflow-hidden rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
           <Layers className='text-muted-foreground/60 size-4' />
           <div className='text-sm font-semibold'>分组消耗趋势</div>
         </div>
 
-        <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
+        <div
+          className={cn(
+            'p-1.5 sm:p-2',
+            // 空态不需要撑满图表高度
+            isEmpty ? 'h-40' : 'h-[300px] sm:h-96'
+          )}
+        >
           {isLoading ? (
             <Skeleton className='h-full w-full' />
+          ) : isEmpty ? (
+            <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
+              所选时间范围内无数据
+            </div>
           ) : (
             themeReady &&
             trendSpec && (

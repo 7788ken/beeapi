@@ -134,6 +134,10 @@ func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) 
 	if newApiErr == nil {
 		return
 	}
+	// 质量闸门的状态码是网关自己写的，不能被渠道 status_code_mapping 改掉。
+	if types.IsResponseQualityFilterError(newApiErr) {
+		return
+	}
 	if statusCodeMappingStr == "" || statusCodeMappingStr == "{}" {
 		return
 	}

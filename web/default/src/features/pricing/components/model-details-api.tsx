@@ -490,12 +490,12 @@ function CodeSamplesSection(props: {
       <div className='flex flex-wrap items-center gap-2'>
         {endpoints.length > 1 && (
           <Tabs value={endpointType} onValueChange={setEndpointType}>
-            <TabsList className='bg-muted/40 h-8 p-0.5'>
+            <TabsList className='h-8'>
               {endpoints.map((ep) => (
                 <TabsTrigger
                   key={ep.type}
                   value={ep.type}
-                  className='h-7 px-2.5 text-xs'
+                  className='px-2.5 text-xs'
                 >
                   {ep.type}
                 </TabsTrigger>
@@ -509,9 +509,9 @@ function CodeSamplesSection(props: {
           onValueChange={(v) => setLang(v as Lang)}
           className='ml-auto'
         >
-          <TabsList className='bg-muted/40 h-8 p-0.5'>
+          <TabsList className='h-8'>
             {(Object.keys(LANG_LABELS) as Lang[]).map((l) => (
-              <TabsTrigger key={l} value={l} className='h-7 px-2.5 text-xs'>
+              <TabsTrigger key={l} value={l} className='px-2.5 text-xs'>
                 {LANG_LABELS[l]}
               </TabsTrigger>
             ))}

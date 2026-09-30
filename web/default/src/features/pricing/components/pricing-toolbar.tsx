@@ -29,6 +29,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  dashSegItem,
+  dashSegTrack,
+} from '@/features/dashboard/components/overview/dash-emphasis'
+import {
   VIEW_MODES,
   getSortLabels,
   type SortOption,
@@ -82,11 +86,7 @@ function SegmentedControl(props: {
   ariaLabel: string
 }) {
   return (
-    <div
-      role='group'
-      aria-label={props.ariaLabel}
-      className='bg-muted/60 inline-flex h-8 items-center rounded-md border p-0.5'
-    >
+    <div role='group' aria-label={props.ariaLabel} className={dashSegTrack}>
       {props.options.map((option) => {
         const Icon = option.icon
         const isActive = option.value === props.value
@@ -97,11 +97,8 @@ function SegmentedControl(props: {
             onClick={() => props.onChange(option.value)}
             aria-pressed={isActive}
             className={cn(
-              'inline-flex h-full items-center justify-center rounded-[5px] text-xs font-medium transition-all',
-              Icon && !option.label ? 'w-7' : 'gap-1.5 px-3',
-              isActive
-                ? 'bg-foreground text-background shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+              dashSegItem(isActive),
+              Icon && !option.label && 'w-7 px-0'
             )}
           >
             {Icon && <Icon className='size-3.5' />}

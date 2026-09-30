@@ -1,17 +1,16 @@
 // 对账面板 — 按天窗口（今天/昨天/指定日期）的渠道 × 模型精确聚合：
 // 请求/成功/失败/超时/费用，用于核对上游账单。
 // 渠道行点击展开模型明细（全局单开），明细内可按全部/单模型过滤。
-
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
-import { cn } from '@/lib/utils'
 import { formatQuota } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -19,7 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { fmtCount } from '../channels/format'
+import {
+  dashHeroCard,
+  dashSegItem,
+  dashSegTrack,
+} from '../overview/dash-emphasis'
 import { fetchChannelReconcile, fetchChannelReconcileUpstreamBill } from './api'
 import {
   dayRangeOf,
@@ -160,7 +165,10 @@ export function ReconcilePanel() {
       key: 'success',
       label: t('Success'),
       value: total ? fmtCount(total.success_count) : '-',
-      sub: successRate != null ? `${t('Success rate')} ${successRate}%` : undefined,
+      sub:
+        successRate != null
+          ? `${t('Success rate')} ${successRate}%`
+          : undefined,
     },
     {
       key: 'failed',
@@ -177,26 +185,28 @@ export function ReconcilePanel() {
   ]
 
   return (
-    <div className='space-y-3'>
+    <div className='space-y-6'>
       {/* 筛选条：今天 / 昨天 / 指定日期 + 刷新 */}
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <div className='flex flex-wrap items-center gap-1.5'>
-          <Button
-            variant={date === today ? 'default' : 'outline'}
-            size='sm'
-            className='h-8 text-xs'
-            onClick={() => setDate(today)}
-          >
-            {t('Today')}
-          </Button>
-          <Button
-            variant={date === localDateStr(-1) ? 'default' : 'outline'}
-            size='sm'
-            className='h-8 text-xs'
-            onClick={() => setDate(localDateStr(-1))}
-          >
-            {t('Yesterday')}
-          </Button>
+          <div className={dashSegTrack}>
+            <button
+              type='button'
+              className={dashSegItem(date === today)}
+              aria-pressed={date === today}
+              onClick={() => setDate(today)}
+            >
+              {t('Today')}
+            </button>
+            <button
+              type='button'
+              className={dashSegItem(date === localDateStr(-1))}
+              aria-pressed={date === localDateStr(-1)}
+              onClick={() => setDate(localDateStr(-1))}
+            >
+              {t('Yesterday')}
+            </button>
+          </div>
           <Input
             type='date'
             value={date}
@@ -204,7 +214,7 @@ export function ReconcilePanel() {
             onChange={(e) => {
               if (e.target.value) setDate(e.target.value)
             }}
-            className='h-8 w-[150px] text-xs'
+            className='bg-card h-8 w-[150px] text-xs'
             aria-label={t('Date')}
           />
           <Button
@@ -215,7 +225,10 @@ export function ReconcilePanel() {
             disabled={query.isFetching}
           >
             <RefreshCw
-              className={cn('mr-1 size-3.5', query.isFetching && 'animate-spin')}
+              className={cn(
+                'mr-1 size-3.5',
+                query.isFetching && 'animate-spin'
+              )}
             />
             {t('Refresh')}
           </Button>
@@ -228,34 +241,42 @@ export function ReconcilePanel() {
       </div>
 
       {/* 汇总条 */}
-      <div className='overflow-hidden rounded-lg border'>
-        <div
-          className={cn(
-            'divide-border/60 grid grid-cols-2 sm:divide-x',
-            summary.length > 5
-              ? 'sm:grid-cols-3 lg:grid-cols-6'
-              : 'sm:grid-cols-5'
-          )}
-        >
-          {summary.map((s) => (
-            <div key={s.key} className='px-4 py-3'>
-              <div className='text-muted-foreground text-xs'>{s.label}</div>
+      <div
+        className={cn(
+          'grid grid-cols-2 gap-6',
+          summary.length > 5
+            ? 'sm:grid-cols-3 lg:grid-cols-6'
+            : 'sm:grid-cols-5'
+        )}
+      >
+        {summary.map((s) => {
+          // 费用是本页核心数字，做主卡；紫底上只放白字，不叠 s.className。
+          const hero = s.key === 'cost'
+          const labelTone = hero
+            ? 'text-primary-foreground'
+            : 'text-muted-foreground'
+          return (
+            <div
+              key={s.key}
+              className={cn(hero ? dashHeroCard : surfaceClass, 'min-w-0 p-5')}
+            >
+              <div className={cn('truncate text-xs', labelTone)}>{s.label}</div>
               <div
                 className={cn(
-                  'mt-1 font-mono text-lg font-semibold tabular-nums',
-                  s.className
+                  'mt-1 truncate font-mono text-lg font-semibold tabular-nums',
+                  hero ? 'text-primary-foreground' : s.className
                 )}
               >
                 {s.value}
               </div>
               {s.sub && (
-                <div className='text-muted-foreground mt-0.5 text-[10px]'>
+                <div className={cn('mt-0.5 truncate text-[10px]', labelTone)}>
                   {s.sub}
                 </div>
               )}
             </div>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
       {/* 渠道明细表 */}
@@ -266,17 +287,27 @@ export function ReconcilePanel() {
           ))}
         </div>
       ) : query.isError ? (
-        <div className='text-destructive rounded-lg border py-8 text-center text-xs'>
+        <div
+          className={cn(
+            surfaceClass,
+            'text-destructive py-10 text-center text-sm'
+          )}
+        >
           {t('Failed to load')}
         </div>
       ) : channels.length === 0 ? (
-        <div className='text-muted-foreground rounded-lg border py-8 text-center text-xs'>
+        <div
+          className={cn(
+            surfaceClass,
+            'text-muted-foreground py-10 text-center text-sm'
+          )}
+        >
           {t('No data')}
         </div>
       ) : (
-        <div className='overflow-x-auto rounded-lg border'>
+        <div className={cn(surfaceClass, 'overflow-x-auto')}>
           <table className='w-full min-w-[720px] text-xs'>
-            <thead className='text-muted-foreground bg-muted/40'>
+            <thead className='text-muted-foreground bg-foreground/[0.03]'>
               <tr className='text-left'>
                 <th className='py-2 pr-2 pl-3 font-normal'>{t('Channel')}</th>
                 <th className='w-24 py-2 pr-2 text-right font-normal'>
@@ -362,7 +393,7 @@ function ChannelRow({
   return (
     <>
       <tr
-        className='border-border/40 hover:bg-muted/30 cursor-pointer border-t'
+        className='border-border/40 hover:bg-foreground/[0.04] cursor-pointer border-t'
         onClick={onToggle}
       >
         <td className='max-w-0 py-1.5 pr-2 pl-3'>
@@ -379,7 +410,7 @@ function ChannelRow({
               #{item.channel_id}
             </span>
             {item.status !== 1 && (
-              <span className='text-muted-foreground bg-muted shrink-0 rounded px-1 py-px text-[10px]'>
+              <span className='text-muted-foreground bg-foreground/10 shrink-0 rounded px-1 py-px text-[10px]'>
                 {t('Disabled')}
               </span>
             )}
@@ -436,7 +467,10 @@ function ChannelRow({
       </tr>
       {expanded && (
         <tr className='border-border/40 border-t'>
-          <td colSpan={billOn ? 7 : 6} className='bg-muted/20 px-3 py-2'>
+          <td
+            colSpan={billOn ? 7 : 6}
+            className='bg-foreground/[0.03] px-3 py-2'
+          >
             <ChannelModelDetail item={item} />
           </td>
         </tr>
@@ -456,7 +490,7 @@ function ChannelModelDetail({ item }: { item: ChannelReconcileItem }) {
   const showTotalRow = selected === ALL_MODELS && item.models.length > 1
 
   return (
-    <div className='border-l-primary/40 bg-background/60 rounded-md border border-l-4 px-3 py-2'>
+    <div className='px-1 py-1'>
       <div className='flex flex-wrap items-center justify-between gap-2 pb-1.5'>
         <span className='text-xs font-semibold'>{t('Model detail')}</span>
         <Select value={selected} onValueChange={setSelected}>

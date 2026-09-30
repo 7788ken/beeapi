@@ -82,6 +82,7 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
+import { useContentBackupModuleEnabled } from '@/features/content-backup/module'
 import {
   createChannel,
   fetchModels,
@@ -335,12 +336,17 @@ function ChannelTabTrigger({
   return (
     <TabsTrigger
       value={tab.value}
-      className='data-[state=active]:bg-background data-[state=active]:border-border relative h-auto flex-none gap-1.5 rounded-md border border-transparent px-3 py-1.5 data-[state=active]:shadow-sm'
+      className='relative h-auto flex-none gap-1.5 rounded-md border border-transparent px-3 py-1.5'
     >
-      <Icon className={cn('h-4 w-4', tab.iconColor)} />
+      <Icon
+        className={cn(
+          'group-data-[state=active]/tab:text-primary-foreground h-4 w-4',
+          tab.iconColor
+        )}
+      />
       <span>{label}</span>
       {hasError && (
-        <span className='bg-destructive absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full' />
+        <span className='bg-destructive group-data-[state=active]/tab:bg-primary-foreground absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full' />
       )}
     </TabsTrigger>
   )
@@ -380,6 +386,8 @@ export function ChannelMutateDrawer({
   >(null)
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
+  // 模块关闭时只隐藏开关，表单值照常回显并原样提交
+  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
@@ -3043,6 +3051,33 @@ export function ChannelMutateDrawer({
                             </FormItem>
                           )}
                         />
+
+                        <FormField
+                          control={form.control}
+                          name='skip_auto_test'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t(
+                                    'Excluded from scheduled and availability tests'
+                                  )}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'Scheduled all-channel tests (including Test All Channels), recovery probing and degrade probing skip this channel, and its Availability column shows solid green without a percentage. Testing this channel on its own still works. Once stopped automatically, it is not re-enabled automatically.'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
                       </div>
 
                       <div className='space-y-4 border-t pt-4'>
@@ -3572,6 +3607,106 @@ export function ChannelMutateDrawer({
 
                                 <FormField
                                   control={form.control}
+                                  name='claude_thinking_adaptive_compat'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between gap-3 px-4 py-3'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel className='text-sm'>
+                                          {t('Claude thinking adaptive compat')}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Rewrite legacy thinking.type=enabled to thinking.type=adaptive and map budget_tokens to output_config.effort, so upstream models that reject enabled thinking no longer return 400'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name='claude_thinking_signature_strip'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between gap-3 px-4 py-3'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel className='text-sm'>
+                                          {t('Claude thinking signature strip')}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Strip thinking/redacted_thinking blocks from message history entirely to avoid upstream 400 caused by invalid or missing signatures'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name='claude_strip_server_tools_compat'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between gap-3 px-4 py-3'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel className='text-sm'>
+                                          {t('Claude server tools strip compat')}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Remove server-side tools (web_search, code_execution, etc.) and their paired history blocks that the upstream rejects with 400'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name='claude_filter_beta_header_compat'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between gap-3 px-4 py-3'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel className='text-sm'>
+                                          {t('Claude beta header filter compat')}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Filter unsupported anthropic-beta values (e.g. prompt-caching-scope-*) that the upstream rejects with 400'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
                                   name='verify_interval_minutes'
                                   render={({ field }) => (
                                     <FormItem className='px-4 py-3'>
@@ -3739,6 +3874,106 @@ export function ChannelMutateDrawer({
                                 <FormLabel>{t('Pass Through Body')}</FormLabel>
                                 <FormDescription>
                                   {t('Pass request body directly to upstream')}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='disable_no_output_refund'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Opt out of no-output refund')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'Bill zero-output responses on this channel normally. Also bill apology and low-token quality intercepts, because upstream already generated. Off (default) = follow the global no-output refund switch; quality hits are refunded.'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        {contentBackupModuleEnabled && (
+                          <FormField
+                            control={form.control}
+                            name='content_backup_enabled'
+                            render={({ field }) => (
+                              <FormItem className='flex items-center justify-between px-4 py-3'>
+                                <div className='space-y-0.5'>
+                                  <FormLabel>{t('Content backup')}</FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Include this channel in content backup collection. Off by default.'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
+                        <FormField
+                          control={form.control}
+                          name='block_apology_enabled'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Block apology replies')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'When the global apology switch is also on, apology replies from this channel are discarded and the configured global status and message are returned.'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='block_low_token_enabled'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Block low-token replies')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'When the global low-token switch is also on, replies below the global threshold are discarded and the configured global status and message are returned.'
+                                  )}
                                 </FormDescription>
                               </div>
                               <FormControl>

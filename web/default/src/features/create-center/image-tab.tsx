@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, surfaceClass } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -187,7 +187,7 @@ export function ImageTab() {
   return (
     <div className='space-y-4'>
       {/* ──────────────── 上：表单 ──────────────── */}
-      <Card className='border-violet-200/50 bg-gradient-to-br from-violet-50/30 to-transparent p-4 dark:border-violet-500/20 dark:from-violet-950/20'>
+      <Card className='border-violet-200/50 bg-linear-to-br from-violet-50/30 to-transparent p-4 dark:border-violet-500/20 dark:from-violet-950/20'>
         {modelsLoading ? (
           <div className='space-y-3'>
             <Skeleton className='h-10 w-full' />
@@ -510,14 +510,14 @@ function GalleryTile({ job, onClick }: GalleryTileProps) {
       type='button'
       onClick={onClick}
       className={cn(
-        'group bg-muted/40 relative aspect-square overflow-hidden rounded-lg border transition-all',
-        job.status === 'done' && 'cursor-zoom-in hover:ring-2 hover:ring-violet-400 hover:ring-offset-2',
-        job.status === 'error' && 'border-rose-300/50 bg-rose-50/30 dark:bg-rose-950/20',
+        surfaceClass, 'group relative aspect-square overflow-hidden transition-all',
+        job.status === 'done' && 'cursor-zoom-in hover:ring-2 hover:ring-violet-400 hover:ring-offset-2 ring-offset-background',
+        job.status === 'error' && 'border-rose-300/50',
         job.status !== 'done' && 'cursor-default'
       )}
     >
       {job.status === 'running' || job.status === 'pending' ? (
-        <div className='flex h-full w-full flex-col items-center justify-center gap-2'>
+        <div className='bg-muted/40 flex h-full w-full flex-col items-center justify-center gap-2'>
           <Loader2 className='text-violet-500 h-6 w-6 animate-spin' />
           <span className='text-muted-foreground text-[10px]'>
             {t('Generating...')}
@@ -526,7 +526,7 @@ function GalleryTile({ job, onClick }: GalleryTileProps) {
       ) : job.status === 'error' ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className='flex h-full w-full flex-col items-center justify-center gap-1.5'>
+            <div className='flex h-full w-full flex-col items-center justify-center gap-1.5 bg-rose-50/30 dark:bg-rose-950/20'>
               <AlertCircle className='h-6 w-6 text-rose-500' />
               <span className='text-rose-600 px-2 text-[10px] line-clamp-2'>
                 {t('Failed')}
@@ -551,7 +551,7 @@ function GalleryTile({ job, onClick }: GalleryTileProps) {
           </div>
         </>
       ) : (
-        <div className='flex h-full w-full items-center justify-center'>
+        <div className='bg-muted/40 flex h-full w-full items-center justify-center'>
           <ImagePlus className='text-muted-foreground h-6 w-6' />
         </div>
       )}

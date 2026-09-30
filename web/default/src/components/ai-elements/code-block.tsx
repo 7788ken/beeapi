@@ -9,7 +9,6 @@ import {
   useEffect,
   useState,
 } from 'react'
-import type { Element } from 'hast'
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import {
   type BundledLanguage,
@@ -35,7 +34,7 @@ const CodeBlockContext = createContext<CodeBlockContextType>({
 
 const lineNumberTransformer: ShikiTransformer = {
   name: 'line-numbers',
-  line(node: Element, line: number) {
+  line(node, line) {
     node.children.unshift({
       type: 'element',
       tagName: 'span',

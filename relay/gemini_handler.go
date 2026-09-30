@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -70,6 +71,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
 
+	if request.GenerationConfig.ThinkingConfig != nil {
+		request.GenerationConfig.ThinkingConfig.ThinkingLevel = reasoning.NormalizeGeminiThinkingLevel(request.GenerationConfig.ThinkingConfig.ThinkingLevel)
+	}
 	if model_setting.GetGeminiSettings().ThinkingAdapterEnabled {
 		if isNoThinkingRequest(request) {
 			// check is thinking
@@ -195,7 +199,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
-	usage, openaiErr := adaptor.DoResponse(c, resp.(*http.Response), info)
+	usage, openaiErr := doResponseWithQualityFilter(c, info, func() (any, *types.NewAPIError) {
+		return adaptor.DoResponse(c, resp.(*http.Response), info)
+	})
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr

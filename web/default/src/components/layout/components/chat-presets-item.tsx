@@ -189,7 +189,7 @@ export function ChatPresetsItem({ item }: { item: NavChatPresets }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton tooltip={item.title}>
-              {item.icon && <item.icon className={`h-4 w-4 ${item.iconClassName || ''}`} />}
+              {item.icon && <item.icon className='h-4 w-4' />}
               <span>{item.title}</span>
               <ChevronRight className='ms-auto h-4 w-4 opacity-70' />
             </SidebarMenuButton>
@@ -225,9 +225,9 @@ export function ChatPresetsItem({ item }: { item: NavChatPresets }) {
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton>
-            {item.icon && <item.icon className={item.iconClassName} />}
+            {item.icon && <item.icon />}
             <span>{item.title}</span>
-            <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
+            <ChevronRight className='ms-auto transition-transform duration-[300ms] ease-out motion-reduce:transition-none group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent className='CollapsibleContent'>

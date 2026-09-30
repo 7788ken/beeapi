@@ -38,7 +38,11 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
       <div className='lg:hidden'>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <Button size='icon' variant='outline' className='size-7'>
+            <Button
+              size='icon'
+              variant='outline'
+              className='border-border bg-card text-foreground size-9 rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-[300ms] ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08)]'
+            >
               <Menu />
             </Button>
           </DropdownMenuTrigger>
@@ -51,14 +55,18 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
                       href={href}
                       target='_blank'
                       rel='noopener noreferrer'
-                      className={!isActive ? 'text-muted-foreground' : ''}
+                      className={
+                        isActive ? 'text-foreground' : 'text-muted-foreground'
+                      }
                     >
                       {title}
                     </a>
                   ) : (
                     <Link
                       to={href}
-                      className={!isActive ? 'text-muted-foreground' : ''}
+                      className={
+                        isActive ? 'text-foreground' : 'text-muted-foreground'
+                      }
                       disabled={disabled}
                     >
                       {title}
@@ -86,7 +94,7 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
               href={href}
               target='_blank'
               rel='noopener noreferrer'
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
+              className={`text-sm font-medium transition-colors duration-[300ms] ease-out hover:text-[#635bff] ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
             >
               {title}
             </a>
@@ -95,7 +103,7 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
               key={`${title}-${href}`}
               to={href}
               disabled={disabled}
-              className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
+              className={`text-sm font-medium transition-colors duration-[300ms] ease-out hover:text-[#635bff] ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
             >
               {title}
             </Link>

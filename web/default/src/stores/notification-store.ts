@@ -11,6 +11,8 @@ interface NotificationState {
   // Read price change batch ids (optional field for backward compatibility
   // with previously persisted localStorage data)
   readPriceBatchIds?: number[]
+  // 已看过的最近一次分组变动发布时间（unix 秒）：侧栏「可用分组」的 NEW 角标只在有更新的发布时亮
+  groupChangesSeenAt: number
 
   // Actions
   markNoticeRead: (noticeContent: string) => void
@@ -20,6 +22,7 @@ interface NotificationState {
   isNoticeClosed: () => boolean
   markPriceBatchesRead: (ids: number[]) => void
   isPriceBatchRead: (id: number) => boolean
+  markGroupChangesSeen: (publishedAt: number) => void
 }
 
 /**
@@ -33,6 +36,7 @@ export const useNotificationStore = create<NotificationState>()(
       readAnnouncementKeys: [],
       closedUntilDate: null,
       readPriceBatchIds: [],
+      groupChangesSeenAt: 0,
 
       markNoticeRead: (noticeContent: string) => {
         // Persist the full trimmed content so edits beyond 100 chars register
@@ -75,6 +79,12 @@ export const useNotificationStore = create<NotificationState>()(
       isPriceBatchRead: (id: number) => {
         return (get().readPriceBatchIds ?? []).includes(id)
       },
+
+      markGroupChangesSeen: (publishedAt: number) => {
+        set((state) => ({
+          groupChangesSeenAt: Math.max(state.groupChangesSeenAt, publishedAt),
+        }))
+      },
     }),
     {
       name: 'notification-storage',
@@ -83,6 +93,7 @@ export const useNotificationStore = create<NotificationState>()(
         readAnnouncementKeys: state.readAnnouncementKeys,
         closedUntilDate: state.closedUntilDate,
         readPriceBatchIds: state.readPriceBatchIds ?? [],
+        groupChangesSeenAt: state.groupChangesSeenAt,
       }),
     }
   )

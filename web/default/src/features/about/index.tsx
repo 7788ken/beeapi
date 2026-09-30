@@ -1,10 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { Construction } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/components/ui/markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
+import { Footer } from '@/components/layout/components/footer'
+import { FOOTER_COLUMNS } from '@/features/home/footer-columns'
+import '@/features/home/home-type.css'
 import { getAboutContent } from './api'
+import { AboutHero } from './components/about-hero'
+import { Contact } from './components/contact'
+import { Mission } from './components/mission'
+import { Team } from './components/team'
 
 function isValidUrl(value: string) {
   try {
@@ -19,24 +25,32 @@ function isLikelyHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value)
 }
 
-function EmptyAboutState() {
+/** 后台未配置关于内容时的默认关于页，版式与首页同一套落地页系统 */
+function AboutLanding() {
+  return (
+    <PublicLayout
+      showMainContainer={false}
+      headerProps={{ className: 'home-type' }}
+    >
+      <div className='home-type bg-[#f4f6fa] text-[#0b1c47] dark:bg-[#0a0c12] dark:text-[#eef1f6]'>
+        <AboutHero />
+        <Mission />
+        <Team />
+        <Contact />
+        <ProjectInfo />
+        <Footer columns={FOOTER_COLUMNS} />
+      </div>
+    </PublicLayout>
+  )
+}
+
+function ProjectInfo() {
   const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
 
   return (
-    <div className='flex min-h-[60vh] items-center justify-center p-8'>
-      <div className='max-w-2xl space-y-6 text-center'>
-        <div className='flex justify-center'>
-          <Construction className='text-muted-foreground h-24 w-24' />
-        </div>
-        <div className='space-y-2'>
-          <h2 className='text-2xl font-bold'>{t('No About Content Set')}</h2>
-          <p className='text-muted-foreground'>
-            {t(
-              'The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.'
-            )}
-          </p>
-        </div>
+    <section className='px-6 pb-16 md:pb-20'>
+      <div className='mx-auto max-w-2xl text-center'>
         <div className='space-y-4 text-sm'>
           <p>
             {t('New API Project Repository:')}{' '}
@@ -100,7 +114,7 @@ function EmptyAboutState() {
           </p>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -130,11 +144,7 @@ export function About() {
   }
 
   if (!hasContent) {
-    return (
-      <PublicLayout>
-        <EmptyAboutState />
-      </PublicLayout>
-    )
+    return <AboutLanding />
   }
 
   if (isUrl) {

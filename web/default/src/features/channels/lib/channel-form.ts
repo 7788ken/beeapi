@@ -53,8 +53,16 @@ export const channelFormSchema = z
     pass_through_body_enabled: z.boolean().optional(),
     system_prompt: z.string().optional(),
     system_prompt_override: z.boolean().optional(),
+    // 渠道级排除零产出免单（部分上游无免单概念）；默认跟随全局开关
+    disable_no_output_refund: z.boolean().optional(),
     // 备用 base_url（多行文本，每行一个 URL；存 setting.backup_base_urls 数组）
     backup_base_urls: z.string().optional(),
+    // 是否纳入内容备份采集范围；默认关（docs/2026-09-15-channel-content-backup-upload.md）
+    content_backup_enabled: z.boolean().optional(),
+    block_apology_enabled: z.boolean().optional(),
+    block_low_token_enabled: z.boolean().optional(),
+    // 不参与定时测试和可用性测试（全量测试/恢复探活/降级探测都跳过）
+    skip_auto_test: z.boolean().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -68,6 +76,10 @@ export const channelFormSchema = z
     allow_inference_geo: z.boolean().optional(), // OpenAI/Anthropic: inference geography
     allow_speed: z.boolean().optional(), // Anthropic: speed mode control
     claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
+    claude_thinking_adaptive_compat: z.boolean().optional(), // Anthropic: rewrite legacy thinking.type=enabled to adaptive
+    claude_thinking_signature_strip: z.boolean().optional(), // Anthropic/Bedrock: strip signature from thinking blocks to avoid 400
+    claude_strip_server_tools_compat: z.boolean().optional(), // Anthropic/Bedrock: strip unsupported server tools (web_search/code_execution) to avoid 400
+    claude_filter_beta_header_compat: z.boolean().optional(), // Anthropic/Bedrock: filter unsupported anthropic-beta values to avoid 400
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -187,7 +199,12 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   pass_through_body_enabled: false,
   system_prompt: '',
   system_prompt_override: false,
+  disable_no_output_refund: false,
   backup_base_urls: '',
+  content_backup_enabled: false,
+  block_apology_enabled: false,
+  block_low_token_enabled: false,
+  skip_auto_test: false,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -201,6 +218,10 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   allow_inference_geo: false,
   allow_speed: false,
   claude_beta_query: false,
+  claude_thinking_adaptive_compat: false,
+  claude_thinking_signature_strip: false,
+  claude_strip_server_tools_compat: false,
+  claude_filter_beta_header_compat: false,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -239,7 +260,12 @@ export function transformChannelToFormDefaults(
     pass_through_body_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
+    disable_no_output_refund: false,
     backup_base_urls: '',
+    content_backup_enabled: false,
+    block_apology_enabled: false,
+    block_low_token_enabled: false,
+    skip_auto_test: false,
   }
 
   if (channel.setting) {
@@ -252,9 +278,14 @@ export function transformChannelToFormDefaults(
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
+        disable_no_output_refund: parsed.disable_no_output_refund === true,
         backup_base_urls: Array.isArray(parsed.backup_base_urls)
           ? parsed.backup_base_urls.join('\n')
           : '',
+        content_backup_enabled: parsed.content_backup_enabled === true,
+        block_apology_enabled: parsed.block_apology_enabled === true,
+        block_low_token_enabled: parsed.block_low_token_enabled === true,
+        skip_auto_test: parsed.skip_auto_test === true,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -274,6 +305,10 @@ export function transformChannelToFormDefaults(
   let allowInferenceGeo = false
   let allowSpeed = false
   let claudeBetaQuery = false
+  let claudeThinkingAdaptiveCompat = false
+  let claudeThinkingSignatureStrip = false
+  let claudeStripServerToolsCompat = false
+  let claudeFilterBetaHeaderCompat = false
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
@@ -293,6 +328,14 @@ export function transformChannelToFormDefaults(
       allowInferenceGeo = parsed.allow_inference_geo === true
       allowSpeed = parsed.allow_speed === true
       claudeBetaQuery = parsed.claude_beta_query === true
+      claudeThinkingAdaptiveCompat =
+        parsed.claude_thinking_adaptive_compat === true
+      claudeThinkingSignatureStrip =
+        parsed.claude_thinking_signature_strip === true
+      claudeStripServerToolsCompat =
+        parsed.claude_strip_server_tools_compat === true
+      claudeFilterBetaHeaderCompat =
+        parsed.claude_filter_beta_header_compat === true
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
@@ -350,6 +393,10 @@ export function transformChannelToFormDefaults(
     allow_inference_geo: allowInferenceGeo,
     allow_speed: allowSpeed,
     claude_beta_query: claudeBetaQuery,
+    claude_thinking_adaptive_compat: claudeThinkingAdaptiveCompat,
+    claude_thinking_signature_strip: claudeThinkingSignatureStrip,
+    claude_strip_server_tools_compat: claudeStripServerToolsCompat,
+    claude_filter_beta_header_compat: claudeFilterBetaHeaderCompat,
     allow_safety_identifier: allowSafetyIdentifier,
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
@@ -372,16 +419,38 @@ export function transformChannelToFormDefaults(
 
 /**
  * Build the setting JSON string from form extra settings
+ *
+ * 以编辑回显时的原始 setting JSON 为基底（formData.setting 在表单初始化后不再被改写），
+ * 再用表单管理的字段覆盖。否则白名单式全量重写会把后端新增、前端尚未适配的字段
+ * （如 base_url_strategy）在每次保存时静默清除。
  */
 function buildSettingJSON(formData: ChannelFormValues): string {
-  const settingObj = {
+  let base: Record<string, unknown> = {}
+  if (formData.setting) {
+    try {
+      const parsed = JSON.parse(formData.setting)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        base = parsed
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to parse original channel setting:', error)
+    }
+  }
+  const settingObj: Record<string, unknown> = {
+    ...base,
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy || '',
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+    disable_no_output_refund: formData.disable_no_output_refund || false,
     backup_base_urls: parseBackupBaseUrls(formData.backup_base_urls),
+    content_backup_enabled: formData.content_backup_enabled || false,
+    block_apology_enabled: formData.block_apology_enabled || false,
+    block_low_token_enabled: formData.block_low_token_enabled || false,
+    skip_auto_test: formData.skip_auto_test || false,
   }
   return JSON.stringify(settingObj)
 }
@@ -461,9 +530,25 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.allow_inference_geo = formData.allow_inference_geo === true
     settingsObj.allow_speed = formData.allow_speed === true
     settingsObj.claude_beta_query = formData.claude_beta_query === true
+    settingsObj.claude_thinking_adaptive_compat =
+      formData.claude_thinking_adaptive_compat === true
+    settingsObj.claude_thinking_signature_strip =
+      formData.claude_thinking_signature_strip === true
+    settingsObj.claude_strip_server_tools_compat =
+      formData.claude_strip_server_tools_compat === true
+    settingsObj.claude_filter_beta_header_compat =
+      formData.claude_filter_beta_header_compat === true
   } else {
     if ('allow_speed' in settingsObj) delete settingsObj.allow_speed
     if ('claude_beta_query' in settingsObj) delete settingsObj.claude_beta_query
+    if ('claude_thinking_adaptive_compat' in settingsObj)
+      delete settingsObj.claude_thinking_adaptive_compat
+    if ('claude_thinking_signature_strip' in settingsObj)
+      delete settingsObj.claude_thinking_signature_strip
+    if ('claude_strip_server_tools_compat' in settingsObj)
+      delete settingsObj.claude_strip_server_tools_compat
+    if ('claude_filter_beta_header_compat' in settingsObj)
+      delete settingsObj.claude_filter_beta_header_compat
   }
 
   // Upstream model update settings (for model-fetchable channel types)

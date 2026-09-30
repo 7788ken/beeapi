@@ -49,9 +49,6 @@ type ChannelHealthConfig struct {
 	// StreakWindowSec Redis streak 的 TTL（秒）。默认 600=10min。
 	StreakWindowSec int `json:"streak_window_sec"`
 
-	// SkipChannelTags 含这些 tag 的渠道完全不参与。
-	SkipChannelTags []string `json:"skip_channel_tags"`
-
 	// ── 反弹保护 ──
 	RebounceProtectionMinutes   int `json:"rebounce_protection_minutes"`
 	RebounceProtectionThreshold int `json:"rebounce_protection_threshold"`
@@ -60,18 +57,16 @@ type ChannelHealthConfig struct {
 	DemoteCooldownSec int `json:"demote_cooldown_sec"`
 
 	// ── 恢复探活 ──
-	RecoveryStrategy     string  `json:"recovery_strategy"`
-	RecoveryProbeMinutes int     `json:"recovery_probe_minutes"`
-	RecoveryProbeModel   string  `json:"recovery_probe_model"`
-	ShadowSampleRate     float64 `json:"shadow_sample_rate"`
+	RecoveryStrategy     string `json:"recovery_strategy"`
+	RecoveryProbeMinutes int    `json:"recovery_probe_minutes"`
 
 	// ── 降级渠道探测恢复 ──
 	// DegradeProbeEnabled 开启后，定期对高降级等级的 enabled 渠道发探测请求，
 	// 成功则累积 ok_streak 触发自动升级，解决"降级死锁"（priority 太低无流量→无法恢复）。
 	DegradeProbeEnabled  bool `json:"degrade_probe_enabled"`
-	DegradeProbeMinLevel int  `json:"degrade_probe_min_level"`   // 仅探测 >= 此级别的渠道（默认 3）
-	DegradeProbeMinutes  int  `json:"degrade_probe_minutes"`     // 探测间隔（默认 10 分钟）
-	DegradeProbeCount    int  `json:"degrade_probe_count"`       // 单次探测每渠道发几次请求（默认 5，凑 ok_streak）
+	DegradeProbeMinLevel int  `json:"degrade_probe_min_level"` // 仅探测 >= 此级别的渠道（默认 1，即所有降级渠道）
+	DegradeProbeMinutes  int  `json:"degrade_probe_minutes"`   // 探测间隔（默认 10 分钟）
+	DegradeProbeCount    int  `json:"degrade_probe_count"`     // 单次探测每渠道发几次请求（默认 5，凑 ok_streak）
 }
 
 var channelHealthSetting = ChannelHealthConfig{
@@ -95,14 +90,11 @@ var channelHealthSetting = ChannelHealthConfig{
 	NotifyOnDegrade:             false,
 	NotifyOnUpgrade:             false,
 	StreakWindowSec:             600,
-	SkipChannelTags:             nil,
 	RebounceProtectionMinutes:   0,
 	RebounceProtectionThreshold: 3,
 	DemoteCooldownSec:           60,
 	RecoveryStrategy:            "probe",
 	RecoveryProbeMinutes:        30,
-	RecoveryProbeModel:          "",
-	ShadowSampleRate:            0,
 	DegradeProbeEnabled:         true,
 	DegradeProbeMinLevel:        1,
 	DegradeProbeMinutes:         10,

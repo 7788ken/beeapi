@@ -19,6 +19,14 @@ func TestSdFlavorBuildAndFetchURLs(t *testing.T) {
 		t.Fatalf("unexpected sd submit url: %q err=%v", u, err)
 	}
 
+	// v2（dreamina max 线路）：仅路径升为 /v2，其余与 v1 一致
+	a2 := &TaskAdaptor{UpstreamFlavor: UpstreamFlavorSdV2}
+	a2.baseURL = "https://model.service-inference.ai"
+	u2v2, err := a2.BuildRequestURL(nil)
+	if err != nil || u2v2 != "https://model.service-inference.ai/v2/video/generate" {
+		t.Fatalf("unexpected sd-v2 submit url: %q err=%v", u2v2, err)
+	}
+
 	arm := &TaskAdaptor{}
 	arm.baseURL = "https://ark.cn-beijing.volces.com"
 	u2, _ := arm.BuildRequestURL(nil)
@@ -43,6 +51,17 @@ func TestSdFlavorFetchTaskURL(t *testing.T) {
 	resp.Body.Close()
 	if gotPath != "/v1/video/tasks/mvt-1" {
 		t.Fatalf("unexpected sd fetch path: %q", gotPath)
+	}
+
+	// v2 走 /v2/video/tasks/{id}
+	a2 := &TaskAdaptor{UpstreamFlavor: UpstreamFlavorSdV2}
+	resp2, err := a2.FetchTask(server.URL, "k", map[string]any{"task_id": "mvt-2"}, "")
+	if err != nil {
+		t.Fatalf("v2 fetch failed: %v", err)
+	}
+	resp2.Body.Close()
+	if gotPath != "/v2/video/tasks/mvt-2" {
+		t.Fatalf("unexpected sd-v2 fetch path: %q", gotPath)
 	}
 }
 
@@ -85,6 +104,7 @@ func TestParseSdTaskResultStatuses(t *testing.T) {
 		want   string
 	}{
 		{"pending", string(model.TaskStatusQueued)},
+		{"preparing", string(model.TaskStatusQueued)}, // v2 自动拉素材阶段，按排队处理
 		{"processing", string(model.TaskStatusInProgress)},
 		{"failed", string(model.TaskStatusFailure)},
 		{"weird-unknown", string(model.TaskStatusInProgress)},

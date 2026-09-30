@@ -66,6 +66,10 @@ func SubscriptionRequestCreemPay(c *gin.Context) {
 		return
 	}
 
+	if !checkPlanPurchaseAllowed(c, userId, plan) {
+		return
+	}
+
 	if plan.MaxPurchasePerUser > 0 {
 		count, err := model.CountUserSubscriptionsByPlan(userId, plan.Id)
 		if err != nil {

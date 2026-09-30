@@ -31,6 +31,8 @@ export function getPlanFormSchema(t: TFunction) {
     total_amount: z.coerce.number().min(0),
     upgrade_group: z.string().optional(),
     bound_group: z.string().optional(),
+    fallback_group: z.string().optional(),
+    allowed_user_groups: z.array(z.string()).optional(),
     stripe_price_id: z.string().optional(),
     creem_product_id: z.string().optional(),
   })
@@ -56,6 +58,8 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   total_amount: 0,
   upgrade_group: '',
   bound_group: '',
+  fallback_group: '',
+  allowed_user_groups: [],
   stripe_price_id: '',
   creem_product_id: '',
 }
@@ -82,6 +86,8 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     total_amount: Number(plan.total_amount || 0),
     upgrade_group: plan.upgrade_group || '',
     bound_group: plan.bound_group || '',
+    fallback_group: plan.fallback_group || '',
+    allowed_user_groups: plan.allowed_user_groups || [],
     stripe_price_id: plan.stripe_price_id || '',
     creem_product_id: plan.creem_product_id || '',
   }
@@ -106,6 +112,8 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
       total_amount: Number(values.total_amount || 0),
       upgrade_group: values.upgrade_group || '',
       bound_group: values.bound_group || '',
+      fallback_group: values.fallback_group || '',
+      allowed_user_groups: values.allowed_user_groups || [],
     },
   }
 }

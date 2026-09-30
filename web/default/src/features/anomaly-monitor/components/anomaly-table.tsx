@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { fetchAnomalyLogs, fetchAnomalySummary, getExportUrl, type AnomalyLog, type AnomalySummary } from '../api'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 
 const TYPE_COLORS: Record<string, string> = {
   client_disconnect: 'bg-yellow-100 text-yellow-800',
@@ -142,7 +144,7 @@ export function AnomalyTable({ type, timeParams, username, modelName, channelId 
         </Button>
       </div>
 
-      <div className="rounded-md border">
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <Table>
           <TableHeader>
             <TableRow>

@@ -32,10 +32,12 @@ var defaultGroupSpecialUsableGroup = map[string]map[string]string{
 	},
 }
 
+// GroupRatio / GroupGroupRatio 走独立 option 键（GroupRatio、GroupGroupRatio），
+// 不要再挂到 GlobalConfig 结构体上。否则会出现双源：
+// 后台只写了 GroupRatio，库里过期的 group_ratio_setting.group_ratio 在
+// loadOptionsFromDatabase / 集群广播时又把已删除的分组写回内存。
 type GroupRatioSetting struct {
-	GroupRatio              *types.RWMap[string, float64]            `json:"group_ratio"`
-	GroupGroupRatio         *types.RWMap[string, map[string]float64] `json:"group_group_ratio"`
-	GroupSpecialUsableGroup *types.RWMap[string, map[string]string]  `json:"group_special_usable_group"`
+	GroupSpecialUsableGroup *types.RWMap[string, map[string]string] `json:"group_special_usable_group"`
 }
 
 var groupRatioSetting GroupRatioSetting
@@ -49,8 +51,6 @@ func init() {
 
 	groupRatioSetting = GroupRatioSetting{
 		GroupSpecialUsableGroup: groupSpecialUsableGroup,
-		GroupRatio:              groupRatioMap,
-		GroupGroupRatio:         groupGroupRatioMap,
 	}
 
 	config.GlobalConfig.Register("group_ratio_setting", &groupRatioSetting)

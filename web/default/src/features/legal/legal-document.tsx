@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FileWarning } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +25,13 @@ function isValidUrl(value: string) {
   }
 }
 
+// 外部链接带上当前界面语言，多语言文档站（如官网法律页）据此切到对应语言版本
+function withLang(value: string, lang: string) {
+  const url = new URL(value)
+  url.searchParams.set('lang', lang)
+  return url.toString()
+}
+
 function isLikelyHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value)
 }
@@ -34,7 +42,7 @@ export function LegalDocument({
   fetchDocument,
   emptyMessage,
 }: LegalDocumentProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: [queryKey],
     queryFn: fetchDocument,
@@ -46,6 +54,14 @@ export function LegalDocument({
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
   const success = data?.success ?? false
+  const externalUrl = isUrl
+    ? withLang(rawContent, i18n.resolvedLanguage ?? i18n.language)
+    : ''
+
+  // 配置为外部链接时直接跳转，不再停在中间页；下方卡片仅在跳转被拦截时兜底
+  useEffect(() => {
+    if (externalUrl) window.location.replace(externalUrl)
+  }, [externalUrl])
 
   if (isLoading) {
     return (
@@ -97,7 +113,7 @@ export function LegalDocument({
                 )}
               </p>
               <Button asChild>
-                <a href={rawContent} target='_blank' rel='noopener noreferrer'>
+                <a href={externalUrl} target='_blank' rel='noopener noreferrer'>
                   {t('View document')}
                 </a>
               </Button>

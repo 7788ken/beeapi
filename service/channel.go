@@ -56,6 +56,14 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 }
 
 func EnableChannel(channelId int, usingKey string, channelName string) {
+	ch, err := model.GetChannelById(channelId, false)
+	if err != nil {
+		common.SysError("check channel recovery ownership: " + err.Error())
+		return
+	}
+	if ch.IQDisabled {
+		return
+	}
 	// 整渠道启用前先做"恢复回 L1"调整：snapshot original + 应用 L1 公式
 	// 单 key 启用（usingKey != ""）不动渠道级健康度
 	if usingKey == "" {
@@ -64,6 +72,13 @@ func EnableChannel(channelId int, usingKey string, channelName string) {
 
 	success := model.UpdateChannelStatus(channelId, usingKey, common.ChannelStatusEnabled, "")
 	if success {
+		// 整渠道恢复时清理完整运行时状态；单 key 恢复只清模型级摘除连击计数，
+		// 保留原有“单 key 不重置渠道健康度”的语义。
+		if usingKey == "" {
+			ClearChannelHealthRuntime(channelId)
+		} else {
+			ClearModelRemovalStreaks(channelId)
+		}
 		if usingKey == "" {
 			postChannelEnableHook(channelId, channelName)
 		}
@@ -253,6 +268,9 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 		return false
 	}
 	if err == nil {
+		return false
+	}
+	if types.IsResponseQualityFilterError(err) {
 		return false
 	}
 	if types.IsChannelError(err) {

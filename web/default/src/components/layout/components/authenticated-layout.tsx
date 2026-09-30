@@ -26,6 +26,7 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
               className={cn(
                 '@container/content',
                 'h-svh',
+                'bg-[#f6f9fc] bg-[linear-gradient(to_right,rgba(99,91,255,0.1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,91,255,0.1)_1px,transparent_1px)] bg-[size:40px_40px] dark:bg-[#0a2540] dark:bg-[linear-gradient(to_right,rgba(124,116,255,0.16)_1px,transparent_1px),linear-gradient(to_bottom,rgba(124,116,255,0.16)_1px,transparent_1px)]',
                 'peer-data-[variant=inset]:h-[calc(100svh-(var(--spacing)*4))]'
               )}
             >

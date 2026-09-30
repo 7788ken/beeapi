@@ -49,9 +49,11 @@ import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedMySubscriptionIndexRouteImport } from './routes/_authenticated/my-subscription/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
+import { Route as AuthenticatedIqTestIndexRouteImport } from './routes/_authenticated/iq-test/index'
 import { Route as AuthenticatedGroupSquareIndexRouteImport } from './routes/_authenticated/group-square/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedCreateCenterIndexRouteImport } from './routes/_authenticated/create-center/index'
+import { Route as AuthenticatedContentBackupIndexRouteImport } from './routes/_authenticated/content-backup/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedAnomalyMonitorIndexRouteImport } from './routes/_authenticated/anomaly-monitor/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
@@ -66,6 +68,7 @@ import { Route as AuthenticatedSystemSettingsMaintenanceIndexRouteImport } from 
 import { Route as AuthenticatedSystemSettingsIntegrationsIndexRouteImport } from './routes/_authenticated/system-settings/integrations/index'
 import { Route as AuthenticatedSystemSettingsGeneralIndexRouteImport } from './routes/_authenticated/system-settings/general/index'
 import { Route as AuthenticatedSystemSettingsContentIndexRouteImport } from './routes/_authenticated/system-settings/content/index'
+import { Route as AuthenticatedSystemSettingsChannelGovernanceIndexRouteImport } from './routes/_authenticated/system-settings/channel-governance/index'
 import { Route as AuthenticatedSystemSettingsAuthIndexRouteImport } from './routes/_authenticated/system-settings/auth/index'
 import { Route as AuthenticatedSystemSettingsRequestLimitsSectionRouteImport } from './routes/_authenticated/system-settings/request-limits/$section'
 import { Route as AuthenticatedSystemSettingsModelsSectionRouteImport } from './routes/_authenticated/system-settings/models/$section'
@@ -73,6 +76,7 @@ import { Route as AuthenticatedSystemSettingsMaintenanceSectionRouteImport } fro
 import { Route as AuthenticatedSystemSettingsIntegrationsSectionRouteImport } from './routes/_authenticated/system-settings/integrations/$section'
 import { Route as AuthenticatedSystemSettingsGeneralSectionRouteImport } from './routes/_authenticated/system-settings/general/$section'
 import { Route as AuthenticatedSystemSettingsContentSectionRouteImport } from './routes/_authenticated/system-settings/content/$section'
+import { Route as AuthenticatedSystemSettingsChannelGovernanceSectionRouteImport } from './routes/_authenticated/system-settings/channel-governance/$section'
 import { Route as AuthenticatedSystemSettingsAuthSectionRouteImport } from './routes/_authenticated/system-settings/auth/$section'
 
 const UserAgreementRoute = UserAgreementRouteImport.update({
@@ -285,6 +289,12 @@ const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
   path: '/keys/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedIqTestIndexRoute =
+  AuthenticatedIqTestIndexRouteImport.update({
+    id: '/iq-test/',
+    path: '/iq-test/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedGroupSquareIndexRoute =
   AuthenticatedGroupSquareIndexRouteImport.update({
     id: '/group-square/',
@@ -301,6 +311,12 @@ const AuthenticatedCreateCenterIndexRoute =
   AuthenticatedCreateCenterIndexRouteImport.update({
     id: '/create-center/',
     path: '/create-center/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedContentBackupIndexRoute =
+  AuthenticatedContentBackupIndexRouteImport.update({
+    id: '/content-backup/',
+    path: '/content-backup/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedChannelsIndexRoute =
@@ -385,6 +401,12 @@ const AuthenticatedSystemSettingsContentIndexRoute =
     path: '/content/',
     getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
   } as any)
+const AuthenticatedSystemSettingsChannelGovernanceIndexRoute =
+  AuthenticatedSystemSettingsChannelGovernanceIndexRouteImport.update({
+    id: '/channel-governance/',
+    path: '/channel-governance/',
+    getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
+  } as any)
 const AuthenticatedSystemSettingsAuthIndexRoute =
   AuthenticatedSystemSettingsAuthIndexRouteImport.update({
     id: '/auth/',
@@ -427,6 +449,12 @@ const AuthenticatedSystemSettingsContentSectionRoute =
     path: '/content/$section',
     getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
   } as any)
+const AuthenticatedSystemSettingsChannelGovernanceSectionRoute =
+  AuthenticatedSystemSettingsChannelGovernanceSectionRouteImport.update({
+    id: '/channel-governance/$section',
+    path: '/channel-governance/$section',
+    getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
+  } as any)
 const AuthenticatedSystemSettingsAuthSectionRoute =
   AuthenticatedSystemSettingsAuthSectionRouteImport.update({
     id: '/auth/$section',
@@ -467,9 +495,11 @@ export interface FileRoutesByFullPath {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/anomaly-monitor/': typeof AuthenticatedAnomalyMonitorIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/content-backup/': typeof AuthenticatedContentBackupIndexRoute
   '/create-center/': typeof AuthenticatedCreateCenterIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-square/': typeof AuthenticatedGroupSquareIndexRoute
+  '/iq-test/': typeof AuthenticatedIqTestIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/my-subscription/': typeof AuthenticatedMySubscriptionIndexRoute
@@ -485,6 +515,7 @@ export interface FileRoutesByFullPath {
   '/wallet/': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId/': typeof PricingModelIdIndexRoute
   '/system-settings/auth/$section': typeof AuthenticatedSystemSettingsAuthSectionRoute
+  '/system-settings/channel-governance/$section': typeof AuthenticatedSystemSettingsChannelGovernanceSectionRoute
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/system-settings/general/$section': typeof AuthenticatedSystemSettingsGeneralSectionRoute
   '/system-settings/integrations/$section': typeof AuthenticatedSystemSettingsIntegrationsSectionRoute
@@ -492,6 +523,7 @@ export interface FileRoutesByFullPath {
   '/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/system-settings/request-limits/$section': typeof AuthenticatedSystemSettingsRequestLimitsSectionRoute
   '/system-settings/auth/': typeof AuthenticatedSystemSettingsAuthIndexRoute
+  '/system-settings/channel-governance/': typeof AuthenticatedSystemSettingsChannelGovernanceIndexRoute
   '/system-settings/content/': typeof AuthenticatedSystemSettingsContentIndexRoute
   '/system-settings/general/': typeof AuthenticatedSystemSettingsGeneralIndexRoute
   '/system-settings/integrations/': typeof AuthenticatedSystemSettingsIntegrationsIndexRoute
@@ -531,9 +563,11 @@ export interface FileRoutesByTo {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/anomaly-monitor': typeof AuthenticatedAnomalyMonitorIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
+  '/content-backup': typeof AuthenticatedContentBackupIndexRoute
   '/create-center': typeof AuthenticatedCreateCenterIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-square': typeof AuthenticatedGroupSquareIndexRoute
+  '/iq-test': typeof AuthenticatedIqTestIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/my-subscription': typeof AuthenticatedMySubscriptionIndexRoute
@@ -549,6 +583,7 @@ export interface FileRoutesByTo {
   '/wallet': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId': typeof PricingModelIdIndexRoute
   '/system-settings/auth/$section': typeof AuthenticatedSystemSettingsAuthSectionRoute
+  '/system-settings/channel-governance/$section': typeof AuthenticatedSystemSettingsChannelGovernanceSectionRoute
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/system-settings/general/$section': typeof AuthenticatedSystemSettingsGeneralSectionRoute
   '/system-settings/integrations/$section': typeof AuthenticatedSystemSettingsIntegrationsSectionRoute
@@ -556,6 +591,7 @@ export interface FileRoutesByTo {
   '/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/system-settings/request-limits/$section': typeof AuthenticatedSystemSettingsRequestLimitsSectionRoute
   '/system-settings/auth': typeof AuthenticatedSystemSettingsAuthIndexRoute
+  '/system-settings/channel-governance': typeof AuthenticatedSystemSettingsChannelGovernanceIndexRoute
   '/system-settings/content': typeof AuthenticatedSystemSettingsContentIndexRoute
   '/system-settings/general': typeof AuthenticatedSystemSettingsGeneralIndexRoute
   '/system-settings/integrations': typeof AuthenticatedSystemSettingsIntegrationsIndexRoute
@@ -599,9 +635,11 @@ export interface FileRoutesById {
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/anomaly-monitor/': typeof AuthenticatedAnomalyMonitorIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/_authenticated/content-backup/': typeof AuthenticatedContentBackupIndexRoute
   '/_authenticated/create-center/': typeof AuthenticatedCreateCenterIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-square/': typeof AuthenticatedGroupSquareIndexRoute
+  '/_authenticated/iq-test/': typeof AuthenticatedIqTestIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/my-subscription/': typeof AuthenticatedMySubscriptionIndexRoute
@@ -617,6 +655,7 @@ export interface FileRoutesById {
   '/_authenticated/wallet/': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId/': typeof PricingModelIdIndexRoute
   '/_authenticated/system-settings/auth/$section': typeof AuthenticatedSystemSettingsAuthSectionRoute
+  '/_authenticated/system-settings/channel-governance/$section': typeof AuthenticatedSystemSettingsChannelGovernanceSectionRoute
   '/_authenticated/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/_authenticated/system-settings/general/$section': typeof AuthenticatedSystemSettingsGeneralSectionRoute
   '/_authenticated/system-settings/integrations/$section': typeof AuthenticatedSystemSettingsIntegrationsSectionRoute
@@ -624,6 +663,7 @@ export interface FileRoutesById {
   '/_authenticated/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/_authenticated/system-settings/request-limits/$section': typeof AuthenticatedSystemSettingsRequestLimitsSectionRoute
   '/_authenticated/system-settings/auth/': typeof AuthenticatedSystemSettingsAuthIndexRoute
+  '/_authenticated/system-settings/channel-governance/': typeof AuthenticatedSystemSettingsChannelGovernanceIndexRoute
   '/_authenticated/system-settings/content/': typeof AuthenticatedSystemSettingsContentIndexRoute
   '/_authenticated/system-settings/general/': typeof AuthenticatedSystemSettingsGeneralIndexRoute
   '/_authenticated/system-settings/integrations/': typeof AuthenticatedSystemSettingsIntegrationsIndexRoute
@@ -666,9 +706,11 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/anomaly-monitor/'
     | '/channels/'
+    | '/content-backup/'
     | '/create-center/'
     | '/dashboard/'
     | '/group-square/'
+    | '/iq-test/'
     | '/keys/'
     | '/models/'
     | '/my-subscription/'
@@ -684,6 +726,7 @@ export interface FileRouteTypes {
     | '/wallet/'
     | '/pricing/$modelId/'
     | '/system-settings/auth/$section'
+    | '/system-settings/channel-governance/$section'
     | '/system-settings/content/$section'
     | '/system-settings/general/$section'
     | '/system-settings/integrations/$section'
@@ -691,6 +734,7 @@ export interface FileRouteTypes {
     | '/system-settings/models/$section'
     | '/system-settings/request-limits/$section'
     | '/system-settings/auth/'
+    | '/system-settings/channel-governance/'
     | '/system-settings/content/'
     | '/system-settings/general/'
     | '/system-settings/integrations/'
@@ -730,9 +774,11 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/anomaly-monitor'
     | '/channels'
+    | '/content-backup'
     | '/create-center'
     | '/dashboard'
     | '/group-square'
+    | '/iq-test'
     | '/keys'
     | '/models'
     | '/my-subscription'
@@ -748,6 +794,7 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/pricing/$modelId'
     | '/system-settings/auth/$section'
+    | '/system-settings/channel-governance/$section'
     | '/system-settings/content/$section'
     | '/system-settings/general/$section'
     | '/system-settings/integrations/$section'
@@ -755,6 +802,7 @@ export interface FileRouteTypes {
     | '/system-settings/models/$section'
     | '/system-settings/request-limits/$section'
     | '/system-settings/auth'
+    | '/system-settings/channel-governance'
     | '/system-settings/content'
     | '/system-settings/general'
     | '/system-settings/integrations'
@@ -797,9 +845,11 @@ export interface FileRouteTypes {
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/anomaly-monitor/'
     | '/_authenticated/channels/'
+    | '/_authenticated/content-backup/'
     | '/_authenticated/create-center/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-square/'
+    | '/_authenticated/iq-test/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
     | '/_authenticated/my-subscription/'
@@ -815,6 +865,7 @@ export interface FileRouteTypes {
     | '/_authenticated/wallet/'
     | '/pricing/$modelId/'
     | '/_authenticated/system-settings/auth/$section'
+    | '/_authenticated/system-settings/channel-governance/$section'
     | '/_authenticated/system-settings/content/$section'
     | '/_authenticated/system-settings/general/$section'
     | '/_authenticated/system-settings/integrations/$section'
@@ -822,6 +873,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system-settings/models/$section'
     | '/_authenticated/system-settings/request-limits/$section'
     | '/_authenticated/system-settings/auth/'
+    | '/_authenticated/system-settings/channel-governance/'
     | '/_authenticated/system-settings/content/'
     | '/_authenticated/system-settings/general/'
     | '/_authenticated/system-settings/integrations/'
@@ -1133,6 +1185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedKeysIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/iq-test/': {
+      id: '/_authenticated/iq-test/'
+      path: '/iq-test'
+      fullPath: '/iq-test/'
+      preLoaderRoute: typeof AuthenticatedIqTestIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/group-square/': {
       id: '/_authenticated/group-square/'
       path: '/group-square'
@@ -1152,6 +1211,13 @@ declare module '@tanstack/react-router' {
       path: '/create-center'
       fullPath: '/create-center/'
       preLoaderRoute: typeof AuthenticatedCreateCenterIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/content-backup/': {
+      id: '/_authenticated/content-backup/'
+      path: '/content-backup'
+      fullPath: '/content-backup/'
+      preLoaderRoute: typeof AuthenticatedContentBackupIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/channels/': {
@@ -1252,6 +1318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemSettingsContentIndexRouteImport
       parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
     }
+    '/_authenticated/system-settings/channel-governance/': {
+      id: '/_authenticated/system-settings/channel-governance/'
+      path: '/channel-governance'
+      fullPath: '/system-settings/channel-governance/'
+      preLoaderRoute: typeof AuthenticatedSystemSettingsChannelGovernanceIndexRouteImport
+      parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
+    }
     '/_authenticated/system-settings/auth/': {
       id: '/_authenticated/system-settings/auth/'
       path: '/auth'
@@ -1301,6 +1374,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemSettingsContentSectionRouteImport
       parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
     }
+    '/_authenticated/system-settings/channel-governance/$section': {
+      id: '/_authenticated/system-settings/channel-governance/$section'
+      path: '/channel-governance/$section'
+      fullPath: '/system-settings/channel-governance/$section'
+      preLoaderRoute: typeof AuthenticatedSystemSettingsChannelGovernanceSectionRouteImport
+      parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
+    }
     '/_authenticated/system-settings/auth/$section': {
       id: '/_authenticated/system-settings/auth/$section'
       path: '/auth/$section'
@@ -1340,6 +1420,7 @@ const authRouteRouteWithChildren = authRouteRoute._addFileChildren(
 interface AuthenticatedSystemSettingsRouteRouteChildren {
   AuthenticatedSystemSettingsIndexRoute: typeof AuthenticatedSystemSettingsIndexRoute
   AuthenticatedSystemSettingsAuthSectionRoute: typeof AuthenticatedSystemSettingsAuthSectionRoute
+  AuthenticatedSystemSettingsChannelGovernanceSectionRoute: typeof AuthenticatedSystemSettingsChannelGovernanceSectionRoute
   AuthenticatedSystemSettingsContentSectionRoute: typeof AuthenticatedSystemSettingsContentSectionRoute
   AuthenticatedSystemSettingsGeneralSectionRoute: typeof AuthenticatedSystemSettingsGeneralSectionRoute
   AuthenticatedSystemSettingsIntegrationsSectionRoute: typeof AuthenticatedSystemSettingsIntegrationsSectionRoute
@@ -1347,6 +1428,7 @@ interface AuthenticatedSystemSettingsRouteRouteChildren {
   AuthenticatedSystemSettingsModelsSectionRoute: typeof AuthenticatedSystemSettingsModelsSectionRoute
   AuthenticatedSystemSettingsRequestLimitsSectionRoute: typeof AuthenticatedSystemSettingsRequestLimitsSectionRoute
   AuthenticatedSystemSettingsAuthIndexRoute: typeof AuthenticatedSystemSettingsAuthIndexRoute
+  AuthenticatedSystemSettingsChannelGovernanceIndexRoute: typeof AuthenticatedSystemSettingsChannelGovernanceIndexRoute
   AuthenticatedSystemSettingsContentIndexRoute: typeof AuthenticatedSystemSettingsContentIndexRoute
   AuthenticatedSystemSettingsGeneralIndexRoute: typeof AuthenticatedSystemSettingsGeneralIndexRoute
   AuthenticatedSystemSettingsIntegrationsIndexRoute: typeof AuthenticatedSystemSettingsIntegrationsIndexRoute
@@ -1361,6 +1443,8 @@ const AuthenticatedSystemSettingsRouteRouteChildren: AuthenticatedSystemSettings
       AuthenticatedSystemSettingsIndexRoute,
     AuthenticatedSystemSettingsAuthSectionRoute:
       AuthenticatedSystemSettingsAuthSectionRoute,
+    AuthenticatedSystemSettingsChannelGovernanceSectionRoute:
+      AuthenticatedSystemSettingsChannelGovernanceSectionRoute,
     AuthenticatedSystemSettingsContentSectionRoute:
       AuthenticatedSystemSettingsContentSectionRoute,
     AuthenticatedSystemSettingsGeneralSectionRoute:
@@ -1375,6 +1459,8 @@ const AuthenticatedSystemSettingsRouteRouteChildren: AuthenticatedSystemSettings
       AuthenticatedSystemSettingsRequestLimitsSectionRoute,
     AuthenticatedSystemSettingsAuthIndexRoute:
       AuthenticatedSystemSettingsAuthIndexRoute,
+    AuthenticatedSystemSettingsChannelGovernanceIndexRoute:
+      AuthenticatedSystemSettingsChannelGovernanceIndexRoute,
     AuthenticatedSystemSettingsContentIndexRoute:
       AuthenticatedSystemSettingsContentIndexRoute,
     AuthenticatedSystemSettingsGeneralIndexRoute:
@@ -1404,9 +1490,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedAnomalyMonitorIndexRoute: typeof AuthenticatedAnomalyMonitorIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
+  AuthenticatedContentBackupIndexRoute: typeof AuthenticatedContentBackupIndexRoute
   AuthenticatedCreateCenterIndexRoute: typeof AuthenticatedCreateCenterIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupSquareIndexRoute: typeof AuthenticatedGroupSquareIndexRoute
+  AuthenticatedIqTestIndexRoute: typeof AuthenticatedIqTestIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedMySubscriptionIndexRoute: typeof AuthenticatedMySubscriptionIndexRoute
@@ -1432,9 +1520,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedAnomalyMonitorIndexRoute: AuthenticatedAnomalyMonitorIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
+  AuthenticatedContentBackupIndexRoute: AuthenticatedContentBackupIndexRoute,
   AuthenticatedCreateCenterIndexRoute: AuthenticatedCreateCenterIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedGroupSquareIndexRoute: AuthenticatedGroupSquareIndexRoute,
+  AuthenticatedIqTestIndexRoute: AuthenticatedIqTestIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedMySubscriptionIndexRoute: AuthenticatedMySubscriptionIndexRoute,

@@ -390,6 +390,9 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 	if req.MaxTokens != nil || req.MaxCompletionTokens != nil {
 		out.MaxOutputTokens = lo.ToPtr(maxOutputTokens)
 	}
+	if strings.TrimSpace(req.PromptCacheKey) != "" {
+		out.PromptCacheKey, _ = common.Marshal(req.PromptCacheKey)
+	}
 
 	if req.ReasoningEffort != "" {
 		out.Reasoning = &dto.Reasoning{

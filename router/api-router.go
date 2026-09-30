@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
@@ -27,6 +28,62 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
+		iqTestRoute := apiRouter.Group("/iq_test")
+		iqTestRoute.Use(middleware.AdminAuth(), middleware.RequireAdminPerm(model.AdminPermChannelMetrics))
+		{
+			iqTestRoute.GET("/setting", controller.GetIQTestSetting)
+			iqTestRoute.PUT("/setting", middleware.RequireAdminPerm(model.AdminPermChannelEdit), controller.UpdateIQTestSetting)
+			iqTestRoute.GET("/models", controller.GetIQTestModels)
+			iqTestRoute.POST("/models", middleware.RequireAdminPerm(model.AdminPermChannelEdit), controller.CreateIQTestModel)
+			iqTestRoute.PUT("/models/:id", middleware.RequireAdminPerm(model.AdminPermChannelEdit), controller.UpdateIQTestModel)
+			iqTestRoute.DELETE("/models/:id", middleware.RequireAdminPerm(model.AdminPermChannelEdit), controller.DeleteIQTestModel)
+			iqTestRoute.POST("/run_now", middleware.RequireAdminPerm(model.AdminPermChannelEdit), middleware.CriticalRateLimit(), controller.RunIQTestNow)
+			iqTestRoute.GET("/coverage", controller.GetIQTestCoverage)
+			iqTestRoute.GET("/runs", controller.GetIQTestRuns)
+			iqTestRoute.GET("/runs/:run_id", controller.GetIQTestRun)
+			iqTestRoute.GET("/results", controller.GetIQTestResults)
+			iqTestRoute.GET("/results/:id", controller.GetIQTestResult)
+		}
+		// 渠道内容备份（docs/2026-09-15-channel-content-backup-upload.md §6）：统一前缀
+		// /api/content_backup，与前端 features/content-backup/api.ts 的 BASE 对齐。挂在
+		// apiRouter 而不是用户管理的 adminRoute 下，后者 basePath 是 /api/user，会把整套
+		// 接口推到 /api/user/content_backup，前端全部 404。
+		// 元数据走 view，重试走 manage，渠道开关走 channel.edit，正文与配置是 Root 专属。
+		// 模块关闭（CONTENT_BACKUP_MODULE=off）时整组不注册，请求落到 NoRoute 返回 404。
+		if common.ContentBackupModuleEnabled {
+			contentBackupRoute := apiRouter.Group("/content_backup")
+			contentBackupRoute.Use(middleware.AdminAuth())
+			{
+				contentBackupViewRoute := contentBackupRoute.Group("")
+				contentBackupViewRoute.Use(middleware.RequireAdminPerm(model.AdminPermContentBackupView, model.AdminPermContentBackupManage))
+				{
+					contentBackupViewRoute.GET("/status", controller.ContentBackupStatus)
+					contentBackupViewRoute.GET("/nodes", controller.ContentBackupNodes)
+					contentBackupViewRoute.GET("/jobs", controller.ContentBackupJobs)
+					contentBackupViewRoute.POST("/jobs/search-session", controller.ContentBackupSearchSession)
+					contentBackupViewRoute.GET("/jobs/:job_id", controller.ContentBackupJobDetail)
+				}
+				contentBackupManageRoute := contentBackupRoute.Group("")
+				contentBackupManageRoute.Use(middleware.RequireAdminPerm(model.AdminPermContentBackupManage))
+				{
+					contentBackupManageRoute.POST("/jobs/retry", controller.ContentBackupRetry)
+				}
+				contentBackupChannelRoute := contentBackupRoute.Group("")
+				contentBackupChannelRoute.Use(middleware.RequireAdminPerm(model.AdminPermChannelEdit))
+				{
+					contentBackupChannelRoute.PUT("/channels/backup", controller.ContentBackupUpdateChannels)
+				}
+				contentBackupRootRoute := contentBackupRoute.Group("")
+				contentBackupRootRoute.Use(middleware.RootAuth())
+				{
+					contentBackupRootRoute.GET("/config", controller.ContentBackupGetConfig)
+					contentBackupRootRoute.PUT("/config", controller.ContentBackupPutConfig)
+					contentBackupRootRoute.GET("/jobs/:job_id/preview", controller.ContentBackupPreview)
+					contentBackupRootRoute.GET("/jobs/:job_id/download", controller.ContentBackupDownload)
+					contentBackupRootRoute.POST("/test_connection", middleware.CriticalRateLimit(), controller.ContentBackupTestConnection)
+				}
+			}
+		}
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
@@ -206,7 +263,7 @@ func SetApiRouter(router *gin.Engine) {
 			subscriptionRoute.POST("/balance/pay", middleware.CriticalRateLimit(), controller.SubscriptionRequestBalancePay)
 		}
 		subscriptionAdminRoute := apiRouter.Group("/subscription/admin")
-		subscriptionAdminRoute.Use(middleware.AdminAuth())
+		subscriptionAdminRoute.Use(middleware.AdminAuth(), middleware.RequireAdminPerm(model.AdminPermSubscriptionManage))
 		{
 			subscriptionAdminRoute.GET("/plans", controller.AdminListSubscriptionPlans)
 			subscriptionAdminRoute.POST("/plans", controller.AdminCreateSubscriptionPlan)
@@ -297,6 +354,10 @@ func SetApiRouter(router *gin.Engine) {
 			// 正常运行靠后台 5min tick；此接口主要用于调试/调整公式后立即看效果。
 			channelRoute.POST("/recompute_metrics", middleware.CriticalRateLimit(), controller.RecomputeChannelMetrics)
 			channelRoute.GET("/statistics", controller.GetChannelStatistics)
+			// 渠道治理观测：分布只查 channels 表（百行级），试算是纯判定。
+			// 两者零副作用，与其他只读诊断接口一样留在「查看渠道」权限下。
+			channelRoute.GET("/governance/distribution", middleware.DisableCache(), controller.GetChannelGovernanceDistribution)
+			channelRoute.POST("/governance/dry_run", middleware.DisableCache(), controller.PostChannelGovernanceDryRun)
 			channelRoute.GET("/statistics/trend", controller.GetChannelStatisticsTrend)
 			channelRoute.GET("/statistics/top_users", controller.GetChannelTopUsers)
 			// 对账视图：窗口内各渠道 × 模型的成功/失败/超时/费用精确聚合（上限 24h）。
@@ -385,7 +446,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		redemptionRoute := apiRouter.Group("/redemption")
-		redemptionRoute.Use(middleware.AdminAuth())
+		redemptionRoute.Use(middleware.AdminAuth(), middleware.RequireAdminPerm(model.AdminPermRedemptionManage))
 		{
 			redemptionRoute.GET("/", controller.GetAllRedemptions)
 			redemptionRoute.GET("/search", controller.SearchRedemptions)
@@ -402,7 +463,9 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/export", middleware.AdminAuth(), logViewPerm, controller.ExportAllLogs)
 		logRoute.DELETE("/", middleware.AdminAuth(), logViewPerm, controller.DeleteHistoryLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), logViewPerm, controller.GetLogsStat)
+		logRoute.GET("/trend", middleware.AdminAuth(), logViewPerm, middleware.SearchRateLimit(), controller.GetLogTrend)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
+		logRoute.GET("/self/trend", middleware.UserAuth(), middleware.SearchRateLimit(), controller.GetUserLogTrend)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), logViewPerm, controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), logViewPerm, controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
@@ -491,7 +554,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		modelsRoute := apiRouter.Group("/models")
-		modelsRoute.Use(middleware.AdminAuth())
+		modelsRoute.Use(middleware.AdminAuth(), middleware.RequireAdminPerm(model.AdminPermModelView))
 		{
 			modelsRoute.GET("/sync_upstream/preview", controller.SyncUpstreamPreview)
 			modelsRoute.POST("/sync_upstream", controller.SyncUpstreamModels)

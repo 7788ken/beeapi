@@ -70,10 +70,19 @@ type assetAPIResponse struct {
 	Result AssetResult `json:"Result"`
 }
 
-// CreateAssetForChannel 按渠道类型分发上游素材协议：
-// 渠道 58（sd 网关）走 POST /v1/sd/assets；其余（火山方舟）走 Action=CreateAsset 控制面。
+// isSdGatewayChannel sd 网关风格渠道（58 = v1，60 = v2/dreamina max）：
+// 素材体系同属一个网关，分发逻辑一致。
+func isSdGatewayChannel(channelType int) bool {
+	return channelType == constant.ChannelTypeSdVideo || channelType == constant.ChannelTypeSdVideoV2
+}
+
+// CreateAssetForChannel 按渠道类型分发上游素材协议（兜底路径）：
+// sd 网关（58/60）走 POST /v1/sd/assets（HC 旧体系）；其余（火山方舟）走 Action=CreateAsset 控制面。
+// 注：sd 网关的 -max 线路（db-sd-max）与非 hc 的 sd2 素材组由 controller 依 model 先行分流
+// （见 controller/sd_asset.go + asset_sdmax.go/asset_sd2.go），不会走到这里；此分发仅覆盖
+// hc 族与未显式传 model 的兜底场景。
 func CreateAssetForChannel(ctx context.Context, channelType int, baseURL, key, proxy string, params AssetCreateParams) (*AssetResult, *AssetUpstreamError, error) {
-	if channelType == constant.ChannelTypeSdVideo {
+	if isSdGatewayChannel(channelType) {
 		return createAssetSd(ctx, baseURL, key, proxy, params)
 	}
 	return CreateAsset(ctx, baseURL, key, proxy, params)
@@ -81,7 +90,7 @@ func CreateAssetForChannel(ctx context.Context, channelType int, baseURL, key, p
 
 // GetAssetForChannel 按渠道类型分发上游素材查询协议（同 CreateAssetForChannel）。
 func GetAssetForChannel(ctx context.Context, channelType int, baseURL, key, proxy, assetId string) (*AssetResult, *AssetUpstreamError, error) {
-	if channelType == constant.ChannelTypeSdVideo {
+	if isSdGatewayChannel(channelType) {
 		return getAssetSd(ctx, baseURL, key, proxy, assetId)
 	}
 	return GetAsset(ctx, baseURL, key, proxy, assetId)

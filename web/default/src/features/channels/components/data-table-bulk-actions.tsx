@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
-import { Power, PowerOff, Tag, Trash2 } from 'lucide-react'
+import { Archive, ArchiveX, Power, PowerOff, Tag, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
@@ -21,11 +21,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
+import { useContentBackupModuleEnabled } from '@/features/content-backup/module'
 import {
   handleBatchDelete,
   handleBatchDisable,
   handleBatchEnable,
   handleBatchSetTag,
+  handleBatchToggleContentBackup,
 } from '../lib'
 import type { Channel } from '../types'
 
@@ -43,6 +45,7 @@ export function DataTableBulkActions<TData>({
   const [tagValue, setTagValue] = useState('')
   // 批量启停/打标签/删除全是写操作，没有「新建/修改渠道」权限就整条工具栏不渲染
   const canEdit = useAdminPerms().channel_edit
+  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const selectedIds = selectedRows.reduce<number[]>((ids, row) => {
@@ -80,6 +83,24 @@ export function DataTableBulkActions<TData>({
       setTagValue('')
       handleClearSelection()
     })
+  }
+
+  const handleEnableContentBackupAll = () => {
+    handleBatchToggleContentBackup(
+      selectedIds,
+      true,
+      queryClient,
+      handleClearSelection
+    )
+  }
+
+  const handleDisableContentBackupAll = () => {
+    handleBatchToggleContentBackup(
+      selectedIds,
+      false,
+      queryClient,
+      handleClearSelection
+    )
   }
 
   if (!canEdit) {
@@ -147,6 +168,52 @@ export function DataTableBulkActions<TData>({
             <p>{t('Set tag for selected channels')}</p>
           </TooltipContent>
         </Tooltip>
+
+        {contentBackupModuleEnabled && (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='outline'
+                  size='icon'
+                  onClick={handleEnableContentBackupAll}
+                  className='size-8'
+                  aria-label={t('Enable content backup for selected channels')}
+                  title={t('Enable content backup for selected channels')}
+                >
+                  <Archive />
+                  <span className='sr-only'>
+                    {t('Enable content backup for selected channels')}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{t('Enable content backup for selected channels')}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='outline'
+                  size='icon'
+                  onClick={handleDisableContentBackupAll}
+                  className='size-8'
+                  aria-label={t('Disable content backup for selected channels')}
+                  title={t('Disable content backup for selected channels')}
+                >
+                  <ArchiveX />
+                  <span className='sr-only'>
+                    {t('Disable content backup for selected channels')}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{t('Disable content backup for selected channels')}</p>
+              </TooltipContent>
+            </Tooltip>
+          </>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>

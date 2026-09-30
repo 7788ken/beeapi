@@ -1,5 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useRef, useEffect, useCallback, useState } from 'react'
 
 interface CounterProps {
   end: number
@@ -9,7 +8,7 @@ interface CounterProps {
   decimals?: number
 }
 
-function Counter(props: CounterProps) {
+export function Counter(props: CounterProps) {
   const { end, suffix = '', prefix = '', duration = 1600, decimals = 0 } = props
   const ref = useRef<HTMLSpanElement>(null)
   const startedRef = useRef(false)
@@ -20,14 +19,25 @@ function Counter(props: CounterProps) {
     [decimals]
   )
 
+  // 不想看动效的人直接拿终值，不必先渲染成 0 再跳一次
+  const [text, setText] = useState(() => {
+    const still =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const initial = still
+      ? decimals > 0
+        ? end.toFixed(decimals)
+        : Math.round(end).toLocaleString()
+      : '0'
+    return `${prefix}${initial}${suffix}`
+  })
+
   const animate = useCallback(() => {
-    const el = ref.current
-    if (!el) return
     const start = performance.now()
     const step = (now: number) => {
       const progress = Math.min((now - start) / duration, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      el.textContent = `${prefix}${formatValue(eased * end)}${suffix}`
+      setText(`${prefix}${formatValue(eased * end)}${suffix}`)
       if (progress < 1) requestAnimationFrame(step)
     }
     requestAnimationFrame(step)
@@ -37,11 +47,7 @@ function Counter(props: CounterProps) {
     const el = ref.current
     if (!el) return
 
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    if (mq.matches) {
-      el.textContent = `${prefix}${formatValue(end)}${suffix}`
-      return
-    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -56,55 +62,11 @@ function Counter(props: CounterProps) {
 
     observer.observe(el)
     return () => observer.disconnect()
-  }, [animate, end, prefix, suffix, formatValue])
+  }, [animate])
 
   return (
     <span ref={ref} className='tabular-nums'>
-      {prefix}0{suffix}
+      {text}
     </span>
-  )
-}
-
-interface StatsProps {
-  className?: string
-}
-
-interface StatItem {
-  end: number
-  suffix: string
-  label: string
-  decimals?: number
-}
-
-export function Stats(_props: StatsProps) {
-  const { t } = useTranslation()
-
-  const stats: StatItem[] = [
-    { end: 50, suffix: '+', label: t('upstream services integrated') },
-    { end: 100, suffix: '+', label: t('model billing support') },
-    { end: 50, suffix: '+', label: t('compatible API routes') },
-    { end: 10, suffix: '+', label: t('scheduling controls') },
-  ]
-
-  return (
-    <div className='border-border/40 bg-muted/10 relative z-10 border-y'>
-      <div className='mx-auto max-w-6xl px-6 py-10 md:py-12'>
-        <div className='grid grid-cols-2 gap-8 md:grid-cols-4 md:gap-12'>
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className='flex flex-col items-center text-center'
-            >
-              <span className='text-2xl font-bold tracking-tight md:text-3xl'>
-                <Counter end={s.end} suffix={s.suffix} decimals={s.decimals} />
-              </span>
-              <span className='text-muted-foreground mt-1.5 text-xs'>
-                {s.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
   )
 }

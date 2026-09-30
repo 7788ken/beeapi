@@ -27,6 +27,11 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 	if data == "" {
 		return nil
 	}
+	if service.QualityStreamHoldActive(c) {
+		service.NoteQualityStreamJSON(c, data)
+		service.BeginSkipQualityStreamNote(c)
+		defer service.EndSkipQualityStreamNote(c)
+	}
 
 	if !forceFormat && !thinkToContent {
 		return helper.StringData(c, data)
@@ -140,7 +145,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 
 			lastStreamData = data
-			if err := processToken(c, info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
+			if err := processToken(c, info, info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
 				logger.LogError(c, "error processing stream token: "+err.Error())
 			}
 		}
@@ -220,10 +225,12 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	service.NoteQualityInspectFromOpenAIText(info, &simpleResponse)
 
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	info.ObserveResponseModel(simpleResponse.Model)
 
 	for _, choice := range simpleResponse.Choices {
 		maybeMarkOpenAIContentFilter(c, choice.FinishReason)
@@ -588,6 +595,7 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		usageResp.PromptTokensDetails.ImageTokens += usageResp.InputTokensDetails.ImageTokens
 		usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
 	}
+	fillEmptyOutputTokenDetails(&usageResp.CompletionTokenDetails, usageResp.OutputTokensDetails)
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
 	return &usageResp.Usage, nil
 }

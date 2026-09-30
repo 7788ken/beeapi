@@ -240,7 +240,7 @@ function OverviewPanel({
       </div>
 
       {conclusion && (
-        <div className='rounded-md border border-l-[3px] border-l-primary p-3 text-sm leading-relaxed'>
+        <div className='rounded-md border p-3 text-sm leading-relaxed'>
           <div className='mb-1 flex items-center gap-2 font-medium'>
             <Badge className={cn('rounded-md', gradeBg(grade))}>{t(recommend)}</Badge>
             {t('Conclusion')}
@@ -1146,7 +1146,7 @@ export function ChannelVerifyDialog({ open, onOpenChange }: Props) {
 
                 {/* 分页签（单一滚动区） */}
                 <Tabs value={tab} onValueChange={setTab} className='flex min-h-0 flex-1 flex-col'>
-                  <TabsList className='mx-3 mt-2 flex h-auto w-auto flex-wrap justify-start gap-1 bg-transparent p-0'>
+                  <TabsList className='mx-3 mt-2 flex h-auto w-auto flex-wrap justify-start gap-1 border-0 bg-transparent p-0'>
                     {availableTabs.map((x) => (
                       <TabsTrigger key={x.key} value={x.key} className='gap-1 text-xs'>
                         {x.key === 'overview' && <Activity className='size-3.5' />}
@@ -1154,7 +1154,7 @@ export function ChannelVerifyDialog({ open, onOpenChange }: Props) {
                         {x.key === 'compat' && <Plug className='size-3.5' />}
                         {x.key === 'source' && <Fingerprint className='size-3.5' />}
                         {x.label}
-                        {x.badge && <span className='text-[10px] text-muted-foreground'>{x.badge}</span>}
+                        {x.badge && <span className='text-[10px] text-muted-foreground group-data-[state=active]/tab:text-primary-foreground'>{x.badge}</span>}
                       </TabsTrigger>
                     ))}
                   </TabsList>

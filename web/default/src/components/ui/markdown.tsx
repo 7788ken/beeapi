@@ -37,6 +37,12 @@ export function Markdown({ children, className }: MarkdownProps) {
           a: ({ node, ...props }) => (
             <a {...props} target='_blank' rel='noopener noreferrer' />
           ),
+          // 宽表格在弹窗/抽屉内横向滚动，避免撑破容器
+          table: ({ node, ...props }) => (
+            <div className='max-w-full overflow-x-auto'>
+              <table {...props} />
+            </div>
+          ),
         }}
       >
         {children}

@@ -140,7 +140,7 @@ export function TaskLogsFilterBar(props: TaskLogsFilterBarProps) {
 
   return (
     <div className='space-y-2 sm:space-y-3'>
-      <div className='grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-[minmax(280px,2fr)_minmax(180px,1fr)_minmax(120px,0.8fr)_auto]'>
+      <div className='grid grid-cols-2 gap-1.5 sm:gap-2 xl:grid-cols-[minmax(280px,2fr)_minmax(180px,1fr)_minmax(120px,0.8fr)_auto]'>
         <CompactDateTimeRangePicker
           start={filters.startTime}
           end={filters.endTime}
@@ -148,7 +148,7 @@ export function TaskLogsFilterBar(props: TaskLogsFilterBarProps) {
             handleChange('startTime', start)
             handleChange('endTime', end)
           }}
-          className='col-span-2 lg:col-span-1'
+          className='col-span-2 xl:col-span-1'
         />
         <Input
           aria-label={t('Task ID')}
@@ -167,7 +167,7 @@ export function TaskLogsFilterBar(props: TaskLogsFilterBarProps) {
             className='h-9'
           />
         )}
-        <div className='col-span-2 flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 lg:col-span-1'>
+        <div className='col-span-2 flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 xl:col-span-1'>
           <Button
             variant='outline'
             size='sm'

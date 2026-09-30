@@ -1,4 +1,4 @@
-import { Route } from 'lucide-react'
+import { CircleAlert, Route } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,8 @@ import { StatusBadge } from '@/components/status-badge'
 interface ModelBadgeProps {
   modelName: string
   actualModel?: string
+  returnedModel?: string
+  mismatch?: boolean
   className?: string
 }
 
@@ -106,8 +108,9 @@ function ModelBadgeContent(props: ModelBadgeProps) {
 
 export function ModelBadge(props: ModelBadgeProps) {
   const { t } = useTranslation()
+  const showPopover = !!(props.actualModel || props.returnedModel)
 
-  if (!props.actualModel) {
+  if (!showPopover) {
     return <ModelBadgeContent {...props} />
   }
 
@@ -116,11 +119,20 @@ export function ModelBadge(props: ModelBadgeProps) {
       <PopoverTrigger asChild>
         <button type='button' className='inline-flex items-center gap-1'>
           <ModelBadgeContent {...props} />
-          <Route className='text-muted-foreground size-3 shrink-0' />
+          {props.mismatch ? (
+            <CircleAlert className='size-3 shrink-0 text-amber-500' />
+          ) : (
+            <Route className='text-muted-foreground size-3 shrink-0' />
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className='w-72'>
         <div className='space-y-2'>
+          {props.mismatch && (
+            <p className='text-xs text-amber-600'>
+              {t('Upstream returned a different model')}
+            </p>
+          )}
           <div className='flex items-start justify-between gap-3'>
             <span className='text-muted-foreground text-xs'>
               {t('Request Model:')}
@@ -129,14 +141,26 @@ export function ModelBadge(props: ModelBadgeProps) {
               {props.modelName}
             </span>
           </div>
-          <div className='flex items-start justify-between gap-3'>
-            <span className='text-muted-foreground text-xs'>
-              {t('Actual Model:')}
-            </span>
-            <span className='truncate font-mono text-xs font-medium'>
-              {props.actualModel}
-            </span>
-          </div>
+          {props.actualModel && (
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground text-xs'>
+                {t('Actual Model:')}
+              </span>
+              <span className='truncate font-mono text-xs font-medium'>
+                {props.actualModel}
+              </span>
+            </div>
+          )}
+          {props.returnedModel && (
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground text-xs'>
+                {t('Returned Model:')}
+              </span>
+              <span className='truncate font-mono text-xs font-medium'>
+                {props.returnedModel}
+              </span>
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>

@@ -1794,6 +1794,47 @@ func UpdateUserAndChannelUsedQuotaWithContext(ctx context.Context, userID int, c
 	return updateChannelUsedQuota(channelID, quota)
 }
 
+// UpdateUserAndChannelUsedQuotaDelta adjusts usage counters without touching
+// request_count. Refunds and settlement deltas use this so a money-back event
+// does not look like a new request.
+func UpdateUserAndChannelUsedQuotaDelta(userID int, channelID int, quota int) error {
+	return UpdateUserAndChannelUsedQuotaDeltaWithContext(context.Background(), userID, channelID, quota)
+}
+
+func UpdateUserAndChannelUsedQuotaDeltaWithContext(ctx context.Context, userID int, channelID int, quota int) error {
+	if quota == 0 {
+		return nil
+	}
+	if common.BatchUpdateEnabled {
+		err := addNewRecords([]BatchUpdate{
+			{Kind: BatchUpdateTypeUsedQuota, ID: userID, Delta: quota},
+			{Kind: BatchUpdateTypeChannelUsedQuota, ID: channelID, Delta: quota},
+		})
+		if err != nil {
+			return recordBatchAdmissionError("update usage statistics delta", err)
+		}
+		return nil
+	}
+	if err := updateUserUsedQuotaOnly(ctx, userID, quota); err != nil {
+		return err
+	}
+	return updateChannelUsedQuota(channelID, quota)
+}
+
+func updateUserUsedQuotaOnly(ctx context.Context, id int, quota int) error {
+	result := DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update(
+		"used_quota", gorm.Expr("used_quota + ?", quota),
+	)
+	if result.Error != nil {
+		common.SysLog("failed to update user used quota: " + result.Error.Error())
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("update user id %d used quota affected %d rows, want 1", id, result.RowsAffected)
+	}
+	return nil
+}
+
 func UpdateUserUsedQuotaAndRequestCount(id int, quota int) error {
 	return UpdateUserUsedQuotaAndRequestCountWithContext(context.Background(), id, quota)
 }

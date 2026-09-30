@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '@/stores/auth-store'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
-import { useAuthStore } from '@/stores/auth-store'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
 import { useModelStatCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
@@ -14,6 +16,8 @@ import type {
   QuotaDataItem,
   DashboardFilters,
 } from '@/features/dashboard/types'
+import { dashHeroCard } from '../overview/dash-emphasis'
+import { DashSkeleton } from '../overview/dash-style'
 
 interface LogStatCardsProps {
   filters?: DashboardFilters
@@ -83,6 +87,7 @@ export function LogStatCards(props: LogStatCardsProps) {
   }
 
   const items = statCardsConfig.map((config) => ({
+    key: config.key,
     title: config.title,
     value:
       config.key === 'quota'
@@ -93,50 +98,77 @@ export function LogStatCards(props: LogStatCardsProps) {
   }))
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
-        {items.map((it, idx) => {
-          const Icon = it.icon
-          return (
-            <div
-              key={it.title}
-              className={`px-3 py-2.5 sm:px-5 sm:py-4 ${idx === items.length - 1 && items.length % 2 !== 0 ? 'col-span-2 sm:col-span-1' : ''}`}
-            >
-              <div className='flex items-center gap-2'>
-                <Icon className='text-muted-foreground/60 size-3.5 shrink-0' />
-                <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
-                  {it.title}
+    <div className='grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5'>
+      {items.map((it, idx) => {
+        const Icon = it.icon
+        const spanLast = idx === items.length - 1 && items.length % 2 !== 0
+        const hero = it.key === 'count'
+        const valueTone = error ? 'text-muted-foreground' : 'text-foreground'
+        const descTone = error
+          ? 'text-muted-foreground/40'
+          : 'text-muted-foreground/60'
+        const placeholder = hero ? (
+          <>
+            <DashSkeleton className='h-7 w-20 bg-white/20' />
+            <DashSkeleton className='h-3.5 w-28 bg-white/20' />
+          </>
+        ) : (
+          <>
+            <Skeleton className='h-7 w-20' />
+            <Skeleton className='h-3.5 w-28' />
+          </>
+        )
+        return (
+          <article
+            key={it.title}
+            className={cn(
+              hero ? dashHeroCard : surfaceClass,
+              'flex min-w-0 flex-col justify-between gap-3 p-5',
+              spanLast && 'col-span-2 md:col-span-1'
+            )}
+          >
+            <div className='flex items-center gap-2'>
+              <Icon
+                className={cn(
+                  'size-3.5 shrink-0',
+                  hero ? 'text-primary-foreground' : 'text-muted-foreground/60'
+                )}
+              />
+              <span
+                className={cn(
+                  'truncate text-xs font-medium tracking-wider uppercase',
+                  hero ? 'text-primary-foreground' : 'text-muted-foreground'
+                )}
+              >
+                {it.title}
+              </span>
+            </div>
+
+            {loading ? (
+              <div className='space-y-1.5'>{placeholder}</div>
+            ) : (
+              <div className='min-w-0'>
+                <div
+                  className={cn(
+                    'truncate font-mono text-2xl font-bold tracking-tight tabular-nums',
+                    hero ? 'text-primary-foreground' : valueTone
+                  )}
+                >
+                  {error ? '--' : it.value}
+                </div>
+                <div
+                  className={cn(
+                    'mt-1 truncate text-xs',
+                    hero ? 'text-primary-foreground' : descTone
+                  )}
+                >
+                  {it.desc}
                 </div>
               </div>
-
-              {loading ? (
-                <div className='mt-2 space-y-1.5'>
-                  <Skeleton className='h-7 w-20' />
-                  <Skeleton className='h-3.5 w-28' />
-                </div>
-              ) : error ? (
-                <>
-                  <div className='text-muted-foreground mt-1.5 font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                    --
-                  </div>
-                  <div className='text-muted-foreground/40 mt-1 hidden text-xs md:block'>
-                    {it.desc}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className='text-foreground mt-1.5 font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                    {it.value}
-                  </div>
-                  <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
-                    {it.desc}
-                  </div>
-                </>
-              )}
-            </div>
-          )
-        })}
-      </div>
+            )}
+          </article>
+        )
+      })}
     </div>
   )
 }

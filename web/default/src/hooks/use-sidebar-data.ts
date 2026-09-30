@@ -21,15 +21,19 @@ import {
   ShieldAlert,
   AlertTriangle,
   Sparkles,
+  BrainCircuit,
+  Archive,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useStatus } from '@/hooks/use-status'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type NavItem, type SidebarData } from '@/components/layout/types'
-import { useStatus } from '@/hooks/use-status'
+import { useGroupNavState } from '@/features/group-square/hooks/use-group-nav-state'
 
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
   const { status } = useStatus()
+  const groupNav = useGroupNavState()
   const topUpLink =
     typeof status?.top_up_link === 'string' ? status.top_up_link.trim() : ''
 
@@ -126,10 +130,12 @@ export function useSidebarData(): SidebarData {
             iconClassName: 'text-orange-500',
           },
           {
-            title: t('Group Square'),
+            title: t('Available Groups'),
+            count: groupNav.availableCount,
             url: '/group-square',
             icon: LayoutGrid,
             iconClassName: 'text-indigo-500',
+            badge: groupNav.hasUnseenChanges ? 'NEW' : undefined,
           },
           {
             title: t('Usage Logs'),
@@ -161,6 +167,12 @@ export function useSidebarData(): SidebarData {
             url: '/channels',
             icon: Radio,
             iconClassName: 'text-rose-500',
+          },
+          {
+            title: t('IQ Management'),
+            url: '/iq-test',
+            icon: BrainCircuit,
+            iconClassName: 'text-emerald-600',
           },
           {
             title: t('Models'),
@@ -197,6 +209,12 @@ export function useSidebarData(): SidebarData {
             url: '/anomaly-monitor',
             icon: AlertTriangle,
             iconClassName: 'text-amber-500',
+          },
+          {
+            title: t('Content backup'),
+            url: '/content-backup',
+            icon: Archive,
+            iconClassName: 'text-cyan-500',
           },
           {
             title: t('System Settings'),

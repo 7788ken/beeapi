@@ -20,6 +20,35 @@ func TestEffectiveAdminPermsDefaultsKeepLegacyAdminPowers(t *testing.T) {
 	assert.NotContains(t, perms, AdminPermQuotaDeductSelf)
 }
 
+func TestModulePermsDefaultsOffForAdminsButOnForRoot(t *testing.T) {
+	// 模型/兑换码/订阅管理三项同 channel.edit 口径：默认关，须超管显式开
+	for _, perm := range []string{AdminPermModelView, AdminPermRedemptionManage, AdminPermSubscriptionManage} {
+		assert.False(t, HasAdminPermFor(common.RoleAdminUser, "", perm),
+			"未配置的管理员不能默认拿到 "+perm)
+		assert.True(t, HasAdminPermFor(common.RoleRootUser, AdminPermsNone, perm),
+			"root 恒有 "+perm)
+		assert.False(t, HasAdminPermFor(common.RoleCommonUser, perm, perm),
+			"普通用户恒无 "+perm)
+	}
+	// 显式授予生效
+	assert.True(t, HasAdminPermFor(common.RoleAdminUser, "model.view,redemption.manage,subscription.manage", AdminPermRedemptionManage))
+}
+
+func TestChannelMetricsDefaultsOffForAdminsButOnForRoot(t *testing.T) {
+	// 倍率/评分同 channel.edit 口径：默认关，须超管显式开（倍率暴露上游成本结构）
+	assert.False(t, HasAdminPermFor(common.RoleAdminUser, "", AdminPermChannelMetrics),
+		"未配置的管理员不能默认看到倍率/评分")
+	assert.True(t, HasAdminPermFor(common.RoleAdminUser, "channel.view,channel.metrics", AdminPermChannelMetrics))
+	// root 恒有
+	assert.True(t, HasAdminPermFor(common.RoleRootUser, AdminPermsNone, AdminPermChannelMetrics))
+	// 普通用户恒无
+	assert.False(t, HasAdminPermFor(common.RoleCommonUser, "channel.metrics", AdminPermChannelMetrics))
+	// NormalizeAdminPerms 认得新 key，且按 AllAdminPerms 顺序排
+	raw, err := NormalizeAdminPerms([]string{"channel.metrics", "channel.view"})
+	require.NoError(t, err)
+	assert.Equal(t, "channel.view,channel.metrics", raw)
+}
+
 func TestChannelEditDefaultsOffForAdminsButOnForRoot(t *testing.T) {
 	// 唯一一处默认值不等于上线前行为：建/改渠道必须超管逐个开
 	assert.False(t, HasAdminPermFor(common.RoleAdminUser, "", AdminPermChannelEdit),

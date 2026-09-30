@@ -3,8 +3,10 @@ import { VChart } from '@visactor/react-vchart'
 import { PieChart as PieChartIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { TimeGranularity } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useTheme } from '@/context/theme-provider'
+import { surfaceClass } from '@/components/ui/card'
 import {
   DEFAULT_TIME_GRANULARITY,
   MODEL_ANALYTICS_CHART_OPTIONS,
@@ -14,6 +16,7 @@ import type {
   ModelAnalyticsChartTab,
   QuotaDataItem,
 } from '@/features/dashboard/types'
+import { dashSegItem, dashSegTrack } from '../overview/dash-emphasis'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -84,8 +87,10 @@ export function ModelCharts(props: ModelChartsProps) {
     resolvedTheme,
   ].join('-')
 
+  const isEmpty = !props.loading && props.data.length === 0
+
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'overflow-hidden')}>
       <div className='flex w-full flex-col gap-1.5 border-b px-3 py-2 sm:gap-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
         <div className='flex items-center gap-2'>
           <PieChartIcon className='text-muted-foreground/60 size-4' />
@@ -97,17 +102,14 @@ export function ModelCharts(props: ModelChartsProps) {
           </span>
         </div>
 
-        <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-md border p-0.5 sm:h-8 sm:w-auto'>
+        <div className={cn(dashSegTrack, 'w-full overflow-x-auto sm:w-auto')}>
           {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
             <button
               key={tab.value}
               type='button'
               onClick={() => setActiveTab(tab.value)}
-              className={`shrink-0 rounded-[5px] px-3 text-xs font-medium transition-colors ${
-                activeTab === tab.value
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+              aria-pressed={activeTab === tab.value}
+              className={dashSegItem(activeTab === tab.value)}
             >
               {t(tab.labelKey)}
             </button>
@@ -115,8 +117,18 @@ export function ModelCharts(props: ModelChartsProps) {
         </div>
       </div>
 
-      <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
-        {themeReady && spec && (
+      <div
+        className={cn(
+          'p-1.5 sm:p-2',
+          // 空态不需要撑满图表高度
+          isEmpty ? 'h-40' : 'h-[300px] sm:h-96'
+        )}
+      >
+        {isEmpty ? (
+          <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
+            {t('No data in selected range')}
+          </div>
+        ) : themeReady && spec ? (
           <VChart
             key={chartKey}
             spec={{
@@ -126,7 +138,7 @@ export function ModelCharts(props: ModelChartsProps) {
             }}
             option={VCHART_OPTION}
           />
-        )}
+        ) : null}
       </div>
     </div>
   )

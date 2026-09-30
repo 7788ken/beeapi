@@ -1,13 +1,8 @@
 import type { GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
-import { ChannelAffinitySection } from './channel-affinity'
-import { ChannelRoutingSection } from './channel-routing-section'
-import { ChannelVerifySection } from './channel-verify-section'
 import { CheckinSettingsSection } from './checkin-settings-section'
 import { PricingSection } from './pricing-section'
 import { QuotaSettingsSection } from './quota-settings-section'
-import { RelayRetrySection } from './relay-retry-section'
-import { UrlHealthSection } from './url-health-section'
 import { SystemBehaviorSection } from './system-behavior-section'
 import { SystemInfoSection } from './system-info-section'
 
@@ -54,6 +49,7 @@ const GENERAL_SECTIONS = [
           AffiliateCommissionEnabled: settings.AffiliateCommissionEnabled,
           AffiliateCommissionRatio: settings.AffiliateCommissionRatio,
           TopUpLink: settings.TopUpLink,
+          QuotaRemindThreshold: settings.QuotaRemindThreshold,
           general_setting: {
             docs_link: settings['general_setting.docs_link'],
           },
@@ -63,7 +59,9 @@ const GENERAL_SECTIONS = [
             billing_refund_when_no_output:
               settings['quota_setting.billing_refund_when_no_output'],
             refund_no_output_client_gone_min_seconds:
-              settings['quota_setting.refund_no_output_client_gone_min_seconds'],
+              settings[
+                'quota_setting.refund_no_output_client_gone_min_seconds'
+              ],
             refund_no_output_exclude_upstream_refusal:
               settings[
                 'quota_setting.refund_no_output_exclude_upstream_refusal'
@@ -119,124 +117,9 @@ const GENERAL_SECTIONS = [
     build: (settings: GeneralSettings) => (
       <SystemBehaviorSection
         defaultValues={{
-          RetryTimes: settings.RetryTimes,
           DefaultCollapseSidebar: settings.DefaultCollapseSidebar,
           DemoSiteEnabled: settings.DemoSiteEnabled,
           SelfUseModeEnabled: settings.SelfUseModeEnabled,
-        }}
-      />
-    ),
-  },
-  {
-    id: 'channel-affinity',
-    titleKey: 'Channel Affinity',
-    descriptionKey: 'Configure channel affinity (sticky routing) rules',
-    build: (settings: GeneralSettings) => (
-      <ChannelAffinitySection
-        defaultValues={{
-          'channel_affinity_setting.enabled':
-            settings['channel_affinity_setting.enabled'],
-          'channel_affinity_setting.switch_on_success':
-            settings['channel_affinity_setting.switch_on_success'],
-          'channel_affinity_setting.max_entries':
-            settings['channel_affinity_setting.max_entries'],
-          'channel_affinity_setting.default_ttl_seconds':
-            settings['channel_affinity_setting.default_ttl_seconds'],
-          'channel_affinity_setting.rules':
-            settings['channel_affinity_setting.rules'],
-        }}
-      />
-    ),
-  },
-  {
-    id: 'relay-retry',
-    titleKey: 'Relay Retry & Timeout',
-    descriptionKey:
-      'Configure per-request deadline, exponential backoff and per-model timeout',
-    build: (settings: GeneralSettings) => (
-      <RelayRetrySection
-        defaultValues={{
-          'relay_retry_setting.total_timeout_seconds':
-            settings['relay_retry_setting.total_timeout_seconds'],
-          'relay_retry_setting.backoff_base_ms':
-            settings['relay_retry_setting.backoff_base_ms'],
-          'relay_retry_setting.backoff_max_ms':
-            settings['relay_retry_setting.backoff_max_ms'],
-          'relay_retry_setting.model_timeouts':
-            settings['relay_retry_setting.model_timeouts'],
-        }}
-      />
-    ),
-  },
-  {
-    id: 'url-health',
-    titleKey: 'Multi Base-URL Failover',
-    descriptionKey:
-      'Circuit breaker and fastest-routing thresholds for channels with backup base URLs',
-    build: (settings: GeneralSettings) => (
-      <UrlHealthSection
-        defaultValues={{
-          'url_health_setting.fail_threshold':
-            settings['url_health_setting.fail_threshold'],
-          'url_health_setting.cooldown_seconds':
-            settings['url_health_setting.cooldown_seconds'],
-          'url_health_setting.ewma_alpha':
-            settings['url_health_setting.ewma_alpha'],
-          'url_health_setting.hysteresis_ratio':
-            settings['url_health_setting.hysteresis_ratio'],
-          'url_health_setting.hysteresis_min_ms':
-            settings['url_health_setting.hysteresis_min_ms'],
-          'url_health_setting.exploration_gap_seconds':
-            settings['url_health_setting.exploration_gap_seconds'],
-        }}
-      />
-    ),
-  },
-  {
-    id: 'channel-routing',
-    titleKey: 'Channel Routing Mode',
-    descriptionKey:
-      'Switch between probabilistic (weighted random) and capacity (bucket overflow) routing',
-    build: (settings: GeneralSettings) => (
-      <ChannelRoutingSection
-        defaultValues={{
-          'channel_routing_setting.mode':
-            settings['channel_routing_setting.mode'],
-          'channel_routing_setting.capacity_window_sec':
-            settings['channel_routing_setting.capacity_window_sec'],
-          'channel_routing_setting.full_strategy':
-            settings['channel_routing_setting.full_strategy'],
-          'channel_routing_setting.fail_mode':
-            settings['channel_routing_setting.fail_mode'],
-          'channel_routing_setting.dry_run':
-            settings['channel_routing_setting.dry_run'],
-          'channel_routing_setting.dry_run_sample_rate':
-            settings['channel_routing_setting.dry_run_sample_rate'],
-          'channel_routing_setting.queue_max_wait_ms':
-            settings['channel_routing_setting.queue_max_wait_ms'],
-          'channel_routing_setting.queue_poll_interval_ms':
-            settings['channel_routing_setting.queue_poll_interval_ms'],
-        }}
-      />
-    ),
-  },
-  {
-    id: 'channel-verify',
-    titleKey: 'Channel Verify Schedule',
-    descriptionKey: 'Schedule external verification and alert on score drops',
-    build: (settings: GeneralSettings) => (
-      <ChannelVerifySection
-        defaultValues={{
-          'channel_verify_setting.auto_verify_enabled':
-            settings['channel_verify_setting.auto_verify_enabled'],
-          'channel_verify_setting.global_interval_minutes':
-            settings['channel_verify_setting.global_interval_minutes'],
-          'channel_verify_setting.score_drop_threshold':
-            settings['channel_verify_setting.score_drop_threshold'],
-          'channel_verify_setting.notify_on_failure':
-            settings['channel_verify_setting.notify_on_failure'],
-          'channel_verify_setting.scheduler_tick_minutes':
-            settings['channel_verify_setting.scheduler_tick_minutes'],
         }}
       />
     ),

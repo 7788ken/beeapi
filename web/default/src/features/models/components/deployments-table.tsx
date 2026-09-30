@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -255,7 +256,8 @@ export function DeploymentsTable() {
         ) : (
           <div
             className={cn(
-              'overflow-hidden rounded-md border transition-opacity duration-150',
+              surfaceClass,
+              'overflow-hidden transition-opacity duration-150',
               isFetching && !isLoading && 'pointer-events-none opacity-50'
             )}
           >

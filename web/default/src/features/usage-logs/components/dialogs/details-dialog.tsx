@@ -1,4 +1,6 @@
+import { Link } from '@tanstack/react-router'
 import {
+  Archive,
   Copy,
   Check,
   Route,
@@ -16,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useAdminPerms } from '@/hooks/use-admin'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,6 +31,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
+import { useContentBackupModuleEnabled } from '@/features/content-backup/module'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import type { UsageLog } from '../../data/schema'
 import {
@@ -38,6 +42,7 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
+  formatChannelChain,
   getFirstResponseTimeColor,
   getResponseTimeColor,
 } from '../../lib/format'
@@ -69,7 +74,7 @@ function DetailRow(props: {
       </span>
       <span
         className={cn(
-          'min-w-0 max-w-full text-xs break-all sm:break-words',
+          'max-w-full min-w-0 text-xs break-all sm:break-words',
           props.mono && 'font-mono',
           props.muted && 'text-muted-foreground'
         )}
@@ -383,6 +388,12 @@ interface DetailsDialogProps {
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  const contentBackupPerms = useAdminPerms()
+  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
+  const canViewContentBackup =
+    contentBackupModuleEnabled &&
+    (contentBackupPerms.content_backup_view ||
+      contentBackupPerms.content_backup_manage)
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
@@ -462,9 +473,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
     props.log.type !== 6 &&
     (other?.request_path || conversionChain.length > 0)
 
-  const useChannel = other?.admin_info?.use_channel
-  const channelChain =
-    useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+  const channelChain = formatChannelChain(other?.admin_info?.use_channel)
 
   // 「复制报障信息」：同时带本站与上游请求 ID，便于两端精确关联。
   const reportInfo = [
@@ -520,7 +529,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         </DialogHeader>
 
         <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-          <div className='w-full min-w-0 max-w-full space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
+          <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
             {/* Overview section - key identifiers */}
             <div className='min-w-0 space-y-1'>
               {props.log.request_id && (
@@ -537,6 +546,48 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   mono
                 />
               )}
+
+              {canViewContentBackup &&
+                (props.log.request_id ? (
+                  <DetailRow
+                    label={t('Content backup')}
+                    value={
+                      <Button
+                        asChild
+                        variant='outline'
+                        size='sm'
+                        className='h-6 gap-1 px-2 text-xs'
+                      >
+                        <Link
+                          to='/content-backup'
+                          search={{ requestId: props.log.request_id }}
+                          target='_blank'
+                        >
+                          <Archive className='size-3' />
+                          {t('View captured request')}
+                        </Link>
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <DetailRow
+                    label={t('Content backup')}
+                    value={
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        disabled
+                        className='h-6 gap-1 px-2 text-xs'
+                        title={t(
+                          'No request ID was recorded for this log entry'
+                        )}
+                      >
+                        <Archive className='size-3' />
+                        {t('View captured request')}
+                      </Button>
+                    }
+                  />
+                ))}
 
               {props.isAdmin && props.log.channel > 0 && (
                 <DetailRow
@@ -864,6 +915,36 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 <DetailRow
                   label={t('Actual Model')}
                   value={other.upstream_model_name}
+                  mono
+                />
+              </DetailSection>
+            )}
+
+            {other?.response_model?.returned_model && (
+              <DetailSection label={t('Response Model')}>
+                {other.response_model.mismatch && (
+                  <DetailRow
+                    label={t('Warning')}
+                    value={t('Upstream returned a different model')}
+                  />
+                )}
+                <DetailRow
+                  label={t('Request Model')}
+                  value={
+                    other.response_model.requested_model || props.log.model_name
+                  }
+                  mono
+                />
+                {other.response_model.upstream_model && (
+                  <DetailRow
+                    label={t('Actual Model')}
+                    value={other.response_model.upstream_model}
+                    mono
+                  />
+                )}
+                <DetailRow
+                  label={t('Returned Model')}
+                  value={other.response_model.returned_model}
                   mono
                 />
               </DetailSection>

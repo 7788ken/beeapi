@@ -211,3 +211,51 @@ func TestResetUserSubscriptionTx_RejectsStaleSnapshotWithoutLosingConsumption(t 
 	assert.ErrorIs(t, err, errFinancialStateConflict)
 	assert.EqualValues(t, 750, loadUserSub(t, stale.Id).AmountUsed)
 }
+
+// 兜底分组恢复：耗尽时降级到 FallbackGroup 的用户，重置复活后应从 FallbackGroup 恢复到 UpgradeGroup。
+func TestAdminResetPlanSubscriptions_RestoresFromFallbackGroup(t *testing.T) {
+	truncateTables(t)
+	initCol()
+
+	now := GetDBTimestamp()
+	plan := &SubscriptionPlan{
+		Id:                      660,
+		Title:                   "fallback-reset-plan",
+		PriceAmount:             1,
+		Currency:                "USD",
+		DurationUnit:            SubscriptionDurationMonth,
+		DurationValue:           1,
+		Enabled:                 true,
+		TotalAmount:             1000,
+		QuotaResetPeriod:        SubscriptionResetCustom,
+		QuotaResetCustomSeconds: 3600,
+	}
+	require.NoError(t, DB.Create(plan).Error)
+
+	// 用户当前处于兜底组 basic（耗尽降级后的状态）
+	insertSubscriptionResetUser(t, 661, "basic")
+	require.NoError(t, DB.Create(&UserSubscription{
+		Id:                662,
+		UserId:            661,
+		PlanId:            plan.Id,
+		AmountTotal:       1000,
+		AmountUsed:        1000,
+		StartTime:         now - 7200,
+		EndTime:           now + 7200,
+		Status:            "exhausted",
+		Source:            "order",
+		LastResetTime:     now - 3600,
+		NextResetTime:     now + 300,
+		ExhaustNotifiedAt: 123,
+		UpgradeGroup:      "codex",
+		FallbackGroup:     "basic",
+	}).Error)
+
+	result, err := AdminResetPlanSubscriptions(plan.Id, true)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.ResetCount)
+
+	assert.Equal(t, "active", loadUserSub(t, 662).Status)
+	assert.Equal(t, "codex", loadUserGroup(t, 661), "应从兜底组 basic 恢复到升级组 codex")
+}

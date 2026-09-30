@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +16,13 @@ import (
 	"github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
+
+	"gorm.io/gorm"
+)
+
+const (
+	systemRoleLiftOptionKey      = "claude.system_role_lift_enabled"
+	systemRoleLiftGrandfatherKey = "claude.system_role_lift_grandfathered"
 )
 
 type Option struct {
@@ -31,6 +40,14 @@ func AllOption() ([]*Option, error) {
 func InitOptionMap() {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
+	common.OptionMap["iq_test_setting.enabled"] = "false"
+	common.OptionMap["iq_test_setting.interval_minutes"] = "60"
+	common.OptionMap["iq_test_setting.concurrency"] = "4"
+	common.OptionMap["iq_test_setting.disable_below_baseline"] = "false"
+	common.OptionMap["iq_test_setting.priority_step"] = "10"
+	common.OptionMap["iq_test_setting.questions_per_round"] = "8"
+	common.OptionMap["iq_test_setting.per_question_timeout_seconds"] = "20"
+	common.OptionMap["iq_test_setting.notify_on_action"] = "true"
 
 	// 添加原有的系统配置
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
@@ -221,6 +238,21 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableKeywords"] = operation_setting.AutomaticDisableKeywordsToString()
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
+	common.OptionMap["ModelMissingRemovalEnabled"] = strconv.FormatBool(operation_setting.ModelMissingRemovalEnabled)
+	common.OptionMap["ModelMissingRemovalCooldownSeconds"] = strconv.Itoa(operation_setting.ModelMissingRemovalCooldownSeconds)
+	common.OptionMap["ModelMissingRecheckIntervalSeconds"] = strconv.Itoa(operation_setting.ModelMissingRecheckIntervalSeconds)
+	common.OptionMap["ModelMissingKeywords"] = operation_setting.ModelMissingKeywordsToString()
+	common.OptionMap["ModelRateLimitRemovalEnabled"] = strconv.FormatBool(operation_setting.ModelRateLimitRemovalEnabled)
+	common.OptionMap["ModelRateLimitRecheckIntervalSeconds"] = strconv.Itoa(operation_setting.ModelRateLimitRecheckIntervalSeconds)
+	common.OptionMap["ModelForbiddenRemovalEnabled"] = strconv.FormatBool(operation_setting.ModelForbiddenRemovalEnabled)
+	common.OptionMap["ModelForbiddenStatusCodes"] = operation_setting.ModelForbiddenStatusCodesToString()
+	common.OptionMap["ModelForbiddenKeywords"] = operation_setting.ModelForbiddenKeywordsToString()
+	common.OptionMap["ModelForbiddenRecheckIntervalSeconds"] = strconv.Itoa(operation_setting.ModelForbiddenRecheckIntervalSeconds)
+	common.OptionMap["ModelRemovalMaxRemovedPerChannel"] = strconv.Itoa(operation_setting.ModelRemovalMaxRemovedPerChannel)
+	common.OptionMap["ModelRemovalConsecutiveThreshold"] = strconv.Itoa(operation_setting.ModelRemovalConsecutiveThreshold)
+	common.OptionMap["ModelRemovalCapAction"] = operation_setting.ModelRemovalCapAction
+	common.OptionMap["ModelMissingRemovalCapEnabled"] = strconv.FormatBool(operation_setting.ModelMissingRemovalCapEnabled)
+	common.OptionMap["ModelRemovalNotifyEnabled"] = strconv.FormatBool(operation_setting.ModelRemovalNotifyEnabled)
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 	// 对账 tab 上游账单数据源：balance 面板地址 + 只读服务令牌（Token 后缀在 GET /api/option/ 自动脱敏）
 	common.OptionMap["ReconcileBalancePanelBaseURL"] = ""
@@ -244,6 +276,86 @@ func loadOptionsFromDatabase() {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
 	}
+	grandfatherSystemRoleLiftDefault()
+}
+
+// grandfatherSystemRoleLiftDefault keeps sites that were effectively on under
+// the old default (no stored claude.system_role_lift_enabled) on after the
+// code default flips to false. An explicit stored true or false is not
+// rewritten. A fresh database with no option rows keeps the new default.
+// The marker row makes this one-shot, so a later new site that saves other
+// options does not get flipped on at the next restart.
+func grandfatherSystemRoleLiftDefault() {
+	if DB == nil || optionMapHas(systemRoleLiftGrandfatherKey) {
+		return
+	}
+
+	var marker Option
+	err := DB.Where(map[string]any{"key": systemRoleLiftGrandfatherKey}).Take(&marker).Error
+	if err == nil {
+		_ = updateOptionMap(systemRoleLiftGrandfatherKey, marker.Value)
+		return
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		common.SysError("system role lift grandfather lookup failed: " + err.Error())
+		return
+	}
+
+	var rowCount int64
+	if err := DB.Model(&Option{}).Count(&rowCount).Error; err != nil {
+		common.SysError("system role lift grandfather count failed: " + err.Error())
+		return
+	}
+
+	var stored Option
+	storedErr := DB.Where(map[string]any{"key": systemRoleLiftOptionKey}).Take(&stored).Error
+	if storedErr != nil && !errors.Is(storedErr, gorm.ErrRecordNotFound) {
+		common.SysError("system role lift grandfather read failed: " + storedErr.Error())
+		return
+	}
+	if rowCount > 0 && errors.Is(storedErr, gorm.ErrRecordNotFound) {
+		if err := writeOption(systemRoleLiftOptionKey, "true"); err != nil {
+			common.SysError("failed to preserve claude.system_role_lift_enabled: " + err.Error())
+			return
+		}
+		common.SysLog("存量站点未保存 claude.system_role_lift_enabled，按旧默认保持开启")
+	}
+	if err := writeOption(systemRoleLiftGrandfatherKey, "true"); err != nil {
+		common.SysError("failed to record system role lift grandfather: " + err.Error())
+	}
+}
+
+func optionMapHas(key string) bool {
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	if common.OptionMap == nil {
+		return false
+	}
+	_, ok := common.OptionMap[key]
+	return ok
+}
+
+func writeOption(key, value string) error {
+	var option Option
+	err := DB.Where(map[string]any{"key": key}).Take(&option).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		option = Option{Key: key, Value: value}
+		if err := DB.Create(&option).Error; err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else if option.Value != value {
+		option.Value = value
+		if err := DB.Save(&option).Error; err != nil {
+			return err
+		}
+	}
+	if err := updateOptionMap(key, value); err != nil {
+		return err
+	}
+	broadcastOptionUpdate()
+	return nil
 }
 
 func SyncOptions(ctx context.Context, frequency int) {
@@ -251,6 +363,46 @@ func SyncOptions(ctx context.Context, frequency int) {
 		common.SysLog("syncing options from database")
 		loadOptionsFromDatabase()
 	})
+}
+
+// optionUpdateChannel 是集群内配置变更的广播频道。
+const optionUpdateChannel = "option_updated"
+
+// broadcastOptionUpdate 通知集群其余节点立即重载配置。
+// 失败只记日志：数据库已写入成功，各节点仍会由 option-sync 在 SyncFrequency 内追平。
+func broadcastOptionUpdate() {
+	if !common.RedisEnabled || common.RDB == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := common.RDB.Publish(ctx, optionUpdateChannel, "").Err(); err != nil {
+		common.SysLog("failed to broadcast option update: " + err.Error())
+	}
+}
+
+// SubscribeOptionUpdates 监听集群广播并立即重载配置，让配置变更秒级收敛到所有节点。
+// 与 SyncOptions 的定时轮询互补：轮询兜住广播丢失（Redis 重启、网络抖动）的情况。
+func SubscribeOptionUpdates(ctx context.Context) {
+	if !common.RedisEnabled || common.RDB == nil {
+		return
+	}
+	sub := common.RDB.Subscribe(ctx, optionUpdateChannel)
+	defer sub.Close()
+
+	ch := sub.Channel()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-ch:
+			if !ok {
+				return
+			}
+			common.SysLog("syncing options from database (cluster broadcast)")
+			loadOptionsFromDatabase()
+		}
+	}
 }
 
 func UpdateOption(key string, value string) error {
@@ -266,7 +418,11 @@ func UpdateOption(key string, value string) error {
 	// otherwise it will execute Update (with all fields).
 	DB.Save(&option)
 	// Update OptionMap
-	return updateOptionMap(key, value)
+	if err := updateOptionMap(key, value); err != nil {
+		return err
+	}
+	broadcastOptionUpdate()
+	return nil
 }
 
 func updateOptionMap(key string, value string) (err error) {
@@ -322,6 +478,16 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticDisableChannelEnabled = boolValue
 		case "AutomaticEnableChannelEnabled":
 			common.AutomaticEnableChannelEnabled = boolValue
+		case "ModelMissingRemovalEnabled":
+			operation_setting.ModelMissingRemovalEnabled = boolValue
+		case "ModelRateLimitRemovalEnabled":
+			operation_setting.ModelRateLimitRemovalEnabled = boolValue
+		case "ModelForbiddenRemovalEnabled":
+			operation_setting.ModelForbiddenRemovalEnabled = boolValue
+		case "ModelMissingRemovalCapEnabled":
+			operation_setting.ModelMissingRemovalCapEnabled = boolValue
+		case "ModelRemovalNotifyEnabled":
+			operation_setting.ModelRemovalNotifyEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
@@ -420,6 +586,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = setting.UpdateChatsByJsonString(value)
 	case "AutoGroups":
 		err = setting.UpdateAutoGroupsByJsonString(value)
+	case "ContentBackupSetting":
+		err = operation_setting.UpdateContentBackupSettingByJsonString(value)
 	case "CustomCallbackAddress":
 		operation_setting.CustomCallbackAddress = value
 	case "EpayId":
@@ -673,6 +841,46 @@ func updateOptionMap(key string, value string) (err error) {
 		err = operation_setting.AutomaticDisableStatusCodesFromString(value)
 	case "AutomaticRetryStatusCodes":
 		err = operation_setting.AutomaticRetryStatusCodesFromString(value)
+	case "ModelMissingRemovalCooldownSeconds":
+		if intValue, parseErr := strconv.Atoi(value); parseErr == nil && intValue >= 1 {
+			operation_setting.ModelMissingRemovalCooldownSeconds = intValue
+		}
+	case "ModelMissingRecheckIntervalSeconds":
+		if intValue, parseErr := strconv.Atoi(value); parseErr == nil && intValue >= 60 {
+			operation_setting.ModelMissingRecheckIntervalSeconds = intValue
+		}
+	case "ModelMissingKeywords":
+		operation_setting.ModelMissingKeywordsFromString(value)
+	case "ModelRateLimitRecheckIntervalSeconds":
+		if intValue, parseErr := strconv.Atoi(value); parseErr == nil && intValue >= 60 {
+			operation_setting.ModelRateLimitRecheckIntervalSeconds = intValue
+		}
+	case "ModelForbiddenStatusCodes":
+		err = operation_setting.ModelForbiddenStatusCodesFromString(value)
+	case "ModelForbiddenKeywords":
+		operation_setting.ModelForbiddenKeywordsFromString(value)
+	case "ModelForbiddenRecheckIntervalSeconds":
+		if intValue, parseErr := strconv.Atoi(value); parseErr == nil && intValue >= 60 {
+			operation_setting.ModelForbiddenRecheckIntervalSeconds = intValue
+		}
+	case "ModelRemovalMaxRemovedPerChannel":
+		if intValue, parseErr := strconv.Atoi(value); parseErr == nil && intValue >= 1 {
+			operation_setting.ModelRemovalMaxRemovedPerChannel = intValue
+		}
+	case "ModelRemovalConsecutiveThreshold":
+		// 连续 N 次才摘除的门槛；<1 无意义（会让门槛失效变成从不摘），拒写。
+		if intValue, parseErr := strconv.Atoi(value); parseErr == nil && intValue >= 1 {
+			operation_setting.ModelRemovalConsecutiveThreshold = intValue
+		}
+	case "ModelRemovalCapAction":
+		// 枚举白名单校验：写错值直接报错，不静默回落成 alert_only——否则管理员以为已开启
+		// 升级停渠道而实际没生效。
+		if !operation_setting.IsValidModelRemovalCapAction(value) {
+			err = fmt.Errorf("invalid ModelRemovalCapAction: %s (expected %s or %s)", value,
+				operation_setting.ModelRemovalCapActionAlertOnly, operation_setting.ModelRemovalCapActionDisableChannel)
+			break
+		}
+		operation_setting.ModelRemovalCapAction = value
 	case "StreamCacheQueueLength":
 		setting.StreamCacheQueueLength, _ = strconv.Atoi(value)
 	case "PayMethods":

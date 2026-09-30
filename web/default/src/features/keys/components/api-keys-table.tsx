@@ -20,6 +20,7 @@ import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Database } from 'lucide-react'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -69,7 +70,7 @@ function isDisabledApiKeyRow(apiKey: ApiKey) {
 
 function ApiKeysMobileSkeleton() {
   return (
-    <div className='divide-border overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'divide-border overflow-hidden')}>
       {Array.from({ length: 5 }).map((_, index) => (
         <div
           key={index}
@@ -104,7 +105,7 @@ function ApiKeysMobileList({
 
   if (!rows.length) {
     return (
-      <div className='rounded-lg border p-8'>
+      <div className={cn(surfaceClass, 'p-8')}>
         <Empty className='border-none p-0'>
           <EmptyHeader>
             <EmptyMedia variant='icon'>
@@ -123,7 +124,7 @@ function ApiKeysMobileList({
   }
 
   return (
-    <div className='divide-border overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'divide-border overflow-hidden')}>
       {rows.map((row) => {
         const apiKey = row.original
         const statusConfig = API_KEY_STATUSES[apiKey.status]
@@ -325,7 +326,8 @@ export function ApiKeysTable() {
         ) : (
           <div
             className={cn(
-              'overflow-hidden rounded-md border transition-opacity duration-150',
+              surfaceClass,
+              'overflow-hidden transition-opacity duration-150',
               isFetching && !isLoading && 'pointer-events-none opacity-50'
             )}
           >

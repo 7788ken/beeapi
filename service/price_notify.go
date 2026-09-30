@@ -100,7 +100,7 @@ func InitPriceNotify() {
 			Note:           "baseline",
 			AffectedGroups: "[]",
 			Summary:        marshalPriceSummary(PriceDiffSummary{}),
-			Snapshot:       snapshotJSON,
+			Snapshot:       model.PricePublishSnapshot(snapshotJSON),
 			IsBaseline:     true,
 			EmailState:     model.PriceEmailStateNone,
 		}
@@ -179,7 +179,7 @@ func PublishPriceChanges(operatorId int, note string, sendEmail bool) (int, erro
 		Note:           note,
 		AffectedGroups: string(affectedJSON),
 		Summary:        marshalPriceSummary(diff.Summary),
-		Snapshot:       snapshotJSON,
+		Snapshot:       model.PricePublishSnapshot(snapshotJSON),
 		IsBaseline:     false,
 		EmailState:     model.PriceEmailStateNone,
 	}
@@ -231,7 +231,7 @@ func computePendingDiff() (*PriceDiffResult, map[string]string, error) {
 		return nil, nil, err
 	}
 	var lastSnapshot map[string]string
-	if err := common.UnmarshalJsonStr(lastBatch.Snapshot, &lastSnapshot); err != nil {
+	if err := common.UnmarshalJsonStr(string(lastBatch.Snapshot), &lastSnapshot); err != nil {
 		return nil, nil, fmt.Errorf("解析上次发布快照失败: %w", err)
 	}
 	currentSnapshot := CollectCurrentPriceSnapshot()

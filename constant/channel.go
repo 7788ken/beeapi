@@ -57,7 +57,9 @@ const (
 	ChannelTypeCodex          = 57
 	ChannelTypeSdVideo        = 58 // sd 网关风格 Seedance 上游（/v1/video/generate + /v1/sd/assets）
 	ChannelTypeAdvancedCustom = 59
-	ChannelTypeDummy          // this one is only for count, do not add any channel after this
+	ChannelTypeSdVideoV2      = 60 // sd 网关 v2（dreamina max 线路：/v2/video/generate + /v2/video/tasks，v1 不再接受 -max 模型）
+	ChannelTypeMiniMaxInf     = 61 // MiniMax 视频（service-inference 网关：/v1/video/generate + /v1/video/tasks/{id}）
+	ChannelTypeDummy               // this one is only for count, do not add any channel after this
 
 )
 
@@ -122,6 +124,8 @@ var ChannelBaseURLs = []string{
 	"https://chatgpt.com",                       //57
 	"https://model.service-inference.ai",        //58
 	"",                                          //59
+	"https://model.service-inference.ai",        //60
+	"https://model.service-inference.ai",        //61
 }
 
 var ChannelTypeNames = map[int]string{
@@ -181,6 +185,8 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeCodex:          "Codex",
 	ChannelTypeSdVideo:        "SdVideo",
 	ChannelTypeAdvancedCustom: "Advanced Custom",
+	ChannelTypeSdVideoV2:      "SdVideoV2",
+	ChannelTypeMiniMaxInf:     "MiniMaxInf",
 }
 
 func GetChannelTypeName(channelType int) string {

@@ -149,11 +149,12 @@ export function CryptomusSettingsSection(props: Props) {
     <SettingsSection
       title='Cryptomus 数字货币支付'
       description='通过 Cryptomus 托管收银台接入 USDT / BTC / ETH 等数字货币充值'
+      surface={false}
     >
       <Alert>
         <AlertDescription className='text-xs'>
           在 cryptomus.com → Business 后台注册商户，拿到商户 UUID 和支付 API Key。
-          Webhook 回调地址：<code>&lt;ServerAddress&gt;/api/cryptomus/webhook</code>，
+          Webhook 回调地址：<code className='break-all'>&lt;ServerAddress&gt;/api/cryptomus/webhook</code>，
           需在 Cryptomus 后台 IP/URL 白名单加上本服务地址。
         </AlertDescription>
       </Alert>

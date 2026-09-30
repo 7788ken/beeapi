@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -127,6 +129,15 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
+	// Must run AFTER the channel SystemPrompt injection above: lifting makes
+	// request.System non-nil, which would otherwise suppress the non-override
+	// SystemPrompt branch and silently drop the channel prompt.
+	if model_setting.GetClaudeSettings().SystemRoleLiftEnabled &&
+		hasSystemRoleMessage(request.Messages) {
+		logger.LogInfo(c, "lifting OpenAI-style system role message into top-level system field")
+		liftSystemRoleMessages(request)
+	}
+
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
@@ -135,9 +146,15 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			return types.NewError(convErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
+		rawUsage, newApiErr := doResponseWithQualityFilter(c, info, func() (any, *types.NewAPIError) {
+			return chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
+		})
 		if newApiErr != nil {
 			return newApiErr
+		}
+		usage, _ := rawUsage.(*dto.Usage)
+		if usage == nil {
+			return types.NewError(fmt.Errorf("invalid usage type from claude chat completions via responses"), types.ErrorCodeBadResponse)
 		}
 
 		service.PostTextConsumeQuota(c, info, usage, nil)
@@ -152,6 +169,26 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 		info.UpstreamRequestBodySize = storage.Size()
 		requestBody = common.ReaderOnly(storage)
+		// 渠道级请求体兼容改写（thinking 自适应/历史思考块剥离/服务端工具剥离）：透传模式下也按开关改写，避免上游 400
+		if relaycommon.ClaudeRequestBodyCompatEnabled(info.ChannelOtherSettings) {
+			if raw, bErr := storage.Bytes(); bErr == nil {
+				rewritten, cErr := relaycommon.ApplyClaudeRequestBodyCompat(raw, info.ChannelOtherSettings)
+				if cErr == nil && !bytes.Equal(raw, rewritten) {
+					body, size, closer, nErr := relaycommon.NewOutboundJSONBody(rewritten)
+					if nErr == nil {
+						defer closer.Close()
+						info.UpstreamRequestBodySize = size
+						requestBody = body
+					} else {
+						common.SysError("ClaudeRequestBodyCompat NewOutboundJSONBody error :" + nErr.Error())
+					}
+				} else if cErr != nil {
+					common.SysError("ClaudeRequestBodyCompat rewrite error :" + cErr.Error())
+				}
+			} else {
+				common.SysError("ClaudeRequestBodyCompat read body error :" + bErr.Error())
+			}
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {
@@ -165,6 +202,12 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 		// remove disabled fields for Claude API
 		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+
+		// 渠道级请求体兼容改写：thinking 自适应 → 历史思考块剥离 → 服务端工具剥离（各按开关生效）
+		jsonData, err = relaycommon.ApplyClaudeRequestBodyCompat(jsonData, info.ChannelOtherSettings)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
@@ -208,7 +251,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
-	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	usage, newAPIError := doResponseWithQualityFilter(c, info, func() (any, *types.NewAPIError) {
+		return adaptor.DoResponse(c, httpResp, info)
+	})
 	//log.Printf("usage: %v", usage)
 	if newAPIError != nil {
 		// reset status code 重置状态码

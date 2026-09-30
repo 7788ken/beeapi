@@ -213,6 +213,10 @@ const EditChannelModal = (props) => {
     allow_inference_geo: false,
     allow_speed: false,
     claude_beta_query: false,
+    claude_thinking_adaptive_compat: false,
+    claude_thinking_signature_strip: false,
+    claude_strip_server_tools_compat: false,
+    claude_filter_beta_header_compat: false,
     upstream_model_update_check_enabled: false,
     upstream_model_update_auto_sync_enabled: false,
     upstream_model_update_last_check_time: 0,
@@ -914,6 +918,14 @@ const EditChannelModal = (props) => {
             parsedSettings.allow_inference_geo || false;
           data.allow_speed = parsedSettings.allow_speed || false;
           data.claude_beta_query = parsedSettings.claude_beta_query || false;
+          data.claude_thinking_adaptive_compat =
+            parsedSettings.claude_thinking_adaptive_compat === true;
+          data.claude_thinking_signature_strip =
+            parsedSettings.claude_thinking_signature_strip === true;
+          data.claude_strip_server_tools_compat =
+            parsedSettings.claude_strip_server_tools_compat === true;
+          data.claude_filter_beta_header_compat =
+            parsedSettings.claude_filter_beta_header_compat === true;
           data.upstream_model_update_check_enabled =
             parsedSettings.upstream_model_update_check_enabled === true;
           data.upstream_model_update_auto_sync_enabled =
@@ -947,6 +959,10 @@ const EditChannelModal = (props) => {
           data.allow_inference_geo = false;
           data.allow_speed = false;
           data.claude_beta_query = false;
+          data.claude_thinking_adaptive_compat = false;
+          data.claude_thinking_signature_strip = false;
+          data.claude_strip_server_tools_compat = false;
+          data.claude_filter_beta_header_compat = false;
           data.upstream_model_update_check_enabled = false;
           data.upstream_model_update_auto_sync_enabled = false;
           data.upstream_model_update_last_check_time = 0;
@@ -966,6 +982,10 @@ const EditChannelModal = (props) => {
         data.allow_inference_geo = false;
         data.allow_speed = false;
         data.claude_beta_query = false;
+        data.claude_thinking_adaptive_compat = false;
+        data.claude_thinking_signature_strip = false;
+        data.claude_strip_server_tools_compat = false;
+        data.claude_filter_beta_header_compat = false;
         data.upstream_model_update_check_enabled = false;
         data.upstream_model_update_auto_sync_enabled = false;
         data.upstream_model_update_last_check_time = 0;
@@ -1045,6 +1065,7 @@ const EditChannelModal = (props) => {
         data.pass_through_body_enabled ||
         data.force_format ||
         data.claude_beta_query ||
+        data.claude_thinking_adaptive_compat ||
         data.system_prompt_override;
       if (hasAdvancedValues) {
         setAdvancedSettingsOpen(true);
@@ -1858,6 +1879,14 @@ const EditChannelModal = (props) => {
         settings.allow_inference_geo = localInputs.allow_inference_geo === true;
         settings.allow_speed = localInputs.allow_speed === true;
         settings.claude_beta_query = localInputs.claude_beta_query === true;
+        settings.claude_thinking_adaptive_compat =
+          localInputs.claude_thinking_adaptive_compat === true;
+        settings.claude_thinking_signature_strip =
+          localInputs.claude_thinking_signature_strip === true;
+        settings.claude_strip_server_tools_compat =
+          localInputs.claude_strip_server_tools_compat === true;
+        settings.claude_filter_beta_header_compat =
+          localInputs.claude_filter_beta_header_compat === true;
       }
     }
 
@@ -1907,6 +1936,10 @@ const EditChannelModal = (props) => {
     delete localInputs.allow_inference_geo;
     delete localInputs.allow_speed;
     delete localInputs.claude_beta_query;
+    delete localInputs.claude_thinking_adaptive_compat;
+    delete localInputs.claude_thinking_signature_strip;
+    delete localInputs.claude_strip_server_tools_compat;
+    delete localInputs.claude_filter_beta_header_compat;
     delete localInputs.upstream_model_update_check_enabled;
     delete localInputs.upstream_model_update_auto_sync_enabled;
     delete localInputs.upstream_model_update_last_check_time;
@@ -2731,6 +2764,78 @@ const EditChannelModal = (props) => {
                       }
                       extraText={t(
                         '开启后，该渠道请求 Claude 时将强制追加 ?beta=true（无需客户端手动传参）',
+                      )}
+                    />
+                  )}
+
+                  {inputs.type === 14 && (
+                    <Form.Switch
+                      field='claude_thinking_adaptive_compat'
+                      label={t('Claude thinking 自适应兼容')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) =>
+                        handleChannelOtherSettingsChange(
+                          'claude_thinking_adaptive_compat',
+                          value,
+                        )
+                      }
+                      extraText={t(
+                        '开启后，自动将请求中的 thinking.type=enabled 改写为 thinking.type=adaptive，并将 budget_tokens 映射为 output_config.effort，避免新模型（如 claude-opus-4-7/4-8）返回 400',
+                      )}
+                    />
+                  )}
+
+                  {inputs.type === 14 && (
+                    <Form.Switch
+                      field='claude_thinking_signature_strip'
+                      label={t('Claude thinking 签名剥离')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) =>
+                        handleChannelOtherSettingsChange(
+                          'claude_thinking_signature_strip',
+                          value,
+                        )
+                      }
+                      extraText={t(
+                        '开启后，完整剥离消息历史中的 thinking/redacted_thinking 块，避免上游因签名无效或缺失返回 400',
+                      )}
+                    />
+                  )}
+                  
+                  {inputs.type === 14 && (
+                    <Form.Switch
+                      field='claude_strip_server_tools_compat'
+                      label={t('Claude 服务端工具剥离兼容')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) =>
+                        handleChannelOtherSettingsChange(
+                          'claude_strip_server_tools_compat',
+                          value,
+                        )
+                      }
+                      extraText={t(
+                        '开启后，剥离上游不支持并返回 400 的服务端工具（web_search、code_execution 等）及历史中配对的工具块',
+                      )}
+                    />
+                  )}
+                  
+                  {inputs.type === 14 && (
+                    <Form.Switch
+                      field='claude_filter_beta_header_compat'
+                      label={t('Claude beta 头过滤兼容')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) =>
+                        handleChannelOtherSettingsChange(
+                          'claude_filter_beta_header_compat',
+                          value,
+                        )
+                      }
+                      extraText={t(
+                        '开启后，过滤上游不支持并返回 400 的 anthropic-beta 特性值（如 prompt-caching-scope-*）',
                       )}
                     />
                   )}

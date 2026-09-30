@@ -361,6 +361,7 @@ const (
 	refundDeniedUpstreamRefusal = "upstream_refusal"
 	refundDeniedClientGoneQuick = "client_gone_quick"
 	refundDeniedShutdown        = "shutdown"
+	refundDeniedChannelNoRefund = "channel_no_output_refund_disabled"
 )
 
 // isUpstreamRefusalReject 判断 admin_reject_reason 是否属于"上游显式拒绝"家族。
@@ -395,6 +396,8 @@ func isUpstreamRefusalReject(reason string) bool {
 //     （白名单格式 + 内嵌 image_generation_call / web_search 调用的混合计费场景）
 //
 // 策略性拒退（落 refund_denied_reason）：
+//   - 渠道级排除（渠道 setting.disable_no_output_refund=true）：部分上游没有免单概念，
+//     管理员按渠道人工排除；默认未设置跟随全局开关。优先于其它策略判定。
 //   - 上游显式拒绝（RefundNoOutputExcludeUpstreamRefusal 开启时）：客户内容触发上游
 //     风控（Claude refusal / OpenAI content_filter / Gemini 安全拦截），按输入照常计费。
 //   - shutdown：应用自身重启不属于客户免单。
@@ -418,6 +421,9 @@ func shouldRefundNoOutput(relayInfo *relaycommon.RelayInfo, summary textQuotaSum
 	}
 	if hasNonCompletionBillingComponent(summary) {
 		return false, ""
+	}
+	if relayInfo.ChannelMeta != nil && relayInfo.ChannelSetting.DisableNoOutputRefund {
+		return false, refundDeniedChannelNoRefund
 	}
 	if operation_setting.GetQuotaSetting().RefundNoOutputExcludeUpstreamRefusal && isUpstreamRefusalReject(adminRejectReason) {
 		return false, refundDeniedUpstreamRefusal

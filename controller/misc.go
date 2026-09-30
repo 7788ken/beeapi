@@ -101,9 +101,15 @@ func GetStatus(c *gin.Context) {
 		"announcements_enabled": cs.AnnouncementsEnabled,
 		"faq_enabled":           cs.FAQEnabled,
 
+		// 在线客服嵌入代码，空=不加载客服
+		"support_widget_code": cs.SupportWidgetCode,
+
 		// 模块管理配置
 		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],
 		"SidebarModulesAdmin": common.OptionMap["SidebarModulesAdmin"],
+
+		// 内容备份模块由部署环境变量 CONTENT_BACKUP_MODULE 控制，false 时前端隐藏全部入口
+		"content_backup_module_enabled": common.ContentBackupModuleEnabled,
 
 		"oidc_enabled":                system_setting.GetOIDCSettings().Enabled,
 		"oidc_client_id":              system_setting.GetOIDCSettings().ClientId,

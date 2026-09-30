@@ -205,7 +205,7 @@ func fallbackCooldownSet(key string, ttl time.Duration) {
 // 公开入口
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ClearChannelHealthRuntime 清除渠道的运行时计数（Redis err_streak / ok_streak / cooldown）。
+// ClearChannelHealthRuntime 清除渠道的运行时计数（Redis err_streak / ok_streak / cooldown，以及模型级摘除的 model_removal_streak）。
 //
 // 用途：管理员手动启用渠道时（status 切换为 Enabled），避免历史 err_streak
 // 残留导致"启用即死"——若上次失败留下的 err_streak 仍≥阈值，新请求一来就立刻
@@ -220,6 +220,9 @@ func ClearChannelHealthRuntime(channelId int) {
 	delKey(keyErrStreak(channelId))
 	delKey(keyOkStreak(channelId))
 	delKey(keyDemoteCooldown(channelId))
+	// 一并清模型级摘除的连击计数：否则渠道恢复/手动启用后 TTL 内历史 (渠道,模型) 计数残留，
+	// 会“刚启用又被摘”（与清 err_streak 防“启用即死”同理）。
+	ClearModelRemovalStreaks(channelId)
 }
 
 // RecordChannelResult 记录一次真实流量结果。
@@ -272,17 +275,23 @@ func RecordChannelResult(channelId int, usingKey string, err *types.NewAPIError,
 // isCountableError 判定错误是否计入渠道 streak。
 //
 // 决策顺序：
-//  1. nil / IsSkipRetryError → 不计入
-//  2. 单 key 失效（401/403 + invalid_api_key 关键字） → 计入（onChannelError 内部分流到 key 级处理）
-//  3. CountableStatusCodes 非空时（白名单模式）：
+//  1. nil → 不计入
+//  2. 质量闸门拦截（道歉 / 低 token）→ 只按它返回的状态码判定（isCountableStatusCode）
+//  3. IsSkipRetryError → 不计入
+//  4. 单 key 失效（401/403 + invalid_api_key 关键字） → 计入（onChannelError 内部分流到 key 级处理）
+//  5. CountableStatusCodes 非空时（白名单模式）：
 //     - 仅匹配列表内的状态码计入
 //     - 429 仍叠加 Count429AsError 开关
-//  4. 列表为空时（兜底模式，向后兼容）：
+//  6. 列表为空时（兜底模式，向后兼容）：
 //     - 429 → Count429AsError 决定
 //     - IsChannelError / ShouldDisableByStatusCode / 5xx 兜底 → 计入
 func isCountableError(err *types.NewAPIError, cfg *operation_setting.ChannelHealthConfig) bool {
 	if err == nil {
 		return false
+	}
+	// 质量闸门拦截带 skipRetry 只为不换渠道；上游 200 但回复不合格，仍是这条渠道的失败。
+	if types.IsResponseQualityFilterError(err) {
+		return isCountableStatusCode(err.StatusCode, cfg)
 	}
 	if types.IsSkipRetryError(err) {
 		return false
@@ -297,29 +306,45 @@ func isCountableError(err *types.NewAPIError, cfg *operation_setting.ChannelHeal
 		return true
 	}
 
+	// 兜底模式下 channel:* 一律计入（429 仍由 Count429AsError 决定）
+	if !operation_setting.HasCountableStatusCodes() && err.StatusCode != 429 && types.IsChannelError(err) {
+		return true
+	}
+	return isCountableStatusCode(err.StatusCode, cfg)
+}
+
+// isCountableStatusCode 只按状态码判定是否计入渠道 streak。
+func isCountableStatusCode(code int, cfg *operation_setting.ChannelHealthConfig) bool {
 	// 白名单模式：CountableStatusCodes 一旦配置就**仅**用它判定状态码
 	if operation_setting.HasCountableStatusCodes() {
-		if err.StatusCode == 429 {
+		if code == 429 {
 			return cfg.Count429AsError && operation_setting.IsCountableStatusCode(429)
 		}
-		return operation_setting.IsCountableStatusCode(err.StatusCode)
+		return operation_setting.IsCountableStatusCode(code)
 	}
 
 	// 兜底模式（列表为空，向后兼容旧行为）
-	if err.StatusCode == 429 {
+	if code == 429 {
 		return cfg.Count429AsError
 	}
-	if types.IsChannelError(err) {
-		return true
-	}
-	if operation_setting.ShouldDisableByStatusCode(err.StatusCode) {
+	if operation_setting.ShouldDisableByStatusCode(code) {
 		return true
 	}
 	// 5xx 一律算渠道错误（防止 ShouldDisableByStatusCode 默认列表漏配）
-	if err.StatusCode >= 500 && err.StatusCode < 600 {
-		return true
-	}
-	return false
+	return code >= 500 && code < 600
+}
+
+// ShouldCountTowardChannelStreak 对外暴露「这次错误是否计入渠道错误连击」的判定，供只读试算接口复用。
+//
+// 纯判定，零副作用：只读全局健康度配置与状态码/关键词表，不碰 Redis streak、不写库、不发通知。
+// 实现直接转调 isCountableError，不复制任何判定逻辑——试算与真实处置必须同源，否则界面上说
+// 「会计入」而实际不计入，比没有这个功能更糟。
+//
+// 注意：本函数只回答「这条错误的分类是否可计数」，不包含「健康度总开关是否打开」。
+// RecordChannelResult 在 cfg.Enabled==false 时开头就 return，所以调用方要判断"实际是否生效"
+// 必须自己再与 cfg.Enabled 相与。
+func ShouldCountTowardChannelStreak(err *types.NewAPIError) bool {
+	return isCountableError(err, operation_setting.GetChannelHealthConfig())
 }
 
 // isTransientOverloadError 判定错误是否属于上游瞬时过载（不应计入渠道 streak）。
@@ -347,8 +372,9 @@ var transientOverloadKeywords = []string{
 
 // isKeyFatalError 判定错误是否属于"单把 key 失效"（vs 渠道整体故障）。
 // 401/403 + 常见 invalid_api_key 关键字。
+// 质量闸门的状态码和文案是网关按配置写的（可配成 401/403），上游其实返回了 200，不算 key 失效。
 func isKeyFatalError(err *types.NewAPIError) bool {
-	if err == nil {
+	if err == nil || types.IsResponseQualityFilterError(err) {
 		return false
 	}
 	if err.StatusCode == 401 || err.StatusCode == 403 {

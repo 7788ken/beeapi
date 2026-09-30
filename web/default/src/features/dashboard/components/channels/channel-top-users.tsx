@@ -57,7 +57,7 @@ export function ChannelTopUsers({ channelId, channelName }: ChannelTopUsersProps
   const totalQuota = users.reduce((acc, u) => acc + Math.max(u.quota, 0), 0)
 
   return (
-    <div className='border-l-primary/40 bg-muted/40 rounded-md border border-l-4 px-3 py-2'>
+    <div className='bg-muted/40 rounded-md border px-3 py-2'>
       <div className='flex flex-wrap items-center justify-between gap-2 pb-1.5'>
         <div className='flex min-w-0 items-baseline gap-1.5 text-xs'>
           <span className='font-semibold'>{t('Top Users')}</span>
@@ -89,10 +89,10 @@ export function ChannelTopUsers({ channelId, channelName }: ChannelTopUsersProps
             onValueChange={(v) => setSortBy(v as TopUsersSortBy)}
           >
             <TabsList className='h-7 p-[2px]'>
-              <TabsTrigger value='quota' className='h-6 px-2 text-xs'>
+              <TabsTrigger value='quota' className='px-2 text-xs'>
                 {t('By consumption')}
               </TabsTrigger>
-              <TabsTrigger value='rpm' className='h-6 px-2 text-xs'>
+              <TabsTrigger value='rpm' className='px-2 text-xs'>
                 {t('By RPM')}
               </TabsTrigger>
             </TabsList>

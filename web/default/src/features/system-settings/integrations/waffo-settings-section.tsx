@@ -201,6 +201,7 @@ export function WaffoSettingsSection(props: Props) {
         description={t(
           'Configure Waffo payment aggregation platform integration'
         )}
+        surface={false}
       >
         <Alert>
           <AlertDescription className='text-xs'>

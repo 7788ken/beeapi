@@ -16,6 +16,8 @@ export type Workspace = {
  */
 type BaseNavItem = {
   title: string
+  /** 标题后的计数，如「可用分组 (44)」：单独渲染、不随标题截断 */
+  count?: number
   badge?: string
   icon?: React.ElementType
   iconClassName?: string

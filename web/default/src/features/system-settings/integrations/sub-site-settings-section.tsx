@@ -51,6 +51,8 @@ import {
 } from '../api'
 import type { SubSite, SubSiteVerifyStatus } from '../types'
 import { SubSiteEditDialog } from './sub-site-edit-dialog'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 
 dayjs.extend(relativeTime)
 
@@ -168,7 +170,7 @@ export function SubSiteSettingsSection() {
           </Button>
         </div>
 
-        <div className='rounded-md border'>
+        <div className={cn(surfaceClass, 'overflow-hidden')}>
           <Table>
             <TableHeader>
               <TableRow>

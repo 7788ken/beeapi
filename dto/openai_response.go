@@ -214,6 +214,7 @@ type ChatCompletionsStreamResponseSimple struct {
 }
 
 type CompletionsStreamResponse struct {
+	Model   string `json:"model"`
 	Choices []struct {
 		Text         string `json:"text"`
 		FinishReason string `json:"finish_reason"`
@@ -231,9 +232,10 @@ type Usage struct {
 
 	PromptTokensDetails    InputTokenDetails  `json:"prompt_tokens_details"`
 	CompletionTokenDetails OutputTokenDetails `json:"completion_tokens_details"`
-	InputTokens            int                `json:"input_tokens"`
-	OutputTokens           int                `json:"output_tokens"`
-	InputTokensDetails     *InputTokenDetails `json:"input_tokens_details"`
+	InputTokens            int                 `json:"input_tokens"`
+	OutputTokens           int                 `json:"output_tokens"`
+	InputTokensDetails     *InputTokenDetails  `json:"input_tokens_details"`
+	OutputTokensDetails    *OutputTokenDetails `json:"output_tokens_details"`
 
 	// claude cache 1h
 	ClaudeCacheCreation5mTokens int `json:"claude_cache_creation_5_m_tokens"`

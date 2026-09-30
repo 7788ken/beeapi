@@ -117,16 +117,13 @@ func sendSubscriptionExhaustedNotify(event model.SubscriptionExhaustedEvent) {
 		planTitle = "订阅套餐"
 	}
 	var prompt, content string
-	if event.DowngradedToAuto {
-		prompt = "订阅额度已用完，已切换为按量计费"
-		content = "您的订阅「{{value}}」额度已全部用完。按您的消费模式设置，系统已自动将您的分组切换为 auto，后续调用将按标准按量价格从钱包余额扣费。如需继续享受套餐价格，请及时续费订阅。"
-	} else if event.Pref == "subscription_then_auto" {
-		// 偏好为转按量但未降级分组（分组被其他生效订阅占用或已被手动修改），仅告知耗尽。
-		prompt = "订阅额度已用完"
-		content = "您的订阅「{{value}}」额度已全部用完，该订阅将不再抵扣费用。如需继续享受套餐价格，请及时续费订阅。"
+	if event.DowngradedToGroup != "" {
+		prompt = "订阅额度已用完，已切换到兜底分组按量计费"
+		content = fmt.Sprintf("您的订阅「{{value}}」额度已全部用完。系统已按套餐设置将您的分组切换到兜底分组「%s」，后续调用将按该分组价格从钱包余额扣费。如需继续享受套餐价格，请及时续费订阅。", event.DowngradedToGroup)
 	} else {
+		// 未配置兜底分组（或降级守卫未命中）：订阅分组调用暂停，不扣钱包，等待续费/额度重置。
 		prompt = "订阅额度已用完，调用已暂停"
-		content = "您的订阅「{{value}}」额度已全部用完，订阅分组的调用已暂停（不会扣减钱包余额）。您可以续费订阅，或在「我的订阅」页将消费模式切换为「优先订阅（用完转按量）」，用钱包余额继续调用。"
+		content = "您的订阅「{{value}}」额度已全部用完，订阅分组的调用已暂停（不会扣减钱包余额）。您可以续费订阅，或等待额度重置。"
 	}
 	values := []interface{}{planTitle}
 	if err := NotifyUser(event.UserId, event.UserEmail, event.UserSetting, dto.NewNotify(dto.NotifyTypeSubscriptionExhausted, prompt, content, values)); err != nil {

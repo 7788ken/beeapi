@@ -23,6 +23,8 @@ func TestClassifyErrorAttribution(t *testing.T) {
 		{"无响应", NewError(errors.New("no resp"), ErrorCodeUpstreamNoResponse), AttributionUpstream},
 		{"上游超时", NewError(errors.New("timeout"), ErrorCodeUpstreamTimeout), AttributionUpstream},
 		{"空响应", NewError(errors.New("empty"), ErrorCodeEmptyResponse), AttributionUpstream},
+		{"道歉拦截 503", NewErrorWithStatusCode(errors.New("apology"), ErrorCodeResponseQualityApology, 503), AttributionUpstream},
+		{"低 token 拦截 503", NewErrorWithStatusCode(errors.New("low token"), ErrorCodeResponseQualityLowToken, 503), AttributionUpstream},
 		{"channel:key 用尽", NewError(errors.New("no key"), ErrorCodeChannelNoAvailableKey), AttributionUpstream},
 		{"channel:key 无效", NewError(errors.New("bad key"), ErrorCodeChannelInvalidKey), AttributionUpstream},
 

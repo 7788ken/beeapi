@@ -65,18 +65,26 @@ func RelaySdAssetCreate(c *gin.Context) {
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
 	baseURL, key, proxy := sdAssetChannelConnFromContext(c)
 
-	// 上游 model：决定素材注册进哪套素材体系。
-	// sd 网关（58）：显式传 model（经渠道模型映射）→ 非 hc 族走 sd2 素材组体系（260128/ep/mini，
-	// 与 HC 的 /v1/sd/assets 旧体系不互通）；hc 族/未传 → 旧体系（HC 默认空间）。
+	// sd 网关按 model 分流到三套互不相通的素材体系（判定顺序敏感）：
+	//   -max 线路  → db-sd-max(/v2/db-sd-max/assets)；须先于 sd2 判定，否则 -max
+	//               （不含 "-hc"）会被 IsSd2AssetModel 误判进 sd2 素材组体系。
+	//   非 hc 非 max → sd2 素材组(/v1/assets)；hc 族/未显式传 model → 旧体系(/v1/sd/assets)。
 	// 方舟控制面（54）：CreateAsset 必须带 model，未显式传时用分发默认值（同样过映射）。
+	isSdGateway := channelType == constant.ChannelTypeSdVideo || channelType == constant.ChannelTypeSdVideoV2
 	upstreamModel := ""
-	if middleware.IsSdAssetExplicitModel(c) || channelType != constant.ChannelTypeSdVideo {
+	if middleware.IsSdAssetExplicitModel(c) || !isSdGateway {
 		upstreamModel = applySdAssetModelMapping(c, req.Model)
 	}
 
-	if channelType == constant.ChannelTypeSdVideo && middleware.IsSdAssetExplicitModel(c) && doubao.IsSd2AssetModel(upstreamModel) {
-		relaySdAssetCreateSd2(c, channelId, baseURL, key, proxy, &req)
-		return
+	if isSdGateway && middleware.IsSdAssetExplicitModel(c) {
+		if doubao.IsSdMaxAssetModel(upstreamModel) {
+			relaySdAssetCreateSdMax(c, channelId, baseURL, key, proxy, &req, upstreamModel)
+			return
+		}
+		if doubao.IsSd2AssetModel(upstreamModel) {
+			relaySdAssetCreateSd2(c, channelId, baseURL, key, proxy, &req)
+			return
+		}
 	}
 
 	result, upErr, err := doubao.CreateAssetForChannel(c.Request.Context(), channelType, baseURL, key, proxy, doubao.AssetCreateParams{
@@ -189,6 +197,58 @@ func relaySdAssetCreateSd2(c *gin.Context, channelId int, baseURL, key, proxy st
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
 
+// relaySdAssetCreateSdMax db-sd-max 预上传体系（-max 线路）上传：直接上传（无素材组、
+// 无处理 task_id）→ 落库（protocol=sdmax）→ 可选 wait 退避轮询至 Active/Failed。
+func relaySdAssetCreateSdMax(c *gin.Context, channelId int, baseURL, key, proxy string, req *dto.SdAssetCreateRequest, upstreamModel string) {
+	created, upErr, err := doubao.CreateAssetSdMax(c.Request.Context(), baseURL, key, proxy, doubao.AssetCreateParams{
+		Model:     upstreamModel,
+		URL:       req.URL,
+		Name:      req.Name,
+		AssetType: req.AssetType,
+	})
+	if err != nil {
+		sdAssetAbort(c, http.StatusBadGateway, common.MaskSensitiveInfo(err.Error()))
+		return
+	}
+	if upErr != nil {
+		sdAssetUpstreamAbort(c, upErr)
+		return
+	}
+
+	status := created.Status
+	if status == "" {
+		status = "Processing"
+	}
+	record := &model.SdAsset{
+		AssetID:   created.Id,
+		UserId:    c.GetInt("id"),
+		ChannelId: channelId,
+		AssetType: req.AssetType,
+		Name:      req.Name,
+		Status:    status,
+		Protocol:  doubao.SdAssetProtocolSdMax,
+	}
+	if err := record.Insert(); err != nil {
+		common.SysError(fmt.Sprintf("sd asset insert failed: asset_id=%s, user_id=%d, error=%v", created.Id, record.UserId, err))
+	}
+
+	final := created
+	if c.Query("wait") == "true" {
+		if polled := waitSdAssetActive(c, record, func() (*doubao.AssetResult, *doubao.AssetUpstreamError, error) {
+			return doubao.GetAssetSdMax(c.Request.Context(), baseURL, key, proxy, created.Id)
+		}); polled != nil {
+			final = polled
+		}
+	}
+
+	data, err := sdAssetData(final)
+	if err != nil {
+		sdAssetAbort(c, http.StatusInternalServerError, "marshal response failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
+}
+
 // RelaySdAssetGet GET /v1/sd/assets/:asset_id：按素材落库记录路由到创建时的渠道，
 // 实时拉上游 GetAsset 并回写状态快照。仅创建者可查（语义对齐任务查询）。
 func RelaySdAssetGet(c *gin.Context) {
@@ -222,9 +282,12 @@ func RelaySdAssetGet(c *gin.Context) {
 
 	var result *doubao.AssetResult
 	var upErr *doubao.AssetUpstreamError
-	if record.Protocol == "sd2" {
+	switch record.Protocol {
+	case "sd2":
 		result, upErr, err = doubao.GetAssetSd2(c.Request.Context(), baseURL, key, channel.GetSetting().Proxy, assetId, record.UpstreamTaskID)
-	} else {
+	case doubao.SdAssetProtocolSdMax:
+		result, upErr, err = doubao.GetAssetSdMax(c.Request.Context(), baseURL, key, channel.GetSetting().Proxy, assetId)
+	default:
 		result, upErr, err = doubao.GetAssetForChannel(c.Request.Context(), channel.Type, baseURL, key, channel.GetSetting().Proxy, assetId)
 	}
 	if err != nil {

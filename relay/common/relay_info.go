@@ -104,6 +104,7 @@ type RelayInfo struct {
 	UsePrice               bool
 	RelayMode              int
 	OriginModelName        string
+	ResponseModel          *ResponseModel
 	RequestURLPath         string
 	RequestHeaders         map[string]string
 	ShouldIncludeUsage     bool
@@ -169,6 +170,14 @@ type RelayInfo struct {
 
 	Request dto.Request
 
+	// QualityInspect 给回复质量闸门用：本轮可见文本 / 工具调用数。
+	// 每轮渠道尝试开始时清空，避免重试带上上一渠道的内容。
+	QualityInspect QualityInspect
+
+	// QualityChargePending 是「拦截后重试」打开时挂起的用量。
+	// 请求最终仍以质量门错误结束才结算；中途成功或改成其它错误则丢掉。
+	QualityChargePending *dto.Usage
+
 	// RequestConversionChain records request format conversions in order, e.g.
 	// ["openai", "openai_responses"] or ["openai", "claude"].
 	RequestConversionChain []types.RelayFormat
@@ -232,6 +241,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	}
 
 	info.ChannelMeta = channelMeta
+	info.ResponseModel = nil
 
 	// reset some fields based on channel meta
 	// 重置某些字段，例如模型名称等
@@ -666,6 +676,60 @@ func (info *RelayInfo) SetFirstResponseTime() {
 
 func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
+}
+
+// QualityInspect 是本轮上游回复的快照，供道歉/低 token 闸门使用。
+// Text 只含可见正文。Reasoning 是思考文本，不参与道歉匹配。
+type QualityInspect struct {
+	Text      string
+	Reasoning string
+	ToolCalls int
+	Media     bool
+}
+
+func (info *RelayInfo) ResetQualityInspect() {
+	if info == nil {
+		return
+	}
+	info.QualityInspect = QualityInspect{}
+}
+
+func (info *RelayInfo) AppendQualityInspectText(text string) {
+	if info == nil || text == "" {
+		return
+	}
+	info.QualityInspect.Text += text
+}
+
+func (info *RelayInfo) AppendQualityInspectReasoning(text string) {
+	if info == nil || text == "" {
+		return
+	}
+	info.QualityInspect.Reasoning += text
+}
+
+func (info *RelayInfo) AddQualityInspectTools(n int) {
+	if info == nil || n <= 0 {
+		return
+	}
+	info.QualityInspect.ToolCalls += n
+}
+
+func (info *RelayInfo) MarkQualityInspectMedia() {
+	if info == nil {
+		return
+	}
+	info.QualityInspect.Media = true
+}
+
+// ClearSentResponse 让本轮看起来还没向客户端写出。质量闸门丢弃缓冲后
+// 必须调用，否则写配置错误响应时会以为已经发过首包。
+func (info *RelayInfo) ClearSentResponse() {
+	if info == nil {
+		return
+	}
+	info.isFirstResponse = true
+	info.FirstResponseTime = info.StartTime.Add(-time.Second)
 }
 
 type TaskRelayInfo struct {

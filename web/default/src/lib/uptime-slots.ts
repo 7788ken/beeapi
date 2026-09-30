@@ -25,15 +25,17 @@ export function browserTzOffsetSec(): number {
  *
  * tzOffsetSec 必须与该接口实际使用的对齐口径一致，否则槽位落不到后端桶上、整条曲线全灰：
  * 渠道可用性传浏览器偏移，分组广场（匿名可访问、后端固定按 UTC 对齐）传 0。
+ * nowSec 默认取当前时间；可用分组页传数据的拉取时刻，与「是否可用」的判定用同一个时间基准。
  */
 export function fillHourlyUptimeSlots(
   byTs: Map<number, UptimeDayPoint>,
   hours: number,
-  tzOffsetSec: number
+  tzOffsetSec: number,
+  nowSec = Math.floor(Date.now() / 1000)
 ): UptimeDayPoint[] {
-  const nowSec = Math.floor(Date.now() / 1000)
   const shifted = nowSec + tzOffsetSec
-  const endTs = shifted - (((shifted % HOUR_SEC) + HOUR_SEC) % HOUR_SEC) - tzOffsetSec
+  const endTs =
+    shifted - (((shifted % HOUR_SEC) + HOUR_SEC) % HOUR_SEC) - tzOffsetSec
 
   const slots: UptimeDayPoint[] = []
   for (let i = hours - 1; i >= 0; i--) {

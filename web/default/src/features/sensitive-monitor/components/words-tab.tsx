@@ -4,8 +4,7 @@ import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +15,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -118,7 +120,7 @@ export function WordsTab() {
         </div>
       </div>
 
-      <div className='rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <Table>
           <TableHeader>
             <TableRow>

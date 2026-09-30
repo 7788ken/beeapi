@@ -78,6 +78,9 @@ func CommonClaudeHeadersOperation(c *gin.Context, req *http.Header, info *relayc
 		req.Set("anthropic-beta", anthropicBeta)
 	}
 	model_setting.GetClaudeSettings().WriteHeaders(info.OriginModelName, req)
+	// 渠道级 beta 头过滤兼容：剥离上游拒绝的 beta 特性值（如 prompt-caching-scope-*），避免 400
+	// （DoApiRequest 在 Header Override 后还会再过滤一次，防 override 回灌）
+	relaycommon.FilterClaudeBetaHeaderInPlace(req, info.ChannelOtherSettings.ClaudeFilterBetaHeaderCompat)
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {

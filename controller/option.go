@@ -79,7 +79,9 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "Secret") ||
 			strings.HasSuffix(k, "Key") ||
 			strings.HasSuffix(k, "secret") ||
-			strings.HasSuffix(k, "api_key")
+			strings.HasSuffix(k, "api_key") ||
+			// 内容备份整包内含远端口令；它有自己的 Root 接口（GET 时抹掉口令），不从这里整包下发。
+			k == model.ContentBackupSettingOptionKey
 		if isSensitiveKey && !isVisiblePublicKeyOption(k) {
 			continue
 		}
@@ -307,6 +309,15 @@ func UpdateOption(c *gin.Context) {
 		}
 	case "console_setting.uptime_kuma_groups":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "UptimeKumaGroups")
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+	case "console_setting.support_widget_code":
+		err = console_setting.ValidateConsoleSettings(option.Value.(string), "SupportWidgetCode")
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

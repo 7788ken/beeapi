@@ -63,9 +63,9 @@ export function ChannelsPrimaryButtons() {
 
   return (
     <>
-      <div className='flex items-center gap-2'>
+      <div className='flex flex-wrap items-center gap-2'>
         {/* Desktop: Toggle switches visible */}
-        <div className='hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
+        <div className='bg-card hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
           <Tags className='text-muted-foreground h-4 w-4' />
           <Label htmlFor='tag-mode' className='cursor-pointer text-sm'>
             {t('Tag Mode')}
@@ -77,7 +77,7 @@ export function ChannelsPrimaryButtons() {
           />
         </div>
 
-        <div className='hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
+        <div className='bg-card hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
           <SortAsc className='text-muted-foreground h-4 w-4' />
           <Label htmlFor='id-sort' className='cursor-pointer text-sm'>
             {t('Sort by ID')}

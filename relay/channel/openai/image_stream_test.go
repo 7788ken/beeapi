@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
@@ -106,6 +107,35 @@ func TestOpenaiImageStreamHandlerForwardsSSEAndUsage(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `data: [DONE]`)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 	require.Equal(t, 3.0, info.PriceData.OtherRatios["n"], "streams without completed events keep the requested count")
+}
+
+func TestNormalizeOpenAIUsageMapsOutputImageTokens(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+
+	body := `{"created":1710000000,"data":[{"b64_json":"image"}],"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7,"input_tokens_details":{"image_tokens":2,"text_tokens":1},"output_tokens_details":{"image_tokens":1120,"text_tokens":4}}}`
+
+	c, _, resp, info := newImageTestContext(t, body, "application/json", false)
+	info.RelayMode = relayconstant.RelayModeImagesGenerations
+
+	usage, err := OpenaiImageHandler(c, info, resp)
+	require.Nil(t, err)
+	require.Equal(t, 3, usage.PromptTokens)
+	require.Equal(t, 4, usage.CompletionTokens)
+	require.Equal(t, 2, usage.PromptTokensDetails.ImageTokens)
+	require.Equal(t, 1120, usage.CompletionTokenDetails.ImageTokens)
+	require.Equal(t, 4, usage.CompletionTokenDetails.TextTokens)
+}
+
+func TestNormalizeOpenAIUsageDoesNotDoubleCountOutputDetails(t *testing.T) {
+	usage := &dto.Usage{
+		CompletionTokenDetails: dto.OutputTokenDetails{ImageTokens: 1120, TextTokens: 4},
+		OutputTokensDetails:    &dto.OutputTokenDetails{ImageTokens: 1120, TextTokens: 4},
+	}
+	normalizeOpenAIUsage(usage)
+	require.Equal(t, 1120, usage.CompletionTokenDetails.ImageTokens)
+	require.Equal(t, 4, usage.CompletionTokenDetails.TextTokens)
 }
 
 func TestOpenaiImageStreamHandlerUsesCompletedEventCount(t *testing.T) {

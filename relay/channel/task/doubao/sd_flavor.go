@@ -17,9 +17,14 @@ import (
 // 与火山方舟同一套 Seedance 语义（content[]/asset:///duration/resolution/ratio），
 // 仅线协议不同 —— 提交 POST {base}/v1/video/generate、轮询 GET {base}/v1/video/tasks/{id}、
 // 响应统一包在 {"task":{...}} 信封里。请求 payload 与方舟一致，直接复用 requestPayload。
+//
+// sd-v2（渠道类型 60，dreamina max 线路）：请求/响应语义与 v1 相同，仅路径升为
+// /v2/video/generate + /v2/video/tasks/{id}。上游 v1 不再接受 -max 模型，故独立成渠道类型，
+// 存量 hc/df 渠道（58）不受影响。
 const (
-	UpstreamFlavorArk = "ark"
-	UpstreamFlavorSd  = "sd"
+	UpstreamFlavorArk  = "ark"
+	UpstreamFlavorSd   = "sd"
+	UpstreamFlavorSdV2 = "sd-v2"
 )
 
 // sdTask sd 网关的任务对象（提交与轮询响应共用）。
@@ -33,7 +38,15 @@ type sdTask struct {
 	LastFrameURL    string          `json:"last_frame_url"`
 	CreatedAt       string          `json:"created_at"` // RFC3339 字符串（方舟为 int64，不能共用结构）
 	CompletedAt     string          `json:"completed_at"`
-	Usage           struct {
+	// Prep v2 新增：上游自动拉取素材的进度（-max 线路无需客户上传素材）。
+	// 仅日志/展示用，状态映射只看 Status 字段。
+	Prep struct {
+		Total   int `json:"total"`
+		Active  int `json:"active"`
+		Failed  int `json:"failed"`
+		Attempt int `json:"attempt"`
+	} `json:"prep"`
+	Usage struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
@@ -68,7 +81,7 @@ func parseSdTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 
 	taskResult := relaycommon.TaskInfo{Code: 0}
 	switch task.Status {
-	case "pending", "queued":
+	case "pending", "queued", "preparing": // preparing：v2 自动拉取素材阶段，尚未进入生成队列
 		taskResult.Status = model.TaskStatusQueued
 		taskResult.Progress = "10%"
 	case "processing", "running":

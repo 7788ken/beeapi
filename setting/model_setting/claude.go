@@ -19,6 +19,12 @@ type ClaudeSettings struct {
 	DefaultMaxTokens                      map[string]int                 `json:"default_max_tokens"`
 	ThinkingAdapterEnabled                bool                           `json:"thinking_adapter_enabled"`
 	ThinkingAdapterBudgetTokensPercentage float64                        `json:"thinking_adapter_budget_tokens_percentage"`
+	// SystemRoleLiftEnabled lifts messages[].role=="system" (OpenAI-style) into
+	// the top-level system field on the native /v1/messages relay path.
+	// Default is off so new sites pass those requests through. Sites that were
+	// already on under the previous default, and never stored a value, are kept
+	// on once at startup. An explicit stored true/false is left unchanged.
+	SystemRoleLiftEnabled bool `json:"system_role_lift_enabled"`
 }
 
 // 默认配置
@@ -29,6 +35,7 @@ var defaultClaudeSettings = ClaudeSettings{
 		"default": 8192,
 	},
 	ThinkingAdapterBudgetTokensPercentage: 0.8,
+	SystemRoleLiftEnabled:                 false,
 }
 
 // 全局实例

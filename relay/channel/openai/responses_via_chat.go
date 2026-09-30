@@ -34,6 +34,7 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if oaiError := chatResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	info.ObserveResponseModel(chatResp.Model)
 
 	if responseID := helper.GetResponseID(c); responseID != "" {
 		chatResp.Id = responseID
@@ -109,6 +110,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			sr.Error(err)
 			return
 		}
+		info.ObserveResponseModel(chunk.Model)
 
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &chunk)
 		if err != nil {

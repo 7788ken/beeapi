@@ -12,6 +12,7 @@ import { useTheme } from '@/context/theme-provider'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { formatQuota } from '@/lib/format'
 import dayjs from '@/lib/dayjs'
+import { dashSegItem, dashSegTrack } from '../overview/dash-emphasis'
 import { fetchChannelTrend } from './api'
 import { resolveRangeSeconds, type TrendMetric } from './types'
 
@@ -135,6 +136,10 @@ export function ChannelStatsTrend({
     } as Record<string, unknown>
   }, [query.data, metric, channelNames, rangeSeconds])
 
+  // 后端只返回有日志的桶：所选渠道窗口内无消费时 points 全空，不画空坐标轴
+  const isEmpty =
+    query.data?.series.every((s) => s.points.length === 0) ?? false
+
   const chartKey = [
     metric,
     idsKey,
@@ -156,15 +161,12 @@ export function ChannelStatsTrend({
                 : t('Click a channel card to add to the trend chart')}
             </span>
           </CardTitle>
-          <div className='bg-muted/60 inline-flex h-7 overflow-hidden rounded-md border p-0.5'>
+          <div className={dashSegTrack}>
             <button
               type='button'
               onClick={() => setMetric('quota')}
-              className={`inline-flex items-center gap-1 rounded-sm px-2 text-xs font-medium transition ${
-                metric === 'quota'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground'
-              }`}
+              aria-pressed={metric === 'quota'}
+              className={dashSegItem(metric === 'quota')}
             >
               <Coins className='size-3' />
               {t('Consumption')}
@@ -172,11 +174,8 @@ export function ChannelStatsTrend({
             <button
               type='button'
               onClick={() => setMetric('call_count')}
-              className={`inline-flex items-center gap-1 rounded-sm px-2 text-xs font-medium transition ${
-                metric === 'call_count'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground'
-              }`}
+              aria-pressed={metric === 'call_count'}
+              className={dashSegItem(metric === 'call_count')}
             >
               <Activity className='size-3' />
               {t('Calls')}
@@ -194,6 +193,10 @@ export function ChannelStatsTrend({
         ) : query.isError ? (
           <div className='text-destructive py-12 text-center text-xs'>
             {t('Failed to load trend data')}
+          </div>
+        ) : isEmpty ? (
+          <div className='text-muted-foreground py-12 text-center text-xs'>
+            {t('No data in selected range')}
           </div>
         ) : (
           <div className='h-72'>

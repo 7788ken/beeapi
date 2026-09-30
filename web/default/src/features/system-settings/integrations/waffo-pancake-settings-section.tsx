@@ -185,6 +185,7 @@ export function WaffoPancakeSettingsSection(props: Props) {
       description={t(
         'Configure Waffo Pancake hosted checkout integration for USD-priced top-ups'
       )}
+      surface={false}
     >
       <Alert>
         <AlertDescription className='text-xs'>

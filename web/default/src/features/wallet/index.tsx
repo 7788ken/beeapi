@@ -422,7 +422,7 @@ export function Wallet(props: WalletProps) {
           {t('Manage your balance and payment methods')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
+          <div className='flex w-full flex-col gap-4 sm:gap-5'>
             <WalletStatsCard user={user} loading={userLoading} />
 
             <div id='wallet-add-funds' className='scroll-mt-4'>

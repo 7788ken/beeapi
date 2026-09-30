@@ -1,7 +1,6 @@
 import { type ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import {
   Collapsible,
   CollapsibleContent,
@@ -54,12 +53,16 @@ export function NavGroup({ title, items, id }: NavGroupProps) {
   }
 
   return (
-    <Collapsible open={isOpen} onOpenChange={handleOpenChange} className='group/nav-group'>
+    <Collapsible
+      open={isOpen}
+      onOpenChange={handleOpenChange}
+      className='group/nav-group'
+    >
       <SidebarGroup>
         <CollapsibleTrigger asChild>
-          <SidebarGroupLabel className='cursor-pointer select-none hover:text-sidebar-foreground'>
+          <SidebarGroupLabel className='text-muted-foreground hover:text-primary cursor-pointer text-sm select-none'>
             <span className='flex-1'>{title}</span>
-            <ChevronDown className='h-3 w-3 transition-transform duration-200 group-data-[state=closed]/nav-group:-rotate-90' />
+            <ChevronDown className='h-3 w-3 transition-transform duration-[300ms] ease-out group-data-[state=closed]/nav-group:-rotate-90 motion-reduce:transition-none' />
           </SidebarGroupLabel>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -68,12 +71,18 @@ export function NavGroup({ title, items, id }: NavGroupProps) {
               const key = `${item.title}-${item.url || item.type}`
 
               if (item.type === 'chat-presets') {
-                return <ChatPresetsItem key={key} item={item as NavChatPresets} />
+                return (
+                  <ChatPresetsItem key={key} item={item as NavChatPresets} />
+                )
               }
 
               if (!item.items) {
                 return (
-                  <SidebarMenuLink key={key} item={item as NavLink} href={href} />
+                  <SidebarMenuLink
+                    key={key}
+                    item={item as NavLink}
+                    href={href}
+                  />
                 )
               }
 
@@ -103,10 +112,29 @@ export function NavGroup({ title, items, id }: NavGroupProps) {
 }
 
 /**
- * Navigation badge component
+ * Navigation badge component（如「可用分组」有新变动时的 NEW）：紫底白字，所在项激活（紫底）时反成白底紫字
  */
 function NavBadge({ children }: { children: ReactNode }) {
-  return <Badge className='rounded-full px-1 py-0 text-xs'>{children}</Badge>
+  return (
+    <span className='bg-primary text-primary-foreground group-data-[active=true]/nav-link:text-primary ms-auto shrink-0 rounded-md px-1.5 py-0.5 text-[10px] leading-none font-semibold group-data-[active=true]/nav-link:bg-white'>
+      {children}
+    </span>
+  )
+}
+
+/** 标题后的计数：不参与截断，颜色随所在项（激活时紫底白字） */
+function NavCount({ count }: { count: number }) {
+  return <span className='-ms-1 shrink-0 tabular-nums'>({count})</span>
+}
+
+/** 侧栏折叠成图标时角标文字放不下，改在图标右上角点一个紫点 */
+function NavBadgeDot() {
+  return (
+    <span
+      aria-hidden
+      className='bg-primary ring-sidebar pointer-events-none absolute end-1 top-1 hidden size-2 rounded-full ring-2 group-data-[collapsible=icon]:block'
+    />
+  )
 }
 
 /**
@@ -120,6 +148,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
         asChild
         isActive={item.external ? false : checkIsActive(href, item)}
         tooltip={item.title}
+        className='group/nav-link'
       >
         {item.external ? (
           <a
@@ -128,18 +157,21 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
             rel='noopener noreferrer'
             onClick={() => setOpenMobile(false)}
           >
-            {item.icon && <item.icon className={item.iconClassName} />}
-            <span>{item.title}</span>
+            {item.icon && <item.icon />}
+            <span className='truncate'>{item.title}</span>
+            {item.count !== undefined && <NavCount count={item.count} />}
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
           </a>
         ) : (
           <Link to={item.url} onClick={() => setOpenMobile(false)}>
-            {item.icon && <item.icon className={item.iconClassName} />}
-            <span>{item.title}</span>
+            {item.icon && <item.icon />}
+            <span className='truncate'>{item.title}</span>
+            {item.count !== undefined && <NavCount count={item.count} />}
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
           </Link>
         )}
       </SidebarMenuButton>
+      {item.badge && <NavBadgeDot />}
     </SidebarMenuItem>
   )
 }
@@ -178,10 +210,10 @@ function SidebarMenuCollapsible({
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton tooltip={item.title}>
-            {item.icon && <item.icon className={item.iconClassName} />}
+            {item.icon && <item.icon />}
             <span>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
-            <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
+            <ChevronRight className='ms-auto transition-transform duration-[300ms] ease-out group-data-[state=open]/collapsible:rotate-90 motion-reduce:transition-none' />
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent className='CollapsibleContent'>
@@ -225,10 +257,10 @@ function SidebarMenuCollapsedDropdown({
             tooltip={item.title}
             isActive={checkIsActive(href, item)}
           >
-            {item.icon && <item.icon className={item.iconClassName} />}
+            {item.icon && <item.icon />}
             <span>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
-            <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
+            <ChevronRight className='ms-auto transition-transform duration-[300ms] ease-out group-data-[state=open]/collapsible:rotate-90 motion-reduce:transition-none' />
           </SidebarMenuButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent side='right' align='start' sideOffset={4}>

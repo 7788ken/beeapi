@@ -37,6 +37,7 @@ import type {
   DashboardChartPreferences,
   DashboardFilters,
 } from '@/features/dashboard/types'
+import { dashPrimaryShadow } from '../overview/dash-emphasis'
 
 interface ModelsFilterProps {
   preferences: DashboardChartPreferences
@@ -122,7 +123,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant='outline' size='sm'>
+        <Button size='sm' className={dashPrimaryShadow}>
           <Filter className='mr-2 h-4 w-4' />
           {t('Filter')}
         </Button>

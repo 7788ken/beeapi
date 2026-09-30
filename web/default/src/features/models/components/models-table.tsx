@@ -12,6 +12,7 @@ import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -259,7 +260,8 @@ export function ModelsTable() {
           <>
             <div
               className={cn(
-                'overflow-hidden rounded-md border transition-opacity duration-150',
+                surfaceClass,
+                'overflow-hidden transition-opacity duration-150',
                 isFetching && !isLoading && 'pointer-events-none opacity-50'
               )}
             >

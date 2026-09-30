@@ -142,7 +142,7 @@ func ApplyThinkingConfig(geminiRequest *dto.GeminiChatRequest, info *relaycommon
 	} else if _, level, ok := reasoning.TrimEffortSuffix(modelName); ok && level != "" {
 		geminiRequest.GenerationConfig.ThinkingConfig = &dto.GeminiThinkingConfig{
 			IncludeThoughts: true,
-			ThinkingLevel:   level,
+			ThinkingLevel:   reasoning.NormalizeGeminiThinkingLevel(level),
 		}
 		info.ReasoningEffort = level
 	}

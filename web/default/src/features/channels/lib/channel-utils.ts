@@ -10,6 +10,7 @@ import {
   TYPE_TO_KEY_PROMPT,
 } from '../constants'
 import type { Channel, ChannelSettings, ChannelOtherSettings } from '../types'
+import { normalizeModelList } from './upstream-update-utils'
 
 // ============================================================================
 // Channel Type Utilities
@@ -59,6 +60,7 @@ export function getChannelTypeIcon(type: number): string {
     25: 'Moonshot', // Moonshot
     31: 'Yi', // LingYiWanWu
     35: 'Minimax', // MiniMax
+    61: 'Minimax', // MiniMaxInf (service-inference 网关 minimax-h3)
     45: 'Volcengine', // VolcEngine
 
     // Other AI providers
@@ -83,6 +85,7 @@ export function getChannelTypeIcon(type: number): string {
     55: 'OpenAI', // Sora
     54: 'Doubao', // DoubaoVideo
     58: 'Doubao', // SdVideo (sd 网关风格 Seedance 上游)
+    60: 'Doubao', // SdVideoV2 (sd 网关 v2，dreamina max 线路)
     56: 'Replicate', // Replicate
 
     // Tools & Platforms
@@ -261,6 +264,65 @@ export function parseChannelOtherSettings(
     return JSON.parse(settingsStr) as ChannelOtherSettings
   } catch {
     return {}
+  }
+}
+
+/** 模型级摘除状态（后端 dto.ChannelOtherSettings，落在 channels.settings 里） */
+export interface ModelRemovalMeta {
+  /** 当前被摘掉的模型名 */
+  removedModels: string[]
+  /**
+   * 模型名 -> 触发原因（model_missing / rate_limit / forbidden）。
+   * 该字段是后加的，存量渠道没有这个键 => 取不到即视为原因未知。
+   */
+  reasons: Record<string, string>
+  /** 下一次复核时间（unix 秒）。注意是渠道级而非按模型；0=未安排 */
+  recheckAt: number
+}
+
+/**
+ * Parse model-level removal state from the channel `settings` JSON.
+ * Accepts an already-parsed object or a raw string; malformed/empty input
+ * yields an empty meta instead of throwing.
+ */
+export function parseModelRemovalMeta(settings: unknown): ModelRemovalMeta {
+  let parsed: Record<string, unknown> | null = null
+  if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+    parsed = settings as Record<string, unknown>
+  } else if (typeof settings === 'string') {
+    try {
+      parsed = JSON.parse(settings)
+    } catch {
+      parsed = null
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return { removedModels: [], reasons: {}, recheckAt: 0 }
+  }
+
+  const rawReasons = parsed.model_removal_reasons
+  const reasons: Record<string, string> = {}
+  if (
+    rawReasons &&
+    typeof rawReasons === 'object' &&
+    !Array.isArray(rawReasons)
+  ) {
+    for (const [model, reason] of Object.entries(
+      rawReasons as Record<string, unknown>
+    )) {
+      if (typeof reason === 'string' && reason) {
+        reasons[model] = reason
+      }
+    }
+  }
+
+  return {
+    removedModels: normalizeModelList(
+      (parsed.model_missing_removed_models as unknown[]) || []
+    ),
+    reasons,
+    recheckAt: Number(parsed.model_missing_recheck_at) || 0,
   }
 }
 
@@ -527,6 +589,16 @@ export function aggregateChannelsByTag(
         created_time: 0,
         balance_updated_time: 0,
         models: '',
+        iq_score: null,
+        iq_score_delta: null,
+        iq_score_previous: null,
+        iq_score_baseline: null,
+        iq_score_trend: 'unknown',
+        iq_score_at: 0,
+        iq_score_model: '',
+        iq_score_status: '',
+        iq_score_error: '',
+        iq_attempt_at: 0,
         children: [],
       } as TagRow
       tagMap.set(tag, tagRow)

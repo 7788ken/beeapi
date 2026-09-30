@@ -37,7 +37,7 @@ function RotatingText({ texts }: { texts: string[] }) {
   return (
     <span className='relative block h-4 overflow-hidden'>
       <span
-        className='absolute left-0 right-0 transition-transform duration-500 ease-in-out'
+        className='absolute left-0 right-0 transition-transform duration-[300ms] ease-out motion-reduce:transition-none'
         style={{ transform: `translateY(-${index * 100 / texts.length}%)` }}
       >
         {texts.map((text) => (

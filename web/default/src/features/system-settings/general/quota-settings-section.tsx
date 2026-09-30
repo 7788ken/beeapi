@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import * as z from 'zod'
 import type { Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -20,6 +22,29 @@ import { SettingsSection } from '../components/settings-section'
 import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
+// QuotaRemindThreshold 后端按内部额度(quota)存储，界面以美元展示：读入÷、提交×quotaPerUnit
+const quotaToUsdString = (quota: string, quotaPerUnit: number): string => {
+  const trimmed = quota.trim()
+  if (!trimmed) return ''
+  const parsed = Number(trimmed)
+  if (Number.isNaN(parsed) || quotaPerUnit <= 0) return trimmed
+  return String(parsed / quotaPerUnit)
+}
+
+const usdToQuotaString = (usd: string, quotaPerUnit: number): string => {
+  const trimmed = usd.trim()
+  if (!trimmed) return ''
+  const parsed = Number(trimmed)
+  if (Number.isNaN(parsed) || quotaPerUnit <= 0) return trimmed
+  return String(Math.round(parsed * quotaPerUnit))
+}
+
+const numericString = z.string().refine((value) => {
+  const trimmed = value.trim()
+  if (!trimmed) return true
+  return !Number.isNaN(Number(trimmed)) && Number(trimmed) >= 0
+}, 'Enter a non-negative number or leave empty')
+
 const quotaSchema = z.object({
   QuotaForNewUser: z.coerce.number().min(0),
   PreConsumedQuota: z.coerce.number().min(0),
@@ -30,6 +55,7 @@ const quotaSchema = z.object({
   AffiliateCommissionEnabled: z.boolean(),
   AffiliateCommissionRatio: z.coerce.number().min(0).max(1),
   TopUpLink: z.string().url().optional().or(z.literal('')),
+  QuotaRemindThreshold: numericString,
   general_setting: z.object({
     docs_link: z.string().url().optional().or(z.literal(''))
   }),
@@ -52,6 +78,19 @@ export function QuotaSettingsSection({
 }: QuotaSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
+  const { currency } = useSystemConfig()
+  const quotaPerUnit = currency.quotaPerUnit
+
+  const formDefaults = useMemo<QuotaFormValues>(
+    () => ({
+      ...defaultValues,
+      QuotaRemindThreshold: quotaToUsdString(
+        defaultValues.QuotaRemindThreshold ?? '',
+        quotaPerUnit
+      ),
+    }),
+    [defaultValues, quotaPerUnit]
+  )
 
   const { form, handleSubmit, isDirty, isSubmitting } =
     useSettingsForm<QuotaFormValues>({
@@ -60,12 +99,15 @@ export function QuotaSettingsSection({
         unknown,
         QuotaFormValues
       >,
-      defaultValues,
+      defaultValues: formDefaults,
       onSubmit: async (_data, changedFields) => {
         for (const [key, value] of Object.entries(changedFields)) {
           await updateOption.mutateAsync({
             key,
-            value: value as string | number | boolean,
+            value:
+              key === 'QuotaRemindThreshold'
+                ? usdToQuotaString(String(value), quotaPerUnit)
+                : (value as string | number | boolean),
           })
         }
       },
@@ -397,6 +439,32 @@ export function QuotaSettingsSection({
                     disabled={updateOption.isPending}
                   />
                 </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='QuotaRemindThreshold'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Quota reminder ($)')}</FormLabel>
+                <FormControl>
+                  <Input
+                    type='number'
+                    min={0}
+                    step={0.01}
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    ref={field.ref}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t('Send email alerts when a user falls below this quota')}
+                </FormDescription>
+                <FormMessage />
               </FormItem>
             )}
           />

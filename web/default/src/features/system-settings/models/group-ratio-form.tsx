@@ -2,7 +2,9 @@ import { memo, useCallback, useState } from 'react'
 import { type UseFormReturn } from 'react-hook-form'
 import { Code2, Eye } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Form,
   FormControl,
@@ -80,6 +82,7 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               groupRatio={form.watch('GroupRatio')}
               topupGroupRatio={form.watch('TopupGroupRatio')}
               groupGroupRatio={form.watch('GroupGroupRatio')}
+              userUsableGroups={form.watch('UserUsableGroups')}
               autoGroups={form.watch('AutoGroups')}
               onChange={(field, value) =>
                 handleFieldChange(field as keyof GroupFormValues, value)
@@ -97,7 +100,12 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               control={form.control}
               name='DefaultUseAutoGroup'
               render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                <FormItem
+                  className={cn(
+                    surfaceClass,
+                    'flex flex-row items-center justify-between p-4'
+                  )}
+                >
                   <div className='space-y-0.5'>
                     <FormLabel className='text-base'>
                       {t('Default to auto groups')}
@@ -123,7 +131,10 @@ export const GroupRatioForm = memo(function GroupRatioForm({
             </Button>
           </div>
         ) : (
-          <form onSubmit={form.handleSubmit(onSave)} className='space-y-6'>
+          <form
+            onSubmit={form.handleSubmit(onSave)}
+            className={cn(surfaceClass, 'space-y-6 p-6')}
+          >
             <FormField
               control={form.control}
               name='GroupRatio'

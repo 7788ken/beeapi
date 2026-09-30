@@ -1,6 +1,8 @@
 import { Activity, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatQuota } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { UserWalletData } from '../types'
 
@@ -13,7 +15,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
   const { t } = useTranslation()
   if (props.loading) {
     return (
-      <div className='overflow-hidden rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='divide-border/60 grid grid-cols-3 divide-x'>
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className='px-3 py-3 sm:px-5 sm:py-4'>
@@ -49,7 +51,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
   ]
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'overflow-hidden')}>
       <div className='divide-border/60 grid grid-cols-3 divide-x'>
         {stats.map((item) => (
           <div key={item.label} className='px-3 py-3 sm:px-5 sm:py-4'>

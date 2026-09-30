@@ -22,6 +22,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// requestHasFunctionTool 判断请求是否携带 function 类型工具(空 type 按 OpenAI 默认视为 function)。
+func requestHasFunctionTool(request *dto.GeneralOpenAIRequest) bool {
+	if request == nil {
+		return false
+	}
+	for _, tool := range request.Tools {
+		if tool.Type == "function" || (tool.Type == "" && tool.Function.Name != "") {
+			return true
+		}
+	}
+	return false
+}
+
 func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
 
@@ -71,14 +84,28 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	adaptor.Init(info)
 
 	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	// 上游硬约束:gpt-5.5 等模型在 chat/completions 同时携带 function tools 与
+	// reasoning_effort 会被 400,必须改走 /v1/responses。命中即自动转,只影响该组合。
+	autoToolsReasoning := service.RequiresResponsesForToolsAndReasoningGlobal(
+		request.Model,
+		requestHasFunctionTool(request),
+		request.ReasoningEffort != "",
+	)
 	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		(service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) ||
+			autoToolsReasoning) {
 		applySystemPromptIfNeeded(c, info, request)
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
+		rawUsage, newApiErr := doResponseWithQualityFilter(c, info, func() (any, *types.NewAPIError) {
+			return chatCompletionsViaResponses(c, info, adaptor, request)
+		})
 		if newApiErr != nil {
 			return newApiErr
+		}
+		usage, _ := rawUsage.(*dto.Usage)
+		if usage == nil {
+			return types.NewError(fmt.Errorf("invalid usage type from chat completions via responses"), types.ErrorCodeBadResponse)
 		}
 
 		var containAudioTokens = usage.CompletionTokenDetails.AudioTokens > 0 || usage.PromptTokensDetails.AudioTokens > 0
@@ -166,6 +193,12 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 
+		// 渠道级请求体兼容改写：OpenAI 入参转 Claude 后同样适用（thinking 自适应 → 历史思考块剥离 → 服务端工具剥离）
+		jsonData, err = relaycommon.ApplyClaudeRequestBodyCompat(jsonData, info.ChannelOtherSettings)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+
 		// apply param override
 		if len(info.ParamOverride) > 0 {
 			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
@@ -205,7 +238,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 	}
 
-	usage, newApiErr := adaptor.DoResponse(c, httpResp, info)
+	usage, newApiErr := doResponseWithQualityFilter(c, info, func() (any, *types.NewAPIError) {
+		return adaptor.DoResponse(c, httpResp, info)
+	})
 	if newApiErr != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)

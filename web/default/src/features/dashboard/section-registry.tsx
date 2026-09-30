@@ -8,7 +8,8 @@ const DASHBOARD_SECTIONS = [
   {
     id: 'overview',
     titleKey: 'Overview',
-    descriptionKey: 'View dashboard overview and statistics',
+    descriptionKey:
+      'Check that your balance covers the next calls, then copy an API address you can reach.',
     build: () => null,
   },
   {

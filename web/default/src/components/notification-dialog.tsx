@@ -245,6 +245,10 @@ export function NotificationDialog({
         </DialogHeader>
 
         <Tabs
+          // DialogContent is a grid; without min-w-0 the Tabs item's min-content
+          // (wide price-change tables) would stretch the grid track past the
+          // dialog's max-width and paint content outside the dialog.
+          className='min-w-0'
           value={activeTab}
           onValueChange={onTabChange as (value: string) => void}
         >

@@ -32,6 +32,7 @@ import type {
   GroupBillingSourceFilter,
   GroupDashboardFilters,
 } from '@/features/dashboard/types'
+import { dashPrimaryShadow } from '../overview/dash-emphasis'
 
 interface GroupsFilterProps {
   preferences: DashboardChartPreferences
@@ -160,7 +161,7 @@ export function GroupsFilter(props: GroupsFilterProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant='outline' size='sm'>
+        <Button size='sm' className={dashPrimaryShadow}>
           <Filter className='mr-2 h-4 w-4' />
           筛选
         </Button>

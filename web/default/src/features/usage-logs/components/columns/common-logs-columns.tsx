@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { CircleAlert, Sparkles, KeyRound } from 'lucide-react'
@@ -18,21 +18,20 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { DataTableColumnHeader } from '@/components/data-table'
-import {
-  StatusBadge,
-  type StatusBadgeProps,
-} from '@/components/status-badge'
+import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import type { UsageLog } from '../../data/schema'
+import { getLogAvatarStyle } from '../../lib/avatar-color'
 import {
+  formatChannelChain,
   formatModelName,
   getFirstResponseTimeColor,
   getResponseTimeColor,
+  getThroughputColor,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
   isViolationFeeLog,
 } from '../../lib/format'
-import { getLogAvatarStyle } from '../../lib/avatar-color'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -132,11 +131,9 @@ function buildDetailSegments(
 
       const cacheEntries = tieredSummary.priceEntries
         .filter((entry) =>
-          [
-            'cacheReadPrice',
-            'cacheCreatePrice',
-            'cacheCreate1hPrice',
-          ].includes(entry.field)
+          ['cacheReadPrice', 'cacheCreatePrice', 'cacheCreate1hPrice'].includes(
+            entry.field
+          )
         )
         .map((entry) => {
           return formatPriceCompact(entry.price)
@@ -195,8 +192,7 @@ function buildDetailSegments(
           other.cache_ratio != null && other.cache_ratio !== 1
             ? formatPriceCompact(inputPriceUSD * other.cache_ratio)
             : null,
-          other.cache_creation_ratio != null &&
-          other.cache_creation_ratio !== 1
+          other.cache_creation_ratio != null && other.cache_creation_ratio !== 1
             ? formatPriceCompact(inputPriceUSD * other.cache_creation_ratio)
             : null,
           other.cache_creation_ratio_1h != null &&
@@ -291,22 +287,17 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           <DataTableColumnHeader column={column} title={t('Channel')} />
         ),
         cell: function ChannelCell({ row }) {
-          const {
-            sensitiveVisible,
-            setAffinityTarget,
-            setAffinityDialogOpen,
-          } = useUsageLogsContext()
+          const { sensitiveVisible, setAffinityTarget, setAffinityDialogOpen } =
+            useUsageLogsContext()
           const log = row.original
 
           if (!isDisplayableLogType(log.type)) return null
 
           const other = parseLogOther(log.other)
           const affinity = other?.admin_info?.channel_affinity
-          const useChannel = other?.admin_info?.use_channel
-          const channelChain =
-            useChannel && useChannel.length > 0
-              ? useChannel.join(' → ')
-              : undefined
+          const channelChain = formatChannelChain(
+            other?.admin_info?.use_channel
+          )
           const channelDisplay = log.channel_name
             ? `${log.channel_name} #${log.channel}`
             : `#${log.channel}`
@@ -357,9 +348,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className='space-y-1'>
-                    <p>{sensitiveVisible ? channelDisplay : channelIdDisplay}</p>
+                    <p>
+                      {sensitiveVisible ? channelDisplay : channelIdDisplay}
+                    </p>
                     {channelChain && (
-                      <p className='text-muted-foreground text-xs'>
+                      <p className='text-background text-xs'>
                         {t('Chain')}: {channelChain}
                       </p>
                     )}
@@ -388,16 +381,44 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         meta: { label: t('Channel'), mobileHidden: true },
       },
       {
+        id: 'retry_chain',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title={t('Chain')} />
+        ),
+        cell: ({ row }) => {
+          const log = row.original
+          if (!isDisplayableLogType(log.type)) return null
+
+          const chain = formatChannelChain(
+            parseLogOther(log.other)?.admin_info?.use_channel
+          )
+          if (!chain) {
+            return (
+              <span className='text-muted-foreground/50 font-mono text-xs'>
+                —
+              </span>
+            )
+          }
+
+          return (
+            <span
+              className='text-foreground max-w-[9rem] truncate font-mono text-xs tabular-nums'
+              title={chain}
+            >
+              {chain}
+            </span>
+          )
+        },
+        meta: { label: t('Chain'), mobileHidden: true },
+      },
+      {
         id: 'user',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('User')} />
         ),
         cell: function UserCell({ row }) {
-          const {
-            sensitiveVisible,
-            setSelectedUserId,
-            setUserInfoDialogOpen,
-          } = useUsageLogsContext()
+          const { sensitiveVisible, setSelectedUserId, setUserInfoDialogOpen } =
+            useUsageLogsContext()
           const log = row.original
 
           if (!log.username) return null
@@ -412,7 +433,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 setUserInfoDialogOpen(true)
               }}
             >
-              <Avatar className='size-6 ring-1 ring-border/60'>
+              <Avatar className='ring-border/60 size-6 ring-1'>
                 <AvatarFallback
                   className={cn(
                     'text-[11px] font-semibold',
@@ -471,16 +492,16 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             copyText={sensitiveVisible ? tokenName : undefined}
             size='sm'
             showDot={false}
-            className='max-w-full overflow-hidden rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 font-mono text-foreground'
+            className='border-border/60 bg-muted/30 text-foreground max-w-full overflow-hidden rounded-md border px-1.5 py-0.5 font-mono'
           />
           {(groupVisible || groupRatioText) && (
-            <span className='flex items-center gap-1 truncate text-[11px] text-muted-foreground/60'>
+            <span className='text-muted-foreground/60 flex items-center gap-1 truncate text-[11px]'>
               {groupVisible &&
                 (groupLinkable ? (
                   <Link
                     to='/channels'
                     search={{ group: [group] }}
-                    className='truncate underline-offset-2 hover:text-foreground hover:underline'
+                    className='hover:text-foreground truncate underline-offset-2 hover:underline'
                     onClick={(e) => e.stopPropagation()}
                     title={t('Filter channels by group {{group}}', { group })}
                   >
@@ -490,7 +511,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   <span className='truncate'>{groupLabel}</span>
                 ))}
               {groupVisible && groupRatioText && <span>·</span>}
-              {groupRatioText && <span className='truncate'>{groupRatioText}</span>}
+              {groupRatioText && (
+                <span className='truncate'>{groupRatioText}</span>
+              )}
             </span>
           )}
         </div>
@@ -517,6 +540,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <ModelBadge
               modelName={modelInfo.name}
               actualModel={modelInfo.actualModel}
+              returnedModel={modelInfo.returnedModel}
+              mismatch={modelInfo.mismatch}
             />
           </div>
         )
@@ -536,113 +561,144 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
+        const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
+        const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
+
+        const barColor: Record<string, string> = {
+          success: 'bg-emerald-500',
+          warning: 'bg-amber-500',
+          danger: 'bg-rose-500',
+        }
+        const valueText: Record<string, string> = {
+          success: 'text-emerald-600 dark:text-emerald-400',
+          warning: 'text-amber-600 dark:text-amber-400',
+          danger: 'text-rose-600 dark:text-rose-400',
+        }
+        const streamError =
+          log.is_stream &&
+          !!other?.stream_status &&
+          other.stream_status.status !== 'ok'
+
+        // 竖条 + 标签 + 数值的行式布局（首字 / 耗时）
+        const renderTimingRow = (
+          label: string,
+          value: string,
+          variant: string,
+          trailing?: ReactNode
+        ) => (
+          <div className='flex items-center gap-1.5'>
+            <span
+              className={cn(
+                'h-3.5 w-[3px] shrink-0 rounded-full',
+                barColor[variant]
+              )}
+              aria-hidden='true'
+            />
+            <span className='text-muted-foreground text-xs'>{label}</span>
+            <span
+              className={cn(
+                'font-mono text-xs font-medium tabular-nums',
+                valueText[variant]
+              )}
+            >
+              {value}
+            </span>
+            {trailing}
+          </div>
+        )
+
+        const timingBody = (
+          <div className='flex w-fit flex-col gap-1'>
+            {log.is_stream &&
+              frt != null &&
+              frt > 0 &&
+              renderTimingRow(
+                t('First Token'),
+                formatUseTime(frt / 1000),
+                frtVariant!
+              )}
+            {renderTimingRow(
+              t('Duration'),
+              formatUseTime(useTime),
+              timeVariant,
+              streamError ? (
+                <CircleAlert className='size-3 text-red-500' />
+              ) : undefined
+            )}
+          </div>
+        )
+
+        if (!streamError || !other?.stream_status) return timingBody
+
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className='w-fit cursor-default'>{timingBody}</div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className='text-background space-y-0.5 text-xs'>
+                  <p>
+                    {t('Stream Status')}: {t('Error')}
+                  </p>
+                  <p>{other.stream_status.end_reason || 'unknown'}</p>
+                  {(other.stream_status.error_count ?? 0) > 0 && (
+                    <p>
+                      {t('Soft Errors')}: {other.stream_status.error_count}
+                    </p>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
+      },
+      meta: { label: t('Timing'), mobileHidden: true },
+    },
+
+    {
+      id: 'stream_speed',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Speed')} />
+      ),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isTimingLogType(log.type)) return null
+
+        const useTime = log.use_time
         const tokensPerSecond =
           useTime > 0 && log.completion_tokens > 0
             ? log.completion_tokens / useTime
             : null
-        const timeVariant = getResponseTimeColor(
-          useTime,
-          log.completion_tokens
-        )
-        const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
-
-        const pillBg: Record<string, string> = {
-          success:
-            'border border-emerald-200/40 bg-emerald-50/35 dark:border-emerald-900/40 dark:bg-emerald-950/15',
-          warning:
-            'border border-amber-200/45 bg-amber-50/35 dark:border-amber-900/40 dark:bg-amber-950/15',
-          danger:
-            'border border-rose-200/50 bg-rose-50/35 dark:border-rose-900/40 dark:bg-rose-950/15',
-        }
-        const pillText: Record<string, string> = {
-          success: 'text-emerald-700/85 dark:text-emerald-400/85',
-          warning: 'text-amber-700/85 dark:text-amber-400/85',
-          danger: 'text-rose-700/85 dark:text-rose-400/85',
-        }
-        const pillDot: Record<string, string> = {
-          success: 'bg-emerald-500/80',
-          warning: 'bg-amber-500/80',
-          danger: 'bg-rose-500/80',
+        const speedText: Record<string, string> = {
+          success: 'text-emerald-600 dark:text-emerald-400',
+          warning: 'text-amber-600 dark:text-amber-400',
+          danger: 'text-rose-600 dark:text-rose-400',
         }
 
         return (
-          <div className='flex flex-col gap-1'>
-            <div className='flex items-center gap-1.5'>
+          <div className='flex flex-col gap-0.5'>
+            <span className='text-foreground text-xs'>
+              {log.is_stream ? t('Stream') : t('Non-stream')}
+            </span>
+            {tokensPerSecond != null ? (
               <span
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
-                  pillBg[timeVariant],
-                  pillText[timeVariant]
+                  'font-mono text-xs font-medium tabular-nums',
+                  speedText[getThroughputColor(tokensPerSecond)]
                 )}
               >
-                <span
-                  className={cn(
-                    'size-1.5 shrink-0 rounded-full',
-                    pillDot[timeVariant]
-                  )}
-                  aria-hidden='true'
-                />
-                {formatUseTime(useTime)}
+                {Math.round(tokensPerSecond)} t/s
               </span>
-              {log.is_stream && (frt != null && frt > 0 ? (
-                <span
-                  className={cn(
-                    'inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
-                    pillBg[frtVariant!],
-                    pillText[frtVariant!]
-                  )}
-                >
-                  {formatUseTime(frt / 1000)}
-                </span>
-              ) : (
-                <span className='inline-flex items-center rounded-md border border-border/60 px-1.5 py-0.5 text-[11px] text-muted-foreground/50'>
-                  N/A
-                </span>
-              ))}
-            </div>
-            <div className='flex items-center gap-1 text-[11px]'>
-              <span className='text-muted-foreground/60'>
-                {log.is_stream ? t('Stream') : t('Non-stream')}
-                {tokensPerSecond != null && (
-                  <>
-                    {' · '}
-                    <span className='font-mono tabular-nums'>
-                      {Math.round(tokensPerSecond)}
-                    </span>
-                    {' t/s'}
-                  </>
-                )}
+            ) : (
+              <span className='text-muted-foreground/60 font-mono text-xs'>
+                —
               </span>
-              {log.is_stream &&
-                other?.stream_status &&
-                other.stream_status.status !== 'ok' && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <CircleAlert className='size-3 text-red-500' />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <div className='space-y-0.5 text-xs'>
-                          <p>
-                            {t('Stream Status')}: {t('Error')}
-                          </p>
-                          <p>{other.stream_status.end_reason || 'unknown'}</p>
-                          {(other.stream_status.error_count ?? 0) > 0 && (
-                            <p>
-                              {t('Soft Errors')}:{' '}
-                              {other.stream_status.error_count}
-                            </p>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-            </div>
+            )}
           </div>
         )
       },
-      meta: { label: t('Timing'), mobileHidden: true },
+      meta: { label: t('Speed') },
     },
 
     {
@@ -673,7 +729,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         return (
           <div className='flex flex-col gap-0.5'>
             <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} / {completionTokens.toLocaleString()}
+              {promptTokens.toLocaleString()} /{' '}
+              {completionTokens.toLocaleString()}
             </span>
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
               <div className='flex items-center gap-1 text-[11px]'>
@@ -708,33 +765,34 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         const isSubscription = other?.billing_source === 'subscription'
 
-        if (isSubscription) {
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className='inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'>
-                    <span className='size-1.5 rounded-full bg-emerald-500' aria-hidden='true' />
-                    {t('Subscription')}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span>
-                    {t('Deducted by subscription')}: {formatLogQuota(quota)}
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )
-        }
-
+        // 货币符号与金额拆分展示（如 "$0.000576" → "$" + "0.000576"）
         const quotaStr = formatLogQuota(quota)
+        const symbolMatch = quotaStr.match(/^([^\d.,+-]+)(.*)$/)
+        const currencySymbol = symbolMatch ? symbolMatch[1] : ''
+        const quotaAmount = symbolMatch ? symbolMatch[2] : quotaStr
 
         return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='border-border/80 inline-flex w-fit items-center rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums'>
-              {quotaStr}
+          <div className='flex items-center gap-1.5'>
+            <span className='border-border/70 bg-muted/40 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-xs font-semibold tabular-nums'>
+              {currencySymbol && <span>{currencySymbol}</span>}
+              <span>{quotaAmount}</span>
             </span>
+            {isSubscription && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className='inline-flex size-5 shrink-0 cursor-help items-center justify-center rounded-full border border-amber-300/70 bg-amber-50/70 text-amber-500 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-400'>
+                      <Sparkles className='size-3 fill-current' />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span>
+                      {t('Deducted by subscription')}: {quotaStr}
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         )
       },

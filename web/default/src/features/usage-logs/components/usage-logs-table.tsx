@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCanViewAllLogs } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -190,7 +191,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     <>
       <div className='space-y-3 sm:space-y-4'>
         {logCategory === 'common' ? (
-          <div className='rounded-md border bg-card/50 p-2 shadow-xs sm:p-3'>
+          <div className={cn(surfaceClass, 'p-2 sm:p-3')}>
             <CommonLogsFilterBar
               stats={<CommonLogsStats />}
               viewOptions={
@@ -206,7 +207,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
             />
           </div>
         ) : (
-          <div className='rounded-md border bg-card/50 p-2 shadow-xs sm:p-3'>
+          <div className={cn(surfaceClass, 'p-2 sm:p-3')}>
             <TaskLogsFilterBar
               logCategory={logCategory}
               viewOptions={<DataTableViewOptions table={table} />}
@@ -225,7 +226,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         ) : (
           <div
             className={cn(
-              'overflow-hidden rounded-md border transition-opacity duration-150',
+              surfaceClass,
+              'overflow-hidden transition-opacity duration-150',
               isFetching && !isLoadingData && 'pointer-events-none opacity-50'
             )}
           >

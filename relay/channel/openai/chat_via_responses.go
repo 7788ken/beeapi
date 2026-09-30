@@ -40,6 +40,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	info.ObserveResponseModel(responsesResp.Model)
 
 	chatResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAI, &responsesResp)
 	if err != nil {
@@ -52,6 +53,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if chatID := helper.GetResponseID(c); chatID != "" {
 		chatResp.Id = chatID
 	}
+	service.NoteQualityInspectFromOpenAIText(info, chatResp)
 	usage := chatResult.Usage
 
 	if usage == nil || usage.TotalTokens == 0 {
@@ -109,6 +111,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			break
 		}
+		if streamResp.Response != nil {
+			info.ObserveResponseModel(streamResp.Response.Model)
+		}
 		accumulator.ProcessEvent(&streamResp)
 		switch streamResp.Type {
 		case "response.completed", "response.done", "response.incomplete":
@@ -161,6 +166,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 	if chatID := helper.GetResponseID(c); chatID != "" {
 		chatResp.Id = chatID
 	}
+	service.NoteQualityInspectFromOpenAIText(info, chatResp)
 	usage := chatResult.Usage
 	if usage == nil || usage.TotalTokens == 0 {
 		text := service.ExtractOutputTextFromResponses(finalResponse)
@@ -217,6 +223,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
+		service.NoteGeminiStreamDelta(c, geminiResponse)
 		c.Render(-1, &common.CustomEvent{Data: "data: " + string(geminiResponseStr)})
 		_ = helper.FlushWriter(c)
 		return true
@@ -278,6 +285,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			logger.LogError(c, "failed to unmarshal responses stream event: "+err.Error())
 			sr.Error(err)
 			return
+		}
+		if streamResp.Response != nil {
+			info.ObserveResponseModel(streamResp.Response.Model)
 		}
 
 		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" {

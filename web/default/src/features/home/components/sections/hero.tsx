@@ -1,8 +1,13 @@
-import { Link } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
-import { HeroTerminalDemo } from '../hero-terminal-demo'
+import { useSystemConfig } from '@/hooks/use-system-config'
+import {
+  HomePrimaryLink,
+  HomeSecondaryLink,
+  homeAccent,
+  homeMuted,
+} from '../home-links'
+import { ParticleField } from '../particle-field'
 
 interface HeroProps {
   className?: string
@@ -11,81 +16,73 @@ interface HeroProps {
 
 export function Hero(props: HeroProps) {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
+  const wordmark = systemName.toUpperCase()
 
   return (
-    <section className='relative z-10 flex flex-col items-center overflow-hidden px-6 pt-28 pb-16 md:pt-36 md:pb-24'>
-      {/* Radial gradient background */}
-      <div
-        aria-hidden
-        className='pointer-events-none absolute inset-0 -z-10 opacity-25 dark:opacity-[0.12]'
-        style={{
-          background: [
-            'radial-gradient(ellipse 60% 50% at 20% 20%, oklch(0.72 0.18 250 / 80%) 0%, transparent 70%)',
-            'radial-gradient(ellipse 50% 40% at 80% 15%, oklch(0.65 0.15 200 / 60%) 0%, transparent 70%)',
-            'radial-gradient(ellipse 40% 35% at 40% 80%, oklch(0.70 0.12 280 / 40%) 0%, transparent 70%)',
-          ].join(', '),
-        }}
-      />
-      {/* Grid pattern */}
-      <div
-        aria-hidden
-        className='absolute inset-0 -z-10 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_30%,black_20%,transparent_100%)] bg-[size:4rem_4rem] opacity-[0.08]'
-      />
+    <section className='relative flex min-h-svh flex-col overflow-hidden'>
+      <ParticleField />
 
-      <div className='flex max-w-3xl flex-col items-center text-center'>
-        <h1
-          className='landing-animate-fade-up text-[clamp(2rem,5.5vw,3.5rem)] leading-[1.15] font-bold tracking-tight'
-          style={{ animationDelay: '0ms' }}
-        >
-          {t('Unified API Gateway for')}
-          <br />
-          <span className='bg-gradient-to-r from-blue-400 via-violet-400 to-purple-500 bg-clip-text text-transparent'>
-            {t('All Your AI Models')}
-          </span>
-        </h1>
+      <div className='relative z-10 flex flex-1 flex-col items-center justify-center px-6 pt-24 pb-16 text-center'>
+        <div
+          aria-hidden
+          className='pointer-events-none absolute top-[44%] left-1/2 h-80 w-[min(56rem,98vw)] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(ellipse,rgba(244,246,250,0.92)_0%,rgba(244,246,250,0.55)_46%,transparent_74%)] dark:bg-[radial-gradient(ellipse,rgba(10,12,18,0.92)_0%,rgba(10,12,18,0.55)_46%,transparent_74%)]'
+        />
         <p
-          className='landing-animate-fade-up text-muted-foreground/80 mt-5 max-w-lg text-base leading-relaxed opacity-0 md:text-lg'
+          className={`landing-animate-fade-up text-[11px] font-medium tracking-[0.1em] uppercase ${homeMuted}`}
+        >
+          {t('One API · 100+ models')}
+        </p>
+        <h1
+          className='landing-animate-fade-up mt-5 text-[clamp(2.5rem,11vw,8.5rem)] leading-[0.94] font-extrabold tracking-[-0.05em] text-balance text-[#0b1c47]/80 opacity-0 dark:text-[#eef1f6]/80'
           style={{ animationDelay: '80ms' }}
         >
-          {t('Power AI applications, manage digital assets, connect the Future')}
-        </p>
-        <div
-          className='landing-animate-fade-up mt-8 flex items-center gap-3 opacity-0'
+          {wordmark}
+        </h1>
+        <p
+          className={`landing-animate-fade-up mt-6 max-w-xl text-base leading-relaxed text-pretty opacity-0 md:text-lg ${homeMuted}`}
           style={{ animationDelay: '160ms' }}
         >
-          {props.isAuthenticated ? (
-            <Button className='group rounded-lg' asChild>
-              <Link to='/dashboard'>
-                {t('Go to Dashboard')}
-                <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
-              </Link>
-            </Button>
-          ) : (
-            <>
-              <Button className='group rounded-lg' asChild>
-                <Link to='/sign-up'>
-                  {t('Get Started')}
-                  <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
-                </Link>
-              </Button>
-              <Button
-                variant='outline'
-                className='border-border/50 hover:border-border hover:bg-muted/50 rounded-lg'
-                asChild
-              >
-                <Link to='/pricing'>{t('View Pricing')}</Link>
-              </Button>
-            </>
+          {t('Different calls go through')}
+          <span className={`${homeAccent} font-medium`}>
+            {t('one endpoint')}
+          </span>
+          {t(
+            '. {{name}} forwards the models you already run, instead of a pile of separate keys.',
+            { name: systemName }
           )}
+        </p>
+        <div
+          className='landing-animate-fade-up mt-8 flex flex-wrap items-center justify-center gap-3 opacity-0'
+          style={{ animationDelay: '240ms' }}
+        >
+          {props.isAuthenticated ? (
+            <HomePrimaryLink to='/dashboard'>
+              {t('Go to Dashboard')}
+              <ArrowUpRight className='size-4' aria-hidden />
+            </HomePrimaryLink>
+          ) : (
+            <HomePrimaryLink to='/sign-up'>
+              {t('Get Started')}
+              <ArrowUpRight className='size-4' aria-hidden />
+            </HomePrimaryLink>
+          )}
+          <HomeSecondaryLink to='/pricing'>
+            {t('View Pricing')}
+          </HomeSecondaryLink>
         </div>
       </div>
 
-      <div
-        className='landing-animate-fade-up w-full opacity-0'
-        style={{ animationDelay: '300ms' }}
+      <a
+        href='#home-console'
+        className={`relative z-10 mx-auto mb-8 hidden min-h-11 flex-col items-center justify-end px-6 text-[10px] font-medium tracking-[0.1em] uppercase sm:flex ${homeMuted}`}
       >
-        <HeroTerminalDemo />
-      </div>
+        {t('Scroll')}
+        <span
+          aria-hidden
+          className='mt-3 h-8 w-px bg-[#0b1c47]/35 dark:bg-[#eef1f6]/35'
+        />
+      </a>
     </section>
   )
 }

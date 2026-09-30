@@ -53,6 +53,6 @@ export function SettingsPage<
   )
 
   return (
-    <div className='space-y-4 pe-4 pb-12'>{sectionContent}</div>
+    <div className='space-y-4'>{sectionContent}</div>
   )
 }

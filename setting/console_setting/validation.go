@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -73,6 +74,8 @@ func ValidateConsoleSettings(settingsStr string, settingType string) error {
 		return validateFAQ(settingsStr)
 	case "UptimeKumaGroups":
 		return validateUptimeKumaGroups(settingsStr)
+	case "SupportWidgetCode":
+		return validateSupportWidgetCode(settingsStr)
 	default:
 		return fmt.Errorf("未知的设置类型：%s", settingType)
 	}
@@ -180,6 +183,17 @@ func validateAnnouncements(announcementsStr string) error {
 				return fmt.Errorf("第%d个公告的说明长度不能超过200字符", i+1)
 			}
 		}
+	}
+	return nil
+}
+
+const SupportWidgetCodeMaxLen = 10000
+
+// 嵌入代码按原样注入所有页面（本来就要能带脚本，不做危险内容过滤；只有 root 能改），
+// 只限长度：它随 /api/status 下发给每个访客
+func validateSupportWidgetCode(code string) error {
+	if utf8.RuneCountInString(code) > SupportWidgetCodeMaxLen {
+		return fmt.Errorf("在线客服嵌入代码不能超过 %d 个字符", SupportWidgetCodeMaxLen)
 	}
 	return nil
 }

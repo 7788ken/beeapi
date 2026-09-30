@@ -304,6 +304,14 @@ func sanitizeFetchModelsError(err error, key string) error {
 	return errors.New(message)
 }
 
+func volcEngineModelsURL(baseURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if strings.HasSuffix(trimmed, "/api/v3") {
+		return trimmed + "/models"
+	}
+	return trimmed + "/api/v3/models"
+}
+
 func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) ([]string, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() != "" {
@@ -356,7 +364,7 @@ func fetchChannelUpstreamModelIDs(ctx context.Context, channel *model.Channel) (
 		if plan, ok := constant.ChannelSpecialBases[baseURL]; ok && plan.OpenAIBaseURL != "" {
 			url = fmt.Sprintf("%s/v1/models", plan.OpenAIBaseURL)
 		} else {
-			url = fmt.Sprintf("%s/v1/models", baseURL)
+			url = volcEngineModelsURL(baseURL)
 		}
 	case constant.ChannelTypeMoonshot:
 		if plan, ok := constant.ChannelSpecialBases[baseURL]; ok && plan.OpenAIBaseURL != "" {

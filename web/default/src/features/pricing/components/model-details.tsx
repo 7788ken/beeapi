@@ -902,7 +902,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
       <ModelHeader model={props.model} />
 
       <Tabs defaultValue='overview' className='gap-4'>
-        <TabsList className='bg-muted/60 h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg p-1'>
+        <TabsList className='h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg p-1'>
           {TAB_VALUES.map((value) => {
             const Icon = TAB_META[value].icon
             return (

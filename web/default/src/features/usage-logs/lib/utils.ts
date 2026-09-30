@@ -18,6 +18,7 @@ import type {
   GetLogsParams,
   GetLogsResponse,
   FetchLogsConfig,
+  GetLogTrendParams,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
 } from '../types'
@@ -242,6 +243,44 @@ export function buildApiParams(config: {
   }
 
   return params
+}
+
+/**
+ * Build the server-side trend query from the same URL filters used by the
+ * paginated log table. Trend requests intentionally omit pagination and type:
+ * the backend always aggregates consume logs and enforces its own row limit.
+ *
+ * `overrides` lets an in-dialog control (time-range picker, granularity select)
+ * replace the URL-derived window/bucket without mutating the shared filters.
+ */
+export function buildLogTrendParams(
+  searchParams: Record<string, unknown>,
+  isAdmin: boolean,
+  tzOffsetSec?: number,
+  overrides?: { startTs?: number; endTs?: number; bucketSeconds?: number }
+): GetLogTrendParams {
+  const params = buildApiParams({
+    page: 1,
+    pageSize: 1,
+    searchParams,
+    columnFilters: [],
+    isAdmin,
+  })
+  const { p: _page, page_size: _pageSize, type: _type, ...trendParams } = params
+
+  return {
+    ...trendParams,
+    ...(tzOffsetSec !== undefined ? { tz_offset_sec: tzOffsetSec } : {}),
+    ...(overrides?.startTs !== undefined
+      ? { start_timestamp: overrides.startTs }
+      : {}),
+    ...(overrides?.endTs !== undefined
+      ? { end_timestamp: overrides.endTs }
+      : {}),
+    ...(overrides?.bucketSeconds !== undefined
+      ? { bucket_seconds: overrides.bucketSeconds }
+      : {}),
+  }
 }
 
 // ============================================================================

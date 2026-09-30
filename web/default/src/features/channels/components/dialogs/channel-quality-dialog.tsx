@@ -15,6 +15,10 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import {
+  dashSegItem,
+  dashSegTrack,
+} from '@/features/dashboard/components/overview/dash-emphasis'
 import { getChannelQualityHistory } from '../../api'
 import type { QualityHistoryData } from '../../api'
 import { useChannels } from '../channels-provider'
@@ -297,18 +301,14 @@ export function ChannelQualityDialog({ open, onOpenChange }: Props) {
         <div className='flex-1 space-y-4 overflow-y-auto px-6 py-4'>
           {/* 时间范围 */}
           <div className='flex flex-wrap items-center gap-2'>
-            <div className='bg-muted/60 inline-flex h-8 overflow-x-auto rounded-md border p-0.5'>
+            <div className={cn(dashSegTrack, 'shrink overflow-x-auto')}>
               {presetButtons.map((item) => (
                 <button
                   key={item.value}
                   type='button'
                   onClick={() => setPreset(item.value)}
-                  className={cn(
-                    'inline-flex shrink-0 items-center rounded-[5px] px-3 text-xs font-medium transition-colors',
-                    preset === item.value
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
+                  className={dashSegItem(preset === item.value)}
+                  aria-pressed={preset === item.value}
                 >
                   {item.label}
                 </button>

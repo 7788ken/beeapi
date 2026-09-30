@@ -6,14 +6,28 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/pkg/httplifecycle"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+// clientGone 在每次写出前判断客户端是否已经离开，并把结论落到请求上下文。
+// 这里是"网关还有数据要发却发不出去"的唯一现场：响应写完之后客户端正常关连接
+// 同样会取消 c.Request.Context()，但那之后不会再调用这些写出函数，所以这个标记
+// 不会把正常结束误记成断连。
+func clientGone(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.Context().Err() == nil {
+		return false
+	}
+	common.SetContextKey(c, constant.ContextKeyClientDisconnected, true)
+	return true
+}
 
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
@@ -26,7 +40,7 @@ func FlushWriter(c *gin.Context) (err error) {
 		return nil
 	}
 
-	if c.Request != nil && c.Request.Context().Err() != nil {
+	if clientGone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
@@ -57,6 +71,7 @@ func SetEventStreamHeaders(c *gin.Context) {
 }
 
 func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
+	service.NoteClaudeStreamDelta(c, &resp)
 	jsonData, err := common.Marshal(resp)
 	if err != nil {
 		common.SysError("error marshalling stream response: " + err.Error())
@@ -69,9 +84,10 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 }
 
 func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
-	if c.Request != nil && c.Request.Context().Err() != nil {
+	if clientGone(c) {
 		return
 	}
+	service.NoteClaudeStreamDelta(c, &resp)
 	c.Render(-1, &common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, &common.CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
 	_ = FlushWriter(c)
@@ -81,9 +97,10 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")
 	}
-	if c.Request != nil && c.Request.Context().Err() != nil {
+	if clientGone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
+	service.NoteResponsesStreamDelta(c, &resp, data)
 	c.Render(-1, &common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, &common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
 	return FlushWriter(c)
@@ -94,8 +111,12 @@ func StringData(c *gin.Context, str string) error {
 		return errors.New("context or writer is nil")
 	}
 
-	if c.Request != nil && c.Request.Context().Err() != nil {
+	if clientGone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+	}
+
+	if !service.SkippingQualityStreamNote(c) {
+		service.NoteQualityStreamJSON(c, str)
 	}
 
 	c.Render(-1, &common.CustomEvent{Data: "data: " + str})
@@ -107,7 +128,7 @@ func PingData(c *gin.Context) error {
 		return errors.New("context or writer is nil")
 	}
 
-	if c.Request != nil && c.Request.Context().Err() != nil {
+	if clientGone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 

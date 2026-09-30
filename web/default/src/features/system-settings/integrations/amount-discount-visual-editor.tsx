@@ -100,7 +100,7 @@ export function AmountDiscountVisualEditor({
   }
 
   return (
-    <div className='space-y-4'>
+    <div className='min-w-0 space-y-4'>
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <p className='text-muted-foreground text-sm'>
           {t('Configure discount rates based on recharge amounts')}

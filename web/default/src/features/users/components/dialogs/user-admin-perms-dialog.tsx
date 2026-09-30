@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { useContentBackupModuleEnabled } from '@/features/content-backup/module'
 import { updateUserAdminPerms } from '../../api'
 import { ERROR_MESSAGES } from '../../constants'
 import { type User } from '../../types'
@@ -35,6 +36,15 @@ export function UserAdminPermsDialog(props: UserAdminPermsDialogProps) {
   const { t } = useTranslation()
   const [granted, setGranted] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  // 模块关闭时只隐藏两行开关；granted 整体提交，已授予的内容备份权限原样保留
+  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
+  const permItems = contentBackupModuleEnabled
+    ? ADMIN_PERM_ITEMS
+    : ADMIN_PERM_ITEMS.filter(
+        (item) =>
+          item.key !== ADMIN_PERM.CONTENT_BACKUP_VIEW &&
+          item.key !== ADMIN_PERM.CONTENT_BACKUP_MANAGE
+      )
 
   useEffect(() => {
     if (!props.open) return
@@ -88,7 +98,7 @@ export function UserAdminPermsDialog(props: UserAdminPermsDialogProps) {
         </DialogHeader>
 
         <div className='space-y-2'>
-          {ADMIN_PERM_ITEMS.map((item) => (
+          {permItems.map((item) => (
             <label
               key={item.key}
               className='flex items-start justify-between gap-3 rounded-md border px-3 py-2.5 text-sm'

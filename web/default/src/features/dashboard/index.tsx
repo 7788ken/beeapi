@@ -1,14 +1,24 @@
-import { useState, useCallback, useMemo, useEffect, useRef, lazy, Suspense, type ReactNode } from 'react'
-import { getRouteApi, useNavigate } from '@tanstack/react-router'
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+  lazy,
+  Suspense,
+  type ReactNode,
+} from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { RefreshCw, Pause, Play } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { ROLE } from '@/lib/roles'
 import { isSidebarModuleEnabled } from '@/lib/nav-modules'
+import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -17,29 +27,25 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { SectionPageLayout } from '@/components/layout'
+import { FadeIn } from '@/components/page-transition'
 import {
-  CardStaggerContainer,
-  CardStaggerItem,
-  FadeIn,
-} from '@/components/page-transition'
+  GroupsFilter,
+  buildDefaultGroupFilters,
+} from './components/groups/groups-filter-dialog'
+import { ModelsChartPreferences } from './components/models/models-chart-preferences'
+import { ModelsFilter } from './components/models/models-filter-dialog'
+import {
+  dashHeroCard,
+  dashPrimaryShadow,
+} from './components/overview/dash-emphasis'
+import { DashSkeleton, dashPrimaryBtn } from './components/overview/dash-style'
+import { OverviewConsole } from './components/overview/overview-console'
+import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
   getSavedChartPreferences,
   saveChartPreferences,
 } from './lib'
-import { ModelsChartPreferences } from './components/models/models-chart-preferences'
-import { ModelsFilter } from './components/models/models-filter-dialog'
-import {
-  GroupsFilter,
-  buildDefaultGroupFilters,
-} from './components/groups/groups-filter-dialog'
-import { AnnouncementsPanel } from './components/overview/announcements-panel'
-import { ApiInfoPanel } from './components/overview/api-info-panel'
-import { FAQPanel } from './components/overview/faq-panel'
-import { PerformanceHealthPanel } from './components/overview/performance-health-panel'
-import { SummaryCards } from './components/overview/summary-cards'
-import { UptimePanel } from './components/overview/uptime-panel'
-import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   type DashboardSectionId,
   DASHBOARD_DEFAULT_SECTION,
@@ -110,23 +116,27 @@ const LazyReconcilePanel = lazy(() =>
 
 function LogStatCardsFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className='px-4 py-3.5 sm:px-5 sm:py-4'>
-            <Skeleton className='h-3.5 w-16' />
-            <Skeleton className='mt-2 h-7 w-20' />
-            <Skeleton className='mt-1.5 h-3.5 w-28' />
-          </div>
-        ))}
+    <div className='grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5'>
+      {/* 第一张是主卡，占位也用紫底，加载完不会白变紫 */}
+      <div className={cn(dashHeroCard, 'p-5')}>
+        <DashSkeleton className='h-3.5 w-16 bg-white/20' />
+        <DashSkeleton className='mt-3 h-7 w-20 bg-white/20' />
+        <DashSkeleton className='mt-1.5 h-3.5 w-28 bg-white/20' />
       </div>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className={cn(surfaceClass, 'p-5')}>
+          <Skeleton className='h-3.5 w-16' />
+          <Skeleton className='mt-3 h-7 w-20' />
+          <Skeleton className='mt-1.5 h-3.5 w-28' />
+        </div>
+      ))}
     </div>
   )
 }
 
 function ModelChartsFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'overflow-hidden')}>
       <div className='flex items-center justify-between border-b px-4 py-3 sm:px-5'>
         <Skeleton className='h-5 w-32' />
         <Skeleton className='h-8 w-72' />
@@ -140,8 +150,8 @@ function ModelChartsFallback() {
 
 function PerformanceOverviewFallback() {
   return (
-    <div className='space-y-3 sm:space-y-4'>
-      <div className='overflow-hidden rounded-lg border'>
+    <div className='space-y-6'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-4'>
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className='px-3 py-2.5 sm:px-5 sm:py-4'>
@@ -152,7 +162,7 @@ function PerformanceOverviewFallback() {
           ))}
         </div>
       </div>
-      <div className='overflow-hidden rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='flex items-center justify-between border-b px-4 py-3 sm:px-5'>
           <Skeleton className='h-5 w-40' />
           <Skeleton className='h-4 w-48' />
@@ -169,7 +179,8 @@ const SECTION_META: Record<
 > = {
   overview: {
     titleKey: 'Overview',
-    descriptionKey: 'View dashboard overview and statistics',
+    descriptionKey:
+      'Check that your balance covers the next calls, then copy an API address you can reach.',
   },
   models: {
     titleKey: 'Model Call Analytics',
@@ -185,15 +196,18 @@ const SECTION_META: Record<
   },
   runtime: {
     titleKey: 'Runtime',
-    descriptionKey: 'Real-time top 10 over the past 5 minutes (users / groups / channels / pairs)',
+    descriptionKey:
+      'Real-time top 10 over the past 5 minutes (users / groups / channels / pairs)',
   },
   channels: {
     titleKey: 'Channel Analytics',
-    descriptionKey: 'Top channels grouped by model type with consumption, RPM, and trend charts',
+    descriptionKey:
+      'Top channels grouped by model type with consumption, RPM, and trend charts',
   },
   reconcile: {
     titleKey: 'Reconciliation',
-    descriptionKey: 'Daily per-channel success / failure / timeout / cost for reconciling upstream bills',
+    descriptionKey:
+      'Daily per-channel success / failure / timeout / cost for reconciling upstream bills',
   },
 }
 
@@ -246,8 +260,12 @@ export function Dashboard() {
     setIsRefreshing(true)
     try {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['dashboard', 'group-quota'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard', 'group-top-users'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['dashboard', 'group-quota'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['dashboard', 'group-top-users'],
+        }),
       ])
     } finally {
       // 给用户一个肉眼可见的旋转反馈
@@ -312,7 +330,8 @@ export function Dashboard() {
     },
     [navigate]
   )
-  const showSectionTabs = activeSection !== 'overview' && visibleSections.length > 1
+  const showSectionTabs =
+    activeSection !== 'overview' && visibleSections.length > 1
   let sectionActions: ReactNode = null
   if (activeSection === 'models') {
     sectionActions = (
@@ -341,8 +360,10 @@ export function Dashboard() {
               disabled={isRefreshing}
               aria-label={t('Refresh')}
             >
-              <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
-              <span className='hidden sm:inline ml-1.5'>{t('Refresh')}</span>
+              <RefreshCw
+                className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
+              />
+              <span className='ml-1.5 hidden sm:inline'>{t('Refresh')}</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t('Refresh group quota data')}</TooltipContent>
@@ -353,6 +374,7 @@ export function Dashboard() {
             <Button
               variant={autoRefresh ? 'default' : 'outline'}
               size='sm'
+              className={cn(autoRefresh && dashPrimaryShadow)}
               onClick={() => setAutoRefresh((v) => !v)}
               aria-label={t('Auto refresh')}
               aria-pressed={autoRefresh}
@@ -362,7 +384,7 @@ export function Dashboard() {
               ) : (
                 <Play className='h-4 w-4' />
               )}
-              <span className='hidden sm:inline ml-1.5'>
+              <span className='ml-1.5 hidden sm:inline'>
                 {autoRefresh ? t('Auto: 30s') : t('Auto refresh')}
               </span>
             </Button>
@@ -389,10 +411,17 @@ export function Dashboard() {
       <SectionPageLayout.Description>
         {t(meta.descriptionKey)}
       </SectionPageLayout.Description>
+      {activeSection === 'overview' && (
+        <SectionPageLayout.Actions>
+          <Link to='/wallet' className={dashPrimaryBtn}>
+            {t('Recharge')}
+          </Link>
+        </SectionPageLayout.Actions>
+      )}
       <SectionPageLayout.Content>
-        <div className='space-y-3 sm:space-y-4'>
+        <div className='space-y-6'>
           {activeSection !== 'overview' && (
-            <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
+            <div className='flex flex-wrap items-center justify-between gap-3'>
               {showSectionTabs ? (
                 <Tabs value={activeSection} onValueChange={handleSectionChange}>
                   <TabsList className='h-auto max-w-full flex-wrap justify-start'>
@@ -414,29 +443,12 @@ export function Dashboard() {
             </div>
           )}
           {activeSection === 'overview' && (
-            <>
-              <SummaryCards />
-              <CardStaggerContainer className='grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2'>
-                {isAdmin &&
-                  isSidebarModuleEnabled('dashboard', 'performanceHealth') && (
-                    <CardStaggerItem className='lg:col-span-2'>
-                      <PerformanceHealthPanel />
-                    </CardStaggerItem>
-                  )}
-                <CardStaggerItem>
-                  <ApiInfoPanel />
-                </CardStaggerItem>
-                <CardStaggerItem>
-                  <AnnouncementsPanel />
-                </CardStaggerItem>
-                <CardStaggerItem>
-                  <FAQPanel />
-                </CardStaggerItem>
-                <CardStaggerItem>
-                  <UptimePanel />
-                </CardStaggerItem>
-              </CardStaggerContainer>
-            </>
+            <OverviewConsole
+              showPerformance={
+                isAdmin &&
+                isSidebarModuleEnabled('dashboard', 'performanceHealth')
+              }
+            />
           )}
           {activeSection === 'models' && (
             <>

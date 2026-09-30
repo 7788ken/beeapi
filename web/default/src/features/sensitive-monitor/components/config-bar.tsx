@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -67,7 +68,7 @@ export function ConfigBar() {
   })
 
   return (
-    <div className='space-y-3 rounded-lg border p-4'>
+    <div className={cn(surfaceClass, 'space-y-3 p-4')}>
       <div className='flex flex-wrap items-center gap-4'>
         <div className='flex items-center gap-2'>
           <Switch

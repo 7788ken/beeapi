@@ -506,13 +506,31 @@ function ExecuteResult({ result }: { result: SubSiteCreateResult }) {
     <Tabs defaultValue='ok'>
       <TabsList>
         <TabsTrigger value='ok'>
-          {t('OK')} <Badge className='ml-2'>{ok.length}</Badge>
+          {t('OK')}{' '}
+          <Badge
+            variant='secondary'
+            className='group-data-[state=active]/tab:text-primary-foreground ml-2 group-data-[state=active]/tab:border-transparent group-data-[state=active]/tab:bg-white/20'
+          >
+            {ok.length}
+          </Badge>
         </TabsTrigger>
         <TabsTrigger value='skipped'>
-          {t('Skipped')} <Badge variant='outline' className='ml-2'>{skipped.length}</Badge>
+          {t('Skipped')}{' '}
+          <Badge
+            variant='outline'
+            className='group-data-[state=active]/tab:text-primary-foreground ml-2 group-data-[state=active]/tab:border-transparent group-data-[state=active]/tab:bg-white/20'
+          >
+            {skipped.length}
+          </Badge>
         </TabsTrigger>
         <TabsTrigger value='failed'>
-          {t('Failed')} <Badge variant='destructive' className='ml-2'>{failed.length}</Badge>
+          {t('Failed')}{' '}
+          <Badge
+            variant='destructive'
+            className='group-data-[state=active]/tab:text-primary-foreground ml-2 group-data-[state=active]/tab:border-transparent group-data-[state=active]/tab:bg-white/20'
+          >
+            {failed.length}
+          </Badge>
         </TabsTrigger>
       </TabsList>
       <TabsContent value='ok'>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { RefreshCw } from 'lucide-react'
@@ -38,7 +38,8 @@ import {
 } from '@/components/data-table'
 import { PageFooterPortal } from '@/components/layout'
 import { Button } from '@/components/ui/button'
-import { getUsers, searchUsers, recomputeUserMetrics } from '../api'
+import { surfaceClass } from '@/components/ui/card'
+import { getUsers, searchUsers, recomputeUserMetrics, getGroups } from '../api'
 import {
   USER_STATUS,
   getUserStatusOptions,
@@ -103,9 +104,33 @@ export function UsersTable() {
     columnFilters: [
       { columnId: 'status', searchKey: 'status', type: 'array' },
       { columnId: 'role', searchKey: 'role', type: 'array' },
-      { columnId: 'group', searchKey: 'group', type: 'string' },
+      // group 在 URL 上保持单值字符串（?group=xxx），表内状态用数组以复用 faceted 单选组件
+      {
+        columnId: 'group',
+        searchKey: 'group',
+        type: 'array',
+        serialize: (value) => (Array.isArray(value) ? value[0] : value),
+        deserialize: (value) =>
+          typeof value === 'string' && value !== '' ? [value] : [],
+      },
     ],
   })
+
+  // 分组筛选值（单选）：后端 /api/user/search 按 group 精确匹配，空关键词也支持。
+  const groupFilterRaw = columnFilters.find((f) => f.id === 'group')?.value
+  const groupFilter = Array.isArray(groupFilterRaw)
+    ? String(groupFilterRaw[0] ?? '')
+    : String(groupFilterRaw ?? '')
+
+  // 分组选项：与渠道页一致，取自 /api/group/。
+  const { data: groupsData } = useQuery({
+    queryKey: ['groups'],
+    queryFn: getGroups,
+  })
+  const groupOptions = useMemo(
+    () => (groupsData?.data || []).map((g) => ({ label: g, value: g })),
+    [groupsData]
+  )
 
   // Fetch data with React Query
   const { data, isLoading, isFetching } = useQuery({
@@ -114,12 +139,13 @@ export function UsersTable() {
       pagination.pageIndex + 1,
       pagination.pageSize,
       globalFilter,
+      groupFilter,
       backendOrderBy,
       backendOrder,
       refreshTrigger,
     ],
     queryFn: async () => {
-      const hasFilter = globalFilter?.trim()
+      const hasFilter = Boolean(globalFilter?.trim() || groupFilter)
       const params: {
         p: number
         page_size: number
@@ -136,7 +162,11 @@ export function UsersTable() {
       }
 
       const result = hasFilter
-        ? await searchUsers({ ...params, keyword: globalFilter })
+        ? await searchUsers({
+            ...params,
+            keyword: globalFilter || '',
+            group: groupFilter,
+          })
         : await getUsers(params)
 
       if (!result.success) {
@@ -234,6 +264,12 @@ export function UsersTable() {
                   title: t('Role'),
                   options: getUserRoleOptions(t),
                 },
+                {
+                  columnId: 'group',
+                  title: t('Group'),
+                  options: groupOptions,
+                  singleSelect: true,
+                },
               ]}
             />
           </div>
@@ -267,7 +303,7 @@ export function UsersTable() {
           <>
             <div
               className={cn(
-                'overflow-hidden rounded-md border transition-opacity duration-150',
+                surfaceClass, 'overflow-hidden transition-opacity duration-150',
                 isFetching && !isLoading && 'pointer-events-none opacity-50'
               )}
             >

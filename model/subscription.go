@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -222,6 +223,15 @@ type SubscriptionPlan struct {
 	// Bind subscription usage to a specific channel group (empty = no restriction)
 	BoundGroup string `json:"bound_group" gorm:"column:bound_group;type:varchar(64);not null;default:''"`
 
+	// FallbackGroup 兜底渠道组：配额耗尽后把 user.group 降级到该分组，后续请求按该分组倍率
+	// 从钱包余额继续扣费；空 = 不兜底，耗尽即停服（请求路径 403，不扣钱包）。
+	// 仅在套餐同时设置了 UpgradeGroup 时完整生效（降级守卫依赖 user.group==UpgradeGroup）。
+	FallbackGroup string `json:"fallback_group" gorm:"column:fallback_group;type:varchar(64);not null;default:''"`
+
+	// AllowedUserGroups 允许购买的用户分组（JSON 数组字符串）；空 = 所有用户均可购买。
+	// 仅在下单入口按 user.group 校验，公开套餐列表不过滤。
+	AllowedUserGroups string `json:"allowed_user_groups" gorm:"column:allowed_user_groups;type:text"`
+
 	// Total quota (amount in quota units, 0 = unlimited)
 	TotalAmount int64 `json:"total_amount" gorm:"type:bigint;not null;default:0"`
 
@@ -243,6 +253,66 @@ func (p *SubscriptionPlan) BeforeCreate(tx *gorm.DB) error {
 func (p *SubscriptionPlan) BeforeUpdate(tx *gorm.DB) error {
 	p.UpdatedAt = common.GetTimestamp()
 	return nil
+}
+
+// GetAllowedUserGroups 解析 AllowedUserGroups（JSON 数组字符串）为 []string。
+// 空串 / 非法 JSON / 非数组 → 返回 nil（表示不限制）。逐项 trim 并丢弃空项。
+func (p *SubscriptionPlan) GetAllowedUserGroups() []string {
+	raw := strings.TrimSpace(p.AllowedUserGroups)
+	if raw == "" {
+		return nil
+	}
+	var groups []string
+	if err := json.Unmarshal([]byte(raw), &groups); err != nil {
+		return nil
+	}
+	result := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if t := strings.TrimSpace(g); t != "" {
+			result = append(result, t)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// SetAllowedUserGroups 将 []string 序列化为 JSON 存入 AllowedUserGroups。
+// 空 / 全空项 → 存空串（表示不限制）。
+func (p *SubscriptionPlan) SetAllowedUserGroups(groups []string) {
+	cleaned := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if t := strings.TrimSpace(g); t != "" {
+			cleaned = append(cleaned, t)
+		}
+	}
+	if len(cleaned) == 0 {
+		p.AllowedUserGroups = ""
+		return
+	}
+	data, err := json.Marshal(cleaned)
+	if err != nil {
+		p.AllowedUserGroups = ""
+		return
+	}
+	p.AllowedUserGroups = string(data)
+}
+
+// IsPurchaseAllowedForGroup 判断给定 user.group 是否允许购买本套餐。
+// AllowedUserGroups 为空 → 不限制，任何分组均可购买。
+func (p *SubscriptionPlan) IsPurchaseAllowedForGroup(userGroup string) bool {
+	allowed := p.GetAllowedUserGroups()
+	if len(allowed) == 0 {
+		return true
+	}
+	target := strings.TrimSpace(userGroup)
+	for _, g := range allowed {
+		if g == target {
+			return true
+		}
+	}
+	return false
 }
 
 // Subscription order (payment -> webhook -> create UserSubscription)
@@ -321,6 +391,9 @@ type UserSubscription struct {
 
 	UpgradeGroup  string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
 	PrevUserGroup string `json:"prev_user_group" gorm:"type:varchar(64);default:''"`
+	// FallbackGroup 购买时对 plan.FallbackGroup 的快照：耗尽降级目标 & 恢复逻辑判定依据，
+	// 不受套餐后续修改影响。空 = 无兜底。
+	FallbackGroup string `json:"fallback_group" gorm:"type:varchar(64);default:''"`
 
 	// IsHidden 用户主动从"我的订阅"列表中软删除（仅 expired/cancelled 或 end_time 已过的订阅允许）。
 	// 行不删除，仅置 true：从用户视图隐藏，且不再计入 max_purchase_per_user 限购名额。
@@ -606,6 +679,17 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, errors.New("已达到该套餐购买上限")
 		}
 	}
+	// 购买分组限制：AllowedUserGroups 非空时仅允许 user.group 命中的用户购买（事务内二次校验，
+	// 与支付控制器入口校验互为防御）。
+	if len(plan.GetAllowedUserGroups()) > 0 {
+		currentGroup, err := getUserGroupByIdTx(tx, userId)
+		if err != nil {
+			return nil, err
+		}
+		if !plan.IsPurchaseAllowedForGroup(currentGroup) {
+			return nil, errors.New("该套餐仅限指定用户分组购买")
+		}
+	}
 	nowUnix := getDBTimestampTx(tx)
 	now := time.Unix(nowUnix, 0)
 	endUnix, err := calcPlanEndTime(now, plan)
@@ -646,6 +730,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		NextResetTime: nextReset,
 		UpgradeGroup:  upgradeGroup,
 		PrevUserGroup: prevGroup,
+		FallbackGroup: strings.TrimSpace(plan.FallbackGroup),
 		CreatedAt:     common.GetTimestamp(),
 		UpdatedAt:     common.GetTimestamp(),
 	}
@@ -1285,8 +1370,13 @@ func resetUserSubscriptionTx(
 	if sub.Status == "exhausted" {
 		upgradeGroup := strings.TrimSpace(sub.UpgradeGroup)
 		if upgradeGroup != "" {
+			// 兼容：新逻辑耗尽降级到 sub.FallbackGroup；存量旧数据可能已降级到 "auto"。二者都恢复到 upgradeGroup。
+			restoreFrom := []string{"auto"}
+			if fallbackGroup := strings.TrimSpace(sub.FallbackGroup); fallbackGroup != "" && fallbackGroup != "auto" {
+				restoreFrom = append(restoreFrom, fallbackGroup)
+			}
 			result := tx.Model(&User{}).
-				Where(map[string]interface{}{"id": sub.UserId, "group": "auto"}).
+				Where(map[string]interface{}{"id": sub.UserId, "group": restoreFrom}).
 				Update("group", upgradeGroup)
 			if result.Error != nil {
 				return SubscriptionResetItem{}, result.Error
@@ -1540,12 +1630,13 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 
 // SubscriptionExhaustedEvent 描述一条已完成耗尽处理的订阅，供 service 层发送通知。
 type SubscriptionExhaustedEvent struct {
-	UserId           int
-	UserEmail        string
-	UserSetting      dto.UserSetting
-	PlanTitle        string
-	Pref             string // 归一化后的计费偏好
-	DowngradedToAuto bool   // true=用户分组已降级为 auto
+	UserId      int
+	UserEmail   string
+	UserSetting dto.UserSetting
+	PlanTitle   string
+	Pref        string // 归一化后的计费偏好
+	// DowngradedToGroup 非空=耗尽后已把 user.group 降级到该兜底分组（后续走钱包按量）；空=未降级（停服）。
+	DowngradedToGroup string
 	// GroupExhausted true=该订阅绑定分组（BoundGroup）内已无任何可消费订阅，
 	// 即本次耗尽真正中断了该分组的订阅抵扣。仅此时才发用户通知；
 	// 分组内还有其他可用订阅时服务无变化，不打扰用户。
@@ -1635,8 +1726,12 @@ func ProcessExhaustedSubscriptions(limit int) (int, []SubscriptionExhaustedEvent
 				"exhaust_notified_at": now,
 				"updated_at":          common.GetTimestamp(),
 			}
-			downgraded := false
-			if pref == "subscription_then_auto" {
+			downgradedToGroup := ""
+			// 兜底由套餐 FallbackGroup 权威驱动（不再依赖用户 BillingPreference）：
+			//   - FallbackGroup 非空：置 exhausted，守卫满足时把 user.group 从 UpgradeGroup 降级到
+			//     FallbackGroup，后续请求按该分组倍率走钱包；
+			//   - FallbackGroup 为空：不降级、status 保持 active，请求路径继续 403（停服，不扣钱包）。
+			if fallbackGroup := strings.TrimSpace(locked.FallbackGroup); fallbackGroup != "" {
 				updates["status"] = "exhausted"
 				// 降级判定按同 UpgradeGroup 维度：其他分组的生效订阅不阻止本组降级
 				//（用户分组只可能被同组订阅撑着；异组订阅依赖 token 分组，与 user.group 无关）。
@@ -1647,7 +1742,7 @@ func ProcessExhaustedSubscriptions(limit int) (int, []SubscriptionExhaustedEvent
 					if err != nil {
 						return err
 					}
-					if currentGroup == upgradeGroup && currentGroup != "auto" {
+					if currentGroup == upgradeGroup && currentGroup != fallbackGroup {
 						var activeSub UserSubscription
 						activeQuery := tx.Where("user_id = ? AND status = ? AND end_time > ? AND id <> ? AND upgrade_group = ? AND exhaust_notified_at = 0",
 							locked.UserId, "active", now, locked.Id, upgradeGroup).
@@ -1658,10 +1753,10 @@ func ProcessExhaustedSubscriptions(limit int) (int, []SubscriptionExhaustedEvent
 						}
 						if activeQuery.RowsAffected == 0 {
 							if err := tx.Model(&User{}).Where("id = ?", locked.UserId).
-								Update("group", "auto").Error; err != nil {
+								Update("group", fallbackGroup).Error; err != nil {
 								return err
 							}
-							downgraded = true
+							downgradedToGroup = fallbackGroup
 						}
 					}
 				}
@@ -1670,13 +1765,13 @@ func ProcessExhaustedSubscriptions(limit int) (int, []SubscriptionExhaustedEvent
 				return err
 			}
 			event = SubscriptionExhaustedEvent{
-				UserId:           locked.UserId,
-				UserEmail:        user.Email,
-				UserSetting:      user.GetSetting(),
-				PlanTitle:        planTitle,
-				Pref:             pref,
-				DowngradedToAuto: downgraded,
-				GroupExhausted:   groupExhausted,
+				UserId:            locked.UserId,
+				UserEmail:         user.Email,
+				UserSetting:       user.GetSetting(),
+				PlanTitle:         planTitle,
+				Pref:              pref,
+				DowngradedToGroup: downgradedToGroup,
+				GroupExhausted:    groupExhausted,
 			}
 			handled = true
 			return nil
@@ -1686,8 +1781,8 @@ func ProcessExhaustedSubscriptions(limit int) (int, []SubscriptionExhaustedEvent
 		}
 		if handled {
 			processed++
-			if event.DowngradedToAuto {
-				_ = UpdateUserGroupCache(event.UserId, "auto")
+			if event.DowngradedToGroup != "" {
+				_ = UpdateUserGroupCache(event.UserId, event.DowngradedToGroup)
 			}
 			events = append(events, event)
 		}
@@ -1836,18 +1931,21 @@ func findEligibleSubscriptionsTx(tx *gorm.DB, userId int, usingGroup string, now
 // 用于 BillingSession 入口预判：决定走订阅扣费还是钱包回退。
 // 第三个返回值 hasExhausted 表示该 group 无活跃订阅、但存在 exhausted（额度耗尽、未到期）
 // 订阅——此时调用方不得回退钱包（该分组套餐价只对订阅额度有效），应直接拒绝。
-// 返回 (nil, nil, false, nil) 表示与该 group 无任何订阅关系。
-func GetEligibleActiveSubscription(userId int, usingGroup string) (*UserSubscription, *SubscriptionPlan, bool, error) {
+// 第四个返回值 exhaustedFallbackGroup 为首条耗尽订阅快照的兜底分组（非空=耗尽后会切到该组走钱包，
+// 空=停服），供请求路径生成正确文案。
+// 返回 (nil, nil, false, "", nil) 表示与该 group 无任何订阅关系。
+func GetEligibleActiveSubscription(userId int, usingGroup string) (*UserSubscription, *SubscriptionPlan, bool, string, error) {
 	if userId <= 0 {
-		return nil, nil, false, errors.New("invalid userId")
+		return nil, nil, false, "", errors.New("invalid userId")
 	}
 	if usingGroup == "" {
-		return nil, nil, false, nil
+		return nil, nil, false, "", nil
 	}
 	var (
-		retSub       *UserSubscription
-		retPlan      *SubscriptionPlan
-		hasExhausted bool
+		retSub               *UserSubscription
+		retPlan              *SubscriptionPlan
+		hasExhausted         bool
+		exhaustedFallbackGrp string
 	)
 	// GetDBTimestamp 是一次独立的 DB 查询，必须在事务外取，否则在
 	// SetMaxOpenConns(1) 的环境（含测试 SQLite）会与事务自身争连接死锁。
@@ -1860,6 +1958,10 @@ func GetEligibleActiveSubscription(userId int, usingGroup string) (*UserSubscrip
 		for i := range subs {
 			if subs[i].Status == "exhausted" {
 				hasExhausted = true
+				// 记录首条耗尽订阅的兜底分组（subs 已按 end_time asc, id asc 排序）。
+				if exhaustedFallbackGrp == "" {
+					exhaustedFallbackGrp = strings.TrimSpace(subs[i].FallbackGroup)
+				}
 				continue
 			}
 			if retSub == nil {
@@ -1871,9 +1973,9 @@ func GetEligibleActiveSubscription(userId int, usingGroup string) (*UserSubscrip
 		return nil
 	})
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, false, "", err
 	}
-	return retSub, retPlan, hasExhausted, nil
+	return retSub, retPlan, hasExhausted, exhaustedFallbackGrp, nil
 }
 
 // PreConsumeUserSubscription pre-consumes from an active subscription whose plan.BoundGroup matches usingGroup.
@@ -2179,7 +2281,9 @@ func ResetDueSubscriptions(limit int) (int, error) {
 			if err != nil {
 				return err
 			}
-			if currentGroup != "auto" {
+			// 兼容：新逻辑耗尽降级到 FallbackGroup；存量旧数据降级到 "auto"。二者都应恢复到 upgradeGroup。
+			fallbackGroup := strings.TrimSpace(locked.FallbackGroup)
+			if currentGroup != "auto" && (fallbackGroup == "" || currentGroup != fallbackGroup) {
 				return nil
 			}
 			if err := tx.Model(&User{}).Where("id = ?", locked.UserId).
@@ -2491,7 +2595,7 @@ type GroupBudgetRow struct {
 }
 
 // EstimateGroupDailyBudget 计算每个 BoundGroup 的每日预算（quota + 货币）
-// 仅统计 status=active 且 plan.bound_group != ''
+// 仅统计 status=active 且 plan.bound_group != ”
 func EstimateGroupDailyBudget() ([]GroupBudgetRow, error) {
 	now := common.GetTimestamp()
 	type subPlan struct {

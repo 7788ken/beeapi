@@ -67,14 +67,14 @@ export function DataTableToolbar<TData>({
       onChange={(event) =>
         table.getColumn(searchKey)?.setFilterValue(event.target.value)
       }
-      className='h-9 w-full sm:h-8 sm:w-[150px] lg:w-[250px]'
+      className='bg-card h-9 w-full sm:h-8 sm:w-[150px] lg:w-[250px]'
     />
   ) : (
     <Input
       placeholder={resolvedSearchPlaceholder}
       value={table.getState().globalFilter ?? ''}
       onChange={(event) => table.setGlobalFilter(event.target.value)}
-      className='h-9 w-full sm:h-8 sm:w-[150px] lg:w-[250px]'
+      className='bg-card h-9 w-full sm:h-8 sm:w-[150px] lg:w-[250px]'
     />
   )
 
@@ -121,7 +121,9 @@ export function DataTableToolbar<TData>({
         <div className='hidden sm:block'>{resetButton}</div>
 
         {extraActions && (
-          <div className='hidden sm:flex items-center gap-2'>{extraActions}</div>
+          <div className='hidden items-center gap-2 sm:flex'>
+            {extraActions}
+          </div>
         )}
 
         {/* Mobile: filter toggle button */}
@@ -149,7 +151,7 @@ export function DataTableToolbar<TData>({
 
       {/* Mobile: collapsible filter area */}
       {hasFilterContent && mobileFiltersOpen && (
-        <div className='bg-muted/30 flex flex-wrap items-center gap-2 rounded-lg border p-2 sm:hidden'>
+        <div className='bg-card flex flex-wrap items-center gap-2 rounded-lg border p-2 sm:hidden'>
           {additionalSearch && <div className='w-full'>{additionalSearch}</div>}
           {filterChips}
           {resetButton}

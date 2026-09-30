@@ -11,6 +11,8 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -73,7 +75,7 @@ export function SubscriptionsTable() {
             )}
           />
         ) : (
-          <div className='overflow-hidden rounded-md border'>
+          <div className={cn(surfaceClass, 'overflow-hidden')}>
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

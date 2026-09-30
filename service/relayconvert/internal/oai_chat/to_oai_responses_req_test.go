@@ -37,6 +37,16 @@ func TestChatCompletionsRequestToResponsesRequestInstructionsAndTools(t *testing
 	assert.Equal(t, "function_call_output", gjson.GetBytes(got.Input, "3.type").String())
 }
 
+func TestChatCompletionsRequestToResponsesRequestCopiesPromptCacheKey(t *testing.T) {
+	got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+		Model:          "gpt-test",
+		PromptCacheKey: "cache-key-1",
+		Messages:       []dto.Message{{Role: "user", Content: "hi"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `"cache-key-1"`, string(got.PromptCacheKey))
+}
+
 func TestChatCompletionsRequestToResponsesRequestRejectsMultipleChoices(t *testing.T) {
 	_, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
 		Model: "gpt-test",

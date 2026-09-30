@@ -93,7 +93,7 @@ function GroupObjectCell({ groupName }: { groupName: string }) {
   const parts = parseGroupGroupRatioName(groupName)
   if (!parts) return <GroupBadge group={groupName} size='sm' />
   return (
-    <span className='inline-flex items-center gap-1'>
+    <span className='inline-flex flex-wrap items-center gap-1'>
       <GroupBadge group={parts.userGroup} size='sm' />
       <span className='text-muted-foreground text-xs'>→</span>
       <GroupBadge group={parts.targetGroup} size='sm' />
@@ -119,6 +119,9 @@ export function ChangeItemsTable({
 }: ChangeItemsTableProps) {
   const { t } = useTranslation()
 
+  // 表头吸顶：配合内层容器限高纵向滚动
+  const headCls = 'sticky top-0 z-10 bg-background'
+
   const sorted = [...items].sort((a, b) => {
     if (a.scope !== b.scope) return a.scope === 'group' ? -1 : 1
     const nameA = a.scope === 'group' ? a.group_name : a.model_name
@@ -135,14 +138,31 @@ export function ChangeItemsTable({
   }
 
   return (
-    <div className={cn('overflow-hidden rounded-lg border', className)}>
-      <Table>
+    // 滚动交给内层 table-container：限高后行数多时表体纵向滚动、表头吸顶；
+    // 外层仅负责圆角裁剪。
+    <div
+      className={cn(
+        'overflow-hidden rounded-lg border',
+        '[&_[data-slot=table-container]]:max-h-80 [&_[data-slot=table-container]]:overflow-y-auto',
+        className
+      )}
+    >
+      <Table className='table-fixed min-w-[540px]'>
         <TableHeader>
           <TableRow>
-            <TableHead>{t('Object')}</TableHead>
-            <TableHead>{t('Item')}</TableHead>
-            <TableHead>{t('Direction')}</TableHead>
-            <TableHead>{t('Change')}</TableHead>
+            {/* table-fixed 下列宽按占比固定：对象列限宽，长模型名 break-all 换行 */}
+            <TableHead className={cn(headCls, 'w-[34%]')}>
+              {t('Object')}
+            </TableHead>
+            <TableHead className={cn(headCls, 'w-[15%]')}>
+              {t('Item')}
+            </TableHead>
+            <TableHead className={cn(headCls, 'w-[13%]')}>
+              {t('Direction')}
+            </TableHead>
+            <TableHead className={cn(headCls, 'w-[38%]')}>
+              {t('Change')}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -150,7 +170,7 @@ export function ChangeItemsTable({
             const change = formatChangeValue(t, item, preferredGroup)
             return (
               <TableRow key={idx}>
-                <TableCell>
+                <TableCell className='whitespace-normal'>
                   {item.scope === 'group' ? (
                     <GroupObjectCell groupName={item.group_name} />
                   ) : (
@@ -165,7 +185,7 @@ export function ChangeItemsTable({
                 <TableCell className='text-xs whitespace-nowrap'>
                   <DirectionMark direction={item.direction} />
                 </TableCell>
-                <TableCell className='font-mono text-xs whitespace-nowrap'>
+                <TableCell className='font-mono text-xs whitespace-normal break-words'>
                   {change.text}
                   {change.groupHint && (
                     <span className='text-muted-foreground ml-1 font-sans text-[10px]'>

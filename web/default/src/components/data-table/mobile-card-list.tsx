@@ -6,6 +6,8 @@ import {
 } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Empty,
   EmptyDescription,
@@ -14,7 +16,6 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
 
 interface MobileCardListProps<TData> {
   table: Table<TData>
@@ -55,7 +56,7 @@ function renderCellContent<TData>(cell: Cell<TData, unknown>): React.ReactNode {
 
 function ListSkeleton() {
   return (
-    <div className='divide-y overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'divide-y overflow-hidden')}>
       {[1, 2, 3, 4, 5].map((i) => (
         <div key={i} className='px-3 py-2.5'>
           <div className='flex items-center justify-between'>
@@ -80,7 +81,7 @@ function ListSkeleton() {
 
 function FallbackListSkeleton() {
   return (
-    <div className='divide-y overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'divide-y overflow-hidden')}>
       {[1, 2, 3, 4, 5].map((i) => (
         <div key={i} className='space-y-1.5 px-3 py-2.5'>
           {[1, 2, 3].map((j) => (
@@ -260,7 +261,7 @@ export function MobileCardList<TData>(props: MobileCardListProps<TData>) {
 
   if (!rows || rows.length === 0) {
     return (
-      <div className='rounded-lg border p-6'>
+      <div className={cn(surfaceClass, 'p-6')}>
         <Empty className='border-none p-0'>
           <EmptyHeader>
             <EmptyMedia variant='icon'>
@@ -277,7 +278,7 @@ export function MobileCardList<TData>(props: MobileCardListProps<TData>) {
   const RowComponent = hasCompactMeta ? CompactRow : FallbackRow
 
   return (
-    <div className='divide-y overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'divide-y overflow-hidden')}>
       {rows.map((row) => {
         const key = getRowKey ? getRowKey(row) : row.id
         return (

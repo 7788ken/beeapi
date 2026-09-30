@@ -3,12 +3,6 @@ export interface GroupInfo {
   desc?: string
 }
 
-export interface GroupRecord {
-  name: string
-  ratio: number
-  desc: string
-}
-
 export type SelfGroupsResponse = Record<string, GroupInfo>
 
 export interface GroupUptimeBucket {

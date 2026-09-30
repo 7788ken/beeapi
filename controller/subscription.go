@@ -44,6 +44,10 @@ type SubscriptionPlanPayload struct {
 
 	UpgradeGroup string  `json:"upgrade_group"`
 	BoundGroup   *string `json:"bound_group,omitempty"`
+	// FallbackGroup 兜底渠道组：耗尽后降级到该组走钱包；nil/空 = 不兜底（耗尽停服）
+	FallbackGroup *string `json:"fallback_group,omitempty"`
+	// AllowedUserGroups 允许购买的用户分组；空/nil = 所有用户均可购买
+	AllowedUserGroups []string `json:"allowed_user_groups"`
 
 	TotalAmount int64 `json:"total_amount"`
 
@@ -70,7 +74,32 @@ func optionalStringPtr(value string) *string {
 	return &trimmed
 }
 
+// checkPlanPurchaseAllowed 校验当前用户分组是否允许购买该套餐。
+// AllowedUserGroups 为空 = 不限制；非空则要求 user.group 命中其一。
+// 返回 false 时已写入错误响应，调用方应直接 return。
+// 用户分组优先取鉴权中间件写入的上下文 group，缺失时回源查询，避免误放行/误拦截。
+func checkPlanPurchaseAllowed(c *gin.Context, userId int, plan *model.SubscriptionPlan) bool {
+	if plan == nil || len(plan.GetAllowedUserGroups()) == 0 {
+		return true
+	}
+	userGroup := strings.TrimSpace(c.GetString("group"))
+	if userGroup == "" {
+		if g, err := model.GetUserGroup(userId, false); err == nil {
+			userGroup = strings.TrimSpace(g)
+		}
+	}
+	if !plan.IsPurchaseAllowedForGroup(userGroup) {
+		common.ApiErrorMsg(c, "该套餐仅限指定用户分组购买")
+		return false
+	}
+	return true
+}
+
 func subscriptionPlanPayloadFromModel(plan model.SubscriptionPlan) SubscriptionPlanPayload {
+	allowedGroups := plan.GetAllowedUserGroups()
+	if allowedGroups == nil {
+		allowedGroups = []string{}
+	}
 	return SubscriptionPlanPayload{
 		Id:                      plan.Id,
 		Title:                   plan.Title,
@@ -91,6 +120,8 @@ func subscriptionPlanPayloadFromModel(plan model.SubscriptionPlan) SubscriptionP
 		StockSold:               plan.StockSold,
 		UpgradeGroup:            plan.UpgradeGroup,
 		BoundGroup:              optionalStringPtr(plan.BoundGroup),
+		FallbackGroup:           optionalStringPtr(plan.FallbackGroup),
+		AllowedUserGroups:       allowedGroups,
 		TotalAmount:             plan.TotalAmount,
 		QuotaResetPeriod:        plan.QuotaResetPeriod,
 		QuotaResetCustomSeconds: plan.QuotaResetCustomSeconds,
@@ -134,6 +165,10 @@ func (p SubscriptionPlanPayload) ToModel() model.SubscriptionPlan {
 	if p.BoundGroup != nil {
 		plan.BoundGroup = strings.TrimSpace(*p.BoundGroup)
 	}
+	if p.FallbackGroup != nil {
+		plan.FallbackGroup = strings.TrimSpace(*p.FallbackGroup)
+	}
+	plan.SetAllowedUserGroups(p.AllowedUserGroups)
 	return plan
 }
 
@@ -280,9 +315,23 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 	}
 	plan.UpgradeGroup = strings.TrimSpace(plan.UpgradeGroup)
 	plan.BoundGroup = strings.TrimSpace(plan.BoundGroup)
+	plan.FallbackGroup = strings.TrimSpace(plan.FallbackGroup)
+	groupRatios := ratio_setting.GetGroupRatioCopy()
 	if plan.UpgradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[plan.UpgradeGroup]; !ok {
+		if _, ok := groupRatios[plan.UpgradeGroup]; !ok {
 			common.ApiErrorMsg(c, "升级分组不存在")
+			return
+		}
+	}
+	if plan.FallbackGroup != "" {
+		if _, ok := groupRatios[plan.FallbackGroup]; !ok {
+			common.ApiErrorMsg(c, "兜底分组不存在")
+			return
+		}
+	}
+	for _, g := range plan.GetAllowedUserGroups() {
+		if _, ok := groupRatios[g]; !ok {
+			common.ApiErrorMsg(c, "允许购买的用户分组「"+g+"」不存在")
 			return
 		}
 	}
@@ -349,9 +398,23 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 	}
 	plan.UpgradeGroup = strings.TrimSpace(plan.UpgradeGroup)
 	plan.BoundGroup = strings.TrimSpace(plan.BoundGroup)
+	plan.FallbackGroup = strings.TrimSpace(plan.FallbackGroup)
+	groupRatios := ratio_setting.GetGroupRatioCopy()
 	if plan.UpgradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[plan.UpgradeGroup]; !ok {
+		if _, ok := groupRatios[plan.UpgradeGroup]; !ok {
 			common.ApiErrorMsg(c, "升级分组不存在")
+			return
+		}
+	}
+	if plan.FallbackGroup != "" {
+		if _, ok := groupRatios[plan.FallbackGroup]; !ok {
+			common.ApiErrorMsg(c, "兜底分组不存在")
+			return
+		}
+	}
+	for _, g := range plan.GetAllowedUserGroups() {
+		if _, ok := groupRatios[g]; !ok {
+			common.ApiErrorMsg(c, "允许购买的用户分组「"+g+"」不存在")
 			return
 		}
 	}
@@ -382,6 +445,8 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 			"total_amount":               plan.TotalAmount,
 			"upgrade_group":              plan.UpgradeGroup,
 			"bound_group":                plan.BoundGroup,
+			"fallback_group":             plan.FallbackGroup,
+			"allowed_user_groups":        plan.AllowedUserGroups,
 			"quota_reset_period":         plan.QuotaResetPeriod,
 			"quota_reset_custom_seconds": plan.QuotaResetCustomSeconds,
 			"updated_at":                 common.GetTimestamp(),

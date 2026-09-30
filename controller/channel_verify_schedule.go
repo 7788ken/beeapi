@@ -178,6 +178,9 @@ func applyVerifyThresholdAction(ch *model.Channel, newScore int, allowDisable bo
 		if fresh.Status == common.ChannelStatusAutoDisabled && common.DerefIntOr(fresh.VerifyDisabled, 0) == 1 {
 			if model.UpdateChannelStatus(ch.Id, "", common.ChannelStatusEnabled, "") {
 				_ = model.SetChannelVerifyDisabled(ch.Id, false)
+				// verify 自动恢复绕过 service.EnableChannel，必须显式清理渠道运行时状态，
+				// 包括新增的模型级摘除连击计数。
+				service.ClearChannelHealthRuntime(ch.Id)
 				common.SysLog(fmt.Sprintf("channel #%d auto-enabled by verify score %d >= %d", ch.Id, newScore, *above))
 			}
 		}

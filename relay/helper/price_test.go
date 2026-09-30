@@ -73,10 +73,12 @@ func TestModelPriceHelperTieredUsesDefaultOutputEstimate(t *testing.T) {
 		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
 	})
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-fallback-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-fallback-model":"tier(\"base\", p * 3 + c * 15)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1}`,
+		"billing_setting.billing_mode": `{"tiered-fallback-model":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"tiered-fallback-model":"tier(\"base\", p * 3 + c * 15)"}`,
 	}))
+	prevGroupRatio := ratio_setting.GroupRatio2JSONString()
+	t.Cleanup(func() { _ = ratio_setting.UpdateGroupRatioByJSONString(prevGroupRatio) })
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1}`))
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)

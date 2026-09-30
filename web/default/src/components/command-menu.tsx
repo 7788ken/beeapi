@@ -14,6 +14,10 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
+import {
+  useContentBackupModuleEnabled,
+  withoutContentBackupNav,
+} from '@/features/content-backup/module'
 import { getNavGroupsForPath } from './layout/lib/workspace-registry'
 import { ScrollArea } from './ui/scroll-area'
 
@@ -24,9 +28,15 @@ export function CommandMenu() {
   const { open, setOpen } = useSearch()
   const { pathname } = useLocation()
   const sidebarData = useSidebarData()
+  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
 
   // 根据当前路径从工作区注册表获取对应的侧边栏配置
-  const navGroups = getNavGroupsForPath(pathname, t) || sidebarData.navGroups
+  const pathNavGroups =
+    getNavGroupsForPath(pathname, t) || sidebarData.navGroups
+  // 本部署关闭内容备份模块时，不列出任何内容备份入口
+  const navGroups = contentBackupModuleEnabled
+    ? pathNavGroups
+    : withoutContentBackupNav(pathNavGroups)
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {

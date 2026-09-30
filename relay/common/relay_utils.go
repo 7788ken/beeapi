@@ -83,12 +83,36 @@ func validatePrompt(prompt string) *dto.TaskError {
 // overflow quota calculation into a negative charge.
 const MaxTaskDurationSeconds = 3600
 
-func validateTaskDurationBounds(req TaskSubmitReq) *dto.TaskError {
+// AdaptiveTaskDuration 是 Seedance 系"由模型自适应决定时长"的哨兵值：视频编辑任务
+// 上游要求 duration=-1（配合 ratio=adaptive，成片时长跟随被编辑的原视频）。
+// 它不是计费乘数（seedance 按输出 token 结算，不用 OtherRatio "seconds"），
+// 所以放行 -1 不会把负数带进额度计算。
+const AdaptiveTaskDuration = -1
+
+// allowsAdaptiveDuration 判断本次请求能否接受 duration=-1：仅 Seedance 家族放行 ——
+// 渠道类型是豆包/sd 网关视频渠道，或模型名含 seedance（子站以 OpenAI/Sora 渠道
+// passthrough 转发 seedance 请求时渠道类型不是豆包，只能靠模型名识别）。
+// 其它平台（kling/vidu/ali 等）的适配器会把 -1 当作默认值或原样下送，继续按原规则拒绝。
+func allowsAdaptiveDuration(modelName string, channelType int) bool {
+	switch channelType {
+	case constant.ChannelTypeDoubaoVideo, constant.ChannelTypeSdVideo, constant.ChannelTypeSdVideoV2:
+		return true
+	}
+	return strings.Contains(strings.ToLower(modelName), "seedance")
+}
+
+func validateTaskDurationBounds(req TaskSubmitReq, info *RelayInfo) *dto.TaskError {
 	seconds := req.Duration
 	if seconds == 0 && req.Seconds != "" {
 		seconds, _ = strconv.Atoi(req.Seconds)
 	}
-	if seconds < 0 || seconds > MaxTaskDurationSeconds {
+	channelType := 0
+	if info != nil && info.ChannelMeta != nil {
+		channelType = info.ChannelType
+	}
+	if seconds == AdaptiveTaskDuration && allowsAdaptiveDuration(req.Model, channelType) {
+		// 自适应时长哨兵：由 seedance 适配器按模型决定是否真正支持（见 doubao.isSeedanceDurationAllowed）
+	} else if seconds < 0 || seconds > MaxTaskDurationSeconds {
 		return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
 	}
 	// metadata["durationSeconds"] 会绕过上面的标准字段校验（gemini/veo 等走 metadata），
@@ -193,11 +217,17 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 		hasInputReference = true
 	}
 
-	if taskErr := validatePrompt(prompt); taskErr != nil {
-		return taskErr
+	// 多模态 content[] 场景：prompt 可写在 content 的 text 项里（对齐上游 seedance 语义），
+	// 此时豁免顶层 prompt 必填；非 content 请求仍要求顶层 prompt（与 ValidateBasicTaskRequest 一致）。
+	// 博士站以 OpenAI/Sora 渠道类型 passthrough 转发 seedance 请求时依赖此豁免，
+	// 否则纯 content[]（无顶层 prompt）的全能参考请求会在本站被 400 拦下、根本到不了上游。
+	if len(req.Content) == 0 {
+		if taskErr := validatePrompt(prompt); taskErr != nil {
+			return taskErr
+		}
 	}
 
-	if taskErr := validateTaskDurationBounds(req); taskErr != nil {
+	if taskErr := validateTaskDurationBounds(req, info); taskErr != nil {
 		return taskErr
 	}
 
@@ -266,7 +296,7 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		}
 	}
 
-	if taskErr := validateTaskDurationBounds(req); taskErr != nil {
+	if taskErr := validateTaskDurationBounds(req, info); taskErr != nil {
 		return taskErr
 	}
 

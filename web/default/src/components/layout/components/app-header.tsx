@@ -101,7 +101,7 @@ export function AppHeader({
       <Header>
         {leftSection}
         {rightContent ?? (
-          <div className='ms-auto flex items-center space-x-4'>
+          <div className='ms-auto flex items-center space-x-2 sm:space-x-4'>
             {showSearch && <Search />}
             <SubscriptionUsageButton />
             {showNotifications && (

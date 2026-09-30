@@ -5,7 +5,6 @@ import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
 import { RatioSettingsCard } from './ratio-settings-card'
-import { RetryShortCircuitSection } from './retry-short-circuit-section'
 
 function formatJsonForEditor(value: string, fallback: string) {
   const raw = (value ?? '').toString().trim()
@@ -78,30 +77,20 @@ const MODELS_SECTIONS = [
     titleKey: 'Claude',
     descriptionKey: 'Configure Claude model settings',
     build: (settings: ModelSettings) => (
-      <>
-        <ClaudeSettingsCard
-          defaultValues={{
-            claude: {
-              model_headers_settings: settings['claude.model_headers_settings'],
-              default_max_tokens: settings['claude.default_max_tokens'],
-              thinking_adapter_enabled:
-                settings['claude.thinking_adapter_enabled'],
-              thinking_adapter_budget_tokens_percentage:
-                settings['claude.thinking_adapter_budget_tokens_percentage'],
-            },
-          }}
-        />
-        <RetryShortCircuitSection
-          defaultValues={{
-            'retry_short_circuit_setting.enabled':
-              settings['retry_short_circuit_setting.enabled'],
-            'retry_short_circuit_setting.min_duration_seconds':
-              settings['retry_short_circuit_setting.min_duration_seconds'],
-            'retry_short_circuit_setting.ttl_minutes':
-              settings['retry_short_circuit_setting.ttl_minutes'],
-          }}
-        />
-      </>
+      <ClaudeSettingsCard
+        defaultValues={{
+          claude: {
+            model_headers_settings: settings['claude.model_headers_settings'],
+            default_max_tokens: settings['claude.default_max_tokens'],
+            thinking_adapter_enabled:
+              settings['claude.thinking_adapter_enabled'],
+            thinking_adapter_budget_tokens_percentage:
+              settings['claude.thinking_adapter_budget_tokens_percentage'],
+            system_role_lift_enabled:
+              settings['claude.system_role_lift_enabled'],
+          },
+        }}
+      />
     ),
   },
   {

@@ -671,6 +671,8 @@
     "启用 Prompt 检查": "启用 Prompt 检查",
     "启用2FA失败": "启用2FA失败",
     "启用Claude思考适配（-thinking后缀）": "启用Claude思考适配（-thinking后缀）",
+    "启用Claude系统角色提升（/v1/messages）": "启用Claude系统角色提升（/v1/messages）",
+    "将 OpenAI 风格的 system 角色消息提升到顶层 system 字段，兼容发错格式的客户端；关闭后此类请求按原样透传": "将 OpenAI 风格的 system 角色消息提升到顶层 system 字段，兼容发错格式的客户端；关闭后此类请求按原样透传",
     "启用FunctionCall思维签名填充": "启用FunctionCall思维签名填充",
     "启用Gemini思考后缀适配": "启用Gemini思考后缀适配",
     "启用Ping间隔": "启用Ping间隔",

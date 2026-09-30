@@ -65,7 +65,7 @@ export function Referral() {
           )}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
+          <div className='flex w-full flex-col gap-4 sm:gap-5'>
             <AffiliateRewardsCard
               user={user}
               affiliateLink={affiliateLink}

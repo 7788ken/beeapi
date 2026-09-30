@@ -47,16 +47,35 @@ func supportsCacheTokenPushDown(dialect string) bool {
 // document instead of returning NULL, which would abort the whole
 // reconciliation query. ClickHouse returns 0 and needs no guard.
 func cacheTokenSumExpression(dialect, column, field string) (string, error) {
+	if !supportsCacheTokenPushDown(dialect) {
+		return "", fmt.Errorf("cache token aggregation not supported for dialect %q", dialect)
+	}
+	value, err := CacheTokenValueExpression(dialect, column, field)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("COALESCE(SUM(%s), 0)", value), nil
+}
+
+// CacheTokenValueExpression returns a per-row integer expression for one JSON
+// field in the log `other` column. Only JSON integers are accepted, matching
+// the Go fallback used by the migration/reconciliation code. Keeping this
+// expression reusable lets other aggregate queries push the same parsing work
+// into the database without loading every log row into Go.
+func CacheTokenValueExpression(dialect, column, field string) (string, error) {
 	switch dialect {
 	case "mysql":
 		// MySQL types any integer above the signed range as UNSIGNED INTEGER,
 		// which includes int64-max; omitting that name silently scores those
 		// values as 0.
 		return fmt.Sprintf(
-			`COALESCE(SUM(CASE WHEN JSON_VALID(%[1]s)`+
+			`CASE WHEN JSON_VALID(%[1]s)`+
 				` AND JSON_TYPE(JSON_EXTRACT(%[1]s, '$.%[2]s')) IN ('INTEGER', 'UNSIGNED INTEGER')`+
-				` THEN JSON_VALUE(%[1]s, '$.%[2]s' RETURNING SIGNED) ELSE 0 END), 0)`,
-			column, field,
+				` THEN CASE WHEN CAST(JSON_UNQUOTE(JSON_EXTRACT(%[1]s, '$.%[2]s')) AS DECIMAL(65,0))`+
+				` BETWEEN -9223372036854775808 AND 9223372036854775807`+
+				` THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(%[1]s, '$.%[2]s')) AS SIGNED)`+
+				` ELSE 0 END ELSE 0 END`,
+			column, field, column, field, column, field,
 		), nil
 	case "clickhouse":
 		// Int64 alone is the right whitelist: ClickHouse types every integer
@@ -64,18 +83,31 @@ func cacheTokenSumExpression(dialect, column, field string) (string, error) {
 		// UInt64 for values beyond that range, where JSONExtractInt returns 0
 		// anyway. See the out-of-range note on the MySQL branch.
 		return fmt.Sprintf(
-			`COALESCE(SUM(CASE WHEN JSONType(%[1]s, '%[2]s') = 'Int64'`+
-				` THEN JSONExtractInt(%[1]s, '%[2]s') ELSE 0 END), 0)`,
+			`CASE WHEN JSONType(%[1]s, '%[2]s') = 'Int64'`+
+				` THEN JSONExtractInt(%[1]s, '%[2]s') ELSE 0 END`,
 			column, field,
 		), nil
 	case "sqlite":
 		// json_type returns 'integer' for integers; floats report 'real' and
 		// numeric strings 'text', so both fall through to 0 as Go does.
 		return fmt.Sprintf(
-			`COALESCE(SUM(CASE WHEN json_valid(%[1]s)`+
+			`CASE WHEN json_valid(%[1]s)`+
 				` AND json_type(%[1]s, '$.%[2]s') = 'integer'`+
-				` THEN CAST(json_extract(%[1]s, '$.%[2]s') AS INTEGER) ELSE 0 END), 0)`,
+				` THEN CAST(json_extract(%[1]s, '$.%[2]s') AS INTEGER) ELSE 0 END`,
 			column, field,
+		), nil
+	case "postgres":
+		// PostgreSQL 15 has no IS JSON predicate. Extract only a JSON object
+		// member whose value is a complete integer token. Requiring the comma or
+		// closing brace boundary excludes floats, exponents and numeric strings,
+		// matching the Go json.Number.Int64 contract without casting arbitrary
+		// malformed text.
+		capture := fmt.Sprintf(`NULLIF(substring(%[1]s from '"%[2]s"[[:space:]]*:[[:space:]]*(-?[0-9]+)[[:space:]]*[,}]'), '')`, column, field)
+		return fmt.Sprintf(
+			`CASE WHEN %[1]s IS NULL THEN 0 `+
+				`WHEN %[1]s::numeric BETWEEN -9223372036854775808 AND 9223372036854775807 `+
+				`THEN %[1]s::bigint ELSE 0 END`,
+			capture, capture, capture,
 		), nil
 	default:
 		return "", fmt.Errorf("cache token aggregation not supported for dialect %q", dialect)

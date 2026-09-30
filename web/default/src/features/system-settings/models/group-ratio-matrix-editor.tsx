@@ -38,6 +38,16 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { safeJsonParse } from '../utils/json-parser'
+import {
+  collectProductRows,
+  normalizeUsableGroups,
+  removeProductGroup,
+  type GroupGroupMap,
+  type RatioMap,
+  type SpecialUsableMap,
+  type UsableGroupRawValue,
+  type UsableGroupsMap,
+} from './group-ratio-maps'
 
 type GroupFormValues = {
   GroupRatio: string
@@ -53,40 +63,13 @@ type GroupRatioMatrixEditorProps = {
   form: UseFormReturn<GroupFormValues>
 }
 
-type RatioMap = Record<string, number>
-type GroupGroupMap = Record<string, RatioMap>
-
-// 产品分组元信息：description + 是否对用户可选
-type UsableGroupRawValue =
-  | string
-  | { description?: string; user_selectable?: boolean }
-type UsableGroupsMap = Record<
-  string,
-  { description: string; user_selectable: boolean }
->
-
-/**
- * 把 UserUsableGroups 的 JSON 字符串（可能是旧 string 值 / 新 object 值）
- * 规范化成统一对象格式，方便增删改和读取。
- */
-function normalizeUsableGroups(jsonStr: string): UsableGroupsMap {
-  const raw = safeJsonParse<Record<string, UsableGroupRawValue>>(jsonStr, {
-    fallback: {},
-    silent: true,
-  })
-  const out: UsableGroupsMap = {}
-  for (const [k, v] of Object.entries(raw)) {
-    if (typeof v === 'string') {
-      out[k] = { description: v, user_selectable: true }
-    } else {
-      out[k] = {
-        description: v?.description ?? '',
-        // 字段缺失时默认 true，与新建分组默认值一致
-        user_selectable: v?.user_selectable !== false,
-      }
-    }
-  }
-  return out
+function parseUsableGroups(jsonStr: string): UsableGroupsMap {
+  return normalizeUsableGroups(
+    safeJsonParse<Record<string, UsableGroupRawValue>>(jsonStr, {
+      fallback: {},
+      silent: true,
+    })
+  )
 }
 
 const ROW_ORDER_STORAGE_KEY = 'newapi:matrix-row-order'
@@ -150,9 +133,13 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
   )
 
   const usableGroups = useMemo<UsableGroupsMap>(
-    () => normalizeUsableGroups(userUsableGroupsStr),
+    () => parseUsableGroups(userUsableGroupsStr),
     [userUsableGroupsStr]
   )
+
+  // Cell onBlur can re-render the row and swallow the following click.
+  // Delete/commit guards use this so a just-deleted product is not written back.
+  const suppressCommitRef = useRef(false)
 
   // 同时写 UserUsableGroups——内部一律存新对象格式，后端读取时会自动兼容
   const writeUsableGroups = useCallback(
@@ -172,26 +159,10 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
     persistRowOrderToStorage(next)
   }, [])
 
-  const rows = useMemo(() => {
-    const allSet = new Set<string>(Object.keys(groupRatio))
-    for (const ug of Object.keys(groupGroupRatio)) {
-      for (const tg of Object.keys(groupGroupRatio[ug] || {})) {
-        allSet.add(tg)
-      }
-    }
-    const all = Array.from(allSet)
-    if (rowOrder.length === 0) return all
-    const orderIdx = new Map<string, number>()
-    rowOrder.forEach((k, i) => orderIdx.set(k, i))
-    const naturalIdx = new Map<string, number>()
-    all.forEach((k, i) => naturalIdx.set(k, i))
-    return all.slice().sort((a, b) => {
-      const ai = orderIdx.has(a) ? (orderIdx.get(a) as number) : Number.POSITIVE_INFINITY
-      const bi = orderIdx.has(b) ? (orderIdx.get(b) as number) : Number.POSITIVE_INFINITY
-      if (ai !== bi) return ai - bi
-      return (naturalIdx.get(a) as number) - (naturalIdx.get(b) as number)
-    })
-  }, [groupRatio, groupGroupRatio, rowOrder])
+  const rows = useMemo(
+    () => collectProductRows(groupRatio, groupGroupRatio, usableGroups, rowOrder),
+    [groupRatio, groupGroupRatio, usableGroups, rowOrder]
+  )
 
   const userCols = useMemo(() => Object.keys(groupGroupRatio), [groupGroupRatio])
 
@@ -211,6 +182,7 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
   // overwrite each other.
   const commitDefault = useCallback(
     (row: string, raw: string) => {
+      if (suppressCommitRef.current) return
       const current = safeJsonParse<RatioMap>(form.getValues('GroupRatio'), {
         fallback: {},
         silent: true,
@@ -229,6 +201,7 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
 
   const commitOverride = useCallback(
     (row: string, col: string, raw: string) => {
+      if (suppressCommitRef.current) return
       const current = safeJsonParse<GroupGroupMap>(
         form.getValues('GroupGroupRatio'),
         { fallback: {}, silent: true }
@@ -363,49 +336,59 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
 
   const handleDeleteRow = useCallback(
     (row: string) => {
-      const nextDefault = { ...groupRatio }
-      delete nextDefault[row]
-      setFormJson('GroupRatio', nextDefault)
-
-      const nextGG: GroupGroupMap = {}
-      for (const ug of Object.keys(groupGroupRatio)) {
-        const colMap = { ...(groupGroupRatio[ug] || {}) }
-        delete colMap[row]
-        if (Object.keys(colMap).length > 0) {
-          nextGG[ug] = colMap
-        }
-      }
-      setFormJson('GroupGroupRatio', nextGG)
-
-      // 同步清理 UserUsableGroups 里的元信息，避免悬空记录
-      if (Object.prototype.hasOwnProperty.call(usableGroups, row)) {
-        const nextUG = { ...usableGroups }
-        delete nextUG[row]
-        writeUsableGroups(nextUG)
-      }
-
-      if (rowOrder.includes(row)) {
-        updateRowOrder(rowOrder.filter((k) => k !== row))
-      }
+      suppressCommitRef.current = true
+      const next = removeProductGroup(row, {
+        groupRatio: safeJsonParse<RatioMap>(form.getValues('GroupRatio'), {
+          fallback: {},
+          silent: true,
+        }),
+        groupGroupRatio: safeJsonParse<GroupGroupMap>(
+          form.getValues('GroupGroupRatio'),
+          { fallback: {}, silent: true }
+        ),
+        usableGroups: parseUsableGroups(form.getValues('UserUsableGroups')),
+        autoGroups: safeJsonParse<string[]>(form.getValues('AutoGroups'), {
+          fallback: [],
+          silent: true,
+        }),
+        topupGroupRatio: safeJsonParse<RatioMap>(
+          form.getValues('TopupGroupRatio'),
+          { fallback: {}, silent: true }
+        ),
+        specialUsable: safeJsonParse<SpecialUsableMap>(
+          form.getValues('GroupSpecialUsableGroup'),
+          { fallback: {}, silent: true }
+        ),
+      })
+      setFormJson('GroupRatio', next.groupRatio)
+      setFormJson('GroupGroupRatio', next.groupGroupRatio)
+      writeUsableGroups(next.usableGroups)
+      setFormJson('AutoGroups', next.autoGroups)
+      setFormJson('TopupGroupRatio', next.topupGroupRatio)
+      setFormJson('GroupSpecialUsableGroup', next.specialUsable)
+      updateRowOrder(rowOrder.filter((k) => k !== row))
+      queueMicrotask(() => {
+        suppressCommitRef.current = false
+      })
     },
-    [
-      groupRatio,
-      groupGroupRatio,
-      usableGroups,
-      rowOrder,
-      setFormJson,
-      writeUsableGroups,
-      updateRowOrder,
-    ]
+    [form, rowOrder, setFormJson, writeUsableGroups, updateRowOrder]
   )
 
   const handleDeleteCol = useCallback(
     (col: string) => {
-      const nextGG = { ...groupGroupRatio }
+      suppressCommitRef.current = true
+      const current = safeJsonParse<GroupGroupMap>(
+        form.getValues('GroupGroupRatio'),
+        { fallback: {}, silent: true }
+      )
+      const nextGG = { ...current }
       delete nextGG[col]
       setFormJson('GroupGroupRatio', nextGG)
+      queueMicrotask(() => {
+        suppressCommitRef.current = false
+      })
     },
-    [groupGroupRatio, setFormJson]
+    [form, setFormJson]
   )
 
   const reorderObjectKeys = useCallback(
@@ -543,7 +526,7 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
   return (
     <Card>
       <CardHeader>
-        <div className='flex items-start justify-between gap-4'>
+        <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
           <div>
             <CardTitle>{t('Pricing matrix')}</CardTitle>
             <CardDescription>
@@ -552,12 +535,22 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
               )}
             </CardDescription>
           </div>
-          <div className='flex gap-2'>
-            <Button size='sm' variant='outline' onClick={() => setAddRowOpen(true)}>
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              onClick={() => setAddRowOpen(true)}
+            >
               <Plus className='mr-2 h-4 w-4' />
               {t('Add product')}
             </Button>
-            <Button size='sm' variant='outline' onClick={() => setAddColOpen(true)}>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              onClick={() => setAddColOpen(true)}
+            >
               <Plus className='mr-2 h-4 w-4' />
               {t('Add user tier')}
             </Button>
@@ -569,7 +562,7 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
           <table className='w-full border-collapse text-sm'>
             <thead className='bg-muted/50'>
               <tr>
-                <th className='sticky left-0 z-20 min-w-[220px] border-b border-r bg-muted/80 p-2 text-left font-medium'>
+                <th className='bg-muted sticky left-0 z-20 min-w-[220px] border-r border-b p-2 text-left font-medium'>
                   {t('Product / User tier')}
                 </th>
                 <th className='min-w-[110px] border-b border-r bg-muted/80 p-2 text-center font-medium'>
@@ -578,31 +571,44 @@ export const GroupRatioMatrixEditor = memo(function GroupRatioMatrixEditor({
                 {userCols.map((col) => (
                   <th
                     key={col}
-                    draggable
-                    onDragStart={(e) => startDrag('col', col, e)}
                     onDragOver={(e) => allowDrop('col', col, e)}
                     onDrop={(e) => finishDrop('col', col, e)}
-                    onDragEnd={cancelDrag}
                     className={
                       'min-w-[140px] border-b border-r p-2 text-center font-medium transition-colors ' +
                       (dragOverKey === col && dragKindRef.current === 'col'
-                        ? 'bg-blue-100'
+                        ? 'bg-blue-100 dark:bg-blue-900'
                         : 'bg-muted/80')
                     }
                   >
                     <div className='flex items-center justify-center gap-1'>
-                      <GripVertical
-                        className='text-muted-foreground h-3 w-3 cursor-grab shrink-0'
-                        aria-hidden
-                      />
+                      <span
+                        draggable
+                        onDragStart={(e) => startDrag('col', col, e)}
+                        onDragEnd={cancelDrag}
+                        className='inline-flex cursor-grab'
+                      >
+                        <GripVertical
+                          className='text-muted-foreground h-3 w-3 shrink-0'
+                          aria-hidden
+                        />
+                      </span>
                       <span className='truncate' title={col}>
                         {col}
                       </span>
                       <Button
+                        type='button'
                         variant='ghost'
                         size='sm'
                         className='h-6 w-6 p-0'
-                        onClick={() => handleDeleteCol(col)}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDeleteCol(col)
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
                         title={t('Delete user tier') as string}
                       >
                         <Trash2 className='h-3 w-3' />
@@ -847,25 +853,29 @@ const MatrixRow = memo(function MatrixRow({
       onDrop={onDrop}
       className={cn(
         'hover:bg-muted/30',
-        isDragOver && 'bg-blue-50',
+        isDragOver && 'bg-blue-50 dark:bg-blue-950',
         // 用户不可选的产品分组整行降低视觉权重
         !userSelectable && 'text-muted-foreground'
       )}
     >
       <td
-        draggable
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
         className={cn(
-          'sticky left-0 z-10 border-b border-r p-2 font-medium',
-          userSelectable ? 'bg-background' : 'bg-muted/40'
+          'sticky left-0 z-10 border-r border-b p-2 font-medium',
+          userSelectable ? 'bg-card' : 'bg-muted'
         )}
       >
         <div className='flex items-center justify-between gap-2'>
-          <GripVertical
-            className='text-muted-foreground h-3 w-3 cursor-grab shrink-0'
-            aria-hidden
-          />
+          <span
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            className='inline-flex cursor-grab shrink-0'
+          >
+            <GripVertical
+              className='text-muted-foreground h-3 w-3'
+              aria-hidden
+            />
+          </span>
           {!userSelectable ? (
             <TooltipProvider delayDuration={120}>
               <Tooltip>
@@ -890,6 +900,7 @@ const MatrixRow = memo(function MatrixRow({
             </Badge>
           ) : null}
           <Button
+            type='button'
             variant='ghost'
             size='sm'
             className='h-6 w-6 shrink-0 p-0'
@@ -899,10 +910,19 @@ const MatrixRow = memo(function MatrixRow({
             <Pencil className='h-3 w-3' />
           </Button>
           <Button
+            type='button'
             variant='ghost'
             size='sm'
             className='h-6 w-6 shrink-0 p-0'
-            onClick={() => onDelete(row)}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onDelete(row)
+            }}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
             title={deleteLabel}
           >
             <Trash2 className='h-3 w-3' />
@@ -952,8 +972,10 @@ function CellInput({ initial, onCommit, highlight }: CellInputProps) {
           }
         }}
         className={
-          'h-8 rounded-none border-0 text-center text-sm focus-visible:ring-1 ' +
-          (highlight ? 'bg-amber-50 font-semibold text-amber-900' : '')
+          'h-8 rounded-none border-0 bg-transparent text-center text-sm focus-visible:ring-1 ' +
+          (highlight
+            ? 'bg-amber-50 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-100'
+            : '')
         }
         placeholder=''
       />

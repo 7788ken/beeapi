@@ -37,6 +37,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
+	taskminimaxinf "github.com/QuantumNous/new-api/relay/channel/task/minimax_inf"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
@@ -159,12 +160,19 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 		case constant.ChannelTypeSdVideo:
 			// 复用 doubao 适配器的校验/计费/content 组装，仅上游线协议切换为 sd 网关风格
 			return &taskdoubao.TaskAdaptor{UpstreamFlavor: taskdoubao.UpstreamFlavorSd}
+		case constant.ChannelTypeSdVideoV2:
+			// sd 网关 v2（dreamina max 线路）：与 58 同源，仅路径升为 /v2/video/*
+			return &taskdoubao.TaskAdaptor{UpstreamFlavor: taskdoubao.UpstreamFlavorSdV2}
 		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
 		case constant.ChannelTypeGemini:
 			return &taskGemini.TaskAdaptor{}
 		case constant.ChannelTypeMiniMax:
 			return &hailuo.TaskAdaptor{}
+		case constant.ChannelTypeMiniMaxInf:
+			// MiniMax 视频（service-inference 网关）：走该网关 sd v1 线协议，
+			// 与 35 的 MiniMax 官方协议不同，故独立渠道类型
+			return &taskminimaxinf.TaskAdaptor{}
 		}
 	}
 	return nil

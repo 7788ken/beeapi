@@ -65,6 +65,7 @@ export default function SettingClaudeModel(props) {
     'claude.thinking_adapter_enabled': true,
     'claude.default_max_tokens': '',
     'claude.thinking_adapter_budget_tokens_percentage': 0.8,
+    'claude.system_role_lift_enabled': false,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -204,6 +205,23 @@ export default function SettingClaudeModel(props) {
                     setInputs({
                       ...inputs,
                       'claude.thinking_adapter_enabled': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row>
+              <Col span={16}>
+                <Form.Switch
+                  label={t('启用Claude系统角色提升（/v1/messages）')}
+                  field={'claude.system_role_lift_enabled'}
+                  extraText={t(
+                    '将 OpenAI 风格的 system 角色消息提升到顶层 system 字段，兼容发错格式的客户端；关闭后此类请求按原样透传',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'claude.system_role_lift_enabled': value,
                     })
                   }
                 />

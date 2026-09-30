@@ -4,6 +4,8 @@ import { buildQueryParams } from './lib/utils'
 import type {
   GetLogsParams,
   GetLogsResponse,
+  GetLogTrendParams,
+  GetLogTrendResponse,
   GetLogStatsParams,
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
@@ -61,6 +63,27 @@ export const getLogStats = (params: GetLogStatsParams = {}) =>
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
+
+/**
+ * Fetch server-side usage-log trend buckets.
+ *
+ * The trend endpoint aggregates consume logs before returning them, so this
+ * request must never be implemented by paging through `/api/log`. React Query
+ * passes an AbortSignal here; forwarding it lets closing the dialog cancel a
+ * still-running aggregate query.
+ */
+export async function getLogTrend(
+  params: GetLogTrendParams = {},
+  isAdmin: boolean,
+  signal?: AbortSignal
+): Promise<GetLogTrendResponse> {
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
+  const endpoint = isAdmin ? '/api/log/trend' : '/api/log/self/trend'
+  const res = await api.get(`${endpoint}?${queryParams}`, { signal })
+  return res.data
+}
 
 // 脱敏 CSV 导出：后端仅返回白名单列（不含渠道/分组/IP 等敏感信息）
 export async function exportLogsCsv(

@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+func TestClaudeSystemRoleLiftDefaultsOff(t *testing.T) {
+	if defaultClaudeSettings.SystemRoleLiftEnabled {
+		t.Fatal("system role lift must default off; existing sites keep a stored value")
+	}
+}
+
 func TestClaudeSettingsWriteHeadersMergesConfiguredValuesIntoSingleHeader(t *testing.T) {
 	settings := &ClaudeSettings{
 		HeadersSettings: map[string]map[string][]string{

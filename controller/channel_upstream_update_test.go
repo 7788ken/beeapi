@@ -278,3 +278,9 @@ func TestShouldSendUpstreamModelUpdateNotification(t *testing.T) {
 	require.True(t, shouldSendUpstreamModelUpdateNotification(baseTime+90000, 7, 0))
 	require.True(t, shouldSendUpstreamModelUpdateNotification(baseTime+90001, 0, 0))
 }
+
+func TestVolcEngineModelsURL(t *testing.T) {
+	require.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/models", volcEngineModelsURL("https://ark.cn-beijing.volces.com"))
+	require.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/models", volcEngineModelsURL("https://ark.cn-beijing.volces.com/"))
+	require.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/models", volcEngineModelsURL("https://ark.cn-beijing.volces.com/api/v3"))
+}

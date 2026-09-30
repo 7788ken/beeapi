@@ -340,6 +340,8 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		return nil, err
 	}
 	applyHeaderOverrideToRequest(req, headerOverride)
+	// beta 头过滤必须在 Header Override 之后：affinity 规则 pass_headers 会把客户端原始 anthropic-beta 盖回
+	common.FilterClaudeBetaHeaderInPlace(&req.Header, info.ChannelOtherSettings.ClaudeFilterBetaHeaderCompat)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)

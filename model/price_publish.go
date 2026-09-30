@@ -1,12 +1,10 @@
 package model
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/QuantumNous/new-api/common"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 // 价格变动发布批次（含 baseline）。
@@ -19,14 +17,13 @@ type PricePublishBatch struct {
 	AffectedGroups string `json:"affected_groups" gorm:"type:text"` // JSON []string
 	Summary        string `json:"summary" gorm:"type:text"`         // JSON {up,down,added,removed}
 	// 发布时全部定价 key 的快照（map[optionKey]jsonString 的 JSON），下次 diff 的基准。
-	// AutoMigrate 先建 text，MySQL 随后由 migratePricePublishSnapshotColumn 升级为 mediumtext。
-	Snapshot    string `json:"-" gorm:"type:text"`
-	IsBaseline  bool   `json:"is_baseline"`
-	EmailState  string `json:"email_state" gorm:"type:varchar(16)"` // none/sending/done/partial
-	EmailTotal  int    `json:"email_total"`
-	EmailSent   int    `json:"email_sent"`
-	EmailFailed int    `json:"email_failed"`
-	EmailCursor int    `json:"email_cursor"` // 断点续发：已处理到的 user id
+	Snapshot    PricePublishSnapshot `json:"-"`
+	IsBaseline  bool                 `json:"is_baseline"`
+	EmailState  string               `json:"email_state" gorm:"type:varchar(16)"` // none/sending/done/partial
+	EmailTotal  int                  `json:"email_total"`
+	EmailSent   int                  `json:"email_sent"`
+	EmailFailed int                  `json:"email_failed"`
+	EmailCursor int                  `json:"email_cursor"` // 断点续发：已处理到的 user id
 }
 
 // 变动明细（不按分组打散，读取时应用层过滤）。
@@ -51,31 +48,17 @@ const (
 	PriceEmailStatePartial = "partial"
 )
 
-// migratePricePublishSnapshotColumn 把 MySQL 下 snapshot 列从 text(64KB) 升到 mediumtext(16MB)，
-// 防止大规模定价快照被截断。SQLite/PG 的 TEXT 无长度限制，无需处理。幂等。
-func migratePricePublishSnapshotColumn() {
-	if !common.UsingMySQL {
-		return
+// PricePublishSnapshot 是定价快照列的类型。结构体标签只能写死一种列类型：写 text 的话，
+// MySQL 上每次启动 AutoMigrate 都会把升级过的 mediumtext 改回 text，严格模式下只要有一份
+// 快照超过 64KB，这条 ALTER 就报 Data too long，InitDB 失败，进程起不来。按方言给出列类型，
+// AutoMigrate 在 MySQL 上直接建/升到 mediumtext，此后不再改动。SQLite/PG 的 text 不限长。
+type PricePublishSnapshot string
+
+func (PricePublishSnapshot) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
+	if db.Dialector.Name() == "mysql" {
+		return "mediumtext"
 	}
-	tableName := "price_publish_batches"
-	if !DB.Migrator().HasTable(tableName) {
-		return
-	}
-	var dataType string
-	if err := DB.Raw(`SELECT DATA_TYPE FROM information_schema.columns
-		WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
-		tableName, "snapshot").Scan(&dataType).Error; err != nil {
-		common.SysLog(fmt.Sprintf("warning: failed to query %s.snapshot column type: %v", tableName, err))
-		return
-	}
-	if strings.EqualFold(dataType, "mediumtext") {
-		return
-	}
-	if err := DB.Exec(fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN snapshot MEDIUMTEXT", tableName)).Error; err != nil {
-		common.SysLog(fmt.Sprintf("warning: failed to migrate %s.snapshot to mediumtext: %v", tableName, err))
-	} else {
-		common.SysLog(fmt.Sprintf("successfully migrated %s.snapshot to mediumtext", tableName))
-	}
+	return "text"
 }
 
 // InsertPricePublishBatch 事务写入批次与明细，回填 batch.Id 与 item.BatchId。

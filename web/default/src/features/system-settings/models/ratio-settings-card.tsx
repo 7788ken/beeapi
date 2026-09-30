@@ -5,6 +5,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { getPendingPriceChanges } from '@/features/price-changes/api'
@@ -20,7 +23,6 @@ import {
 } from './price-publish-panel'
 import { ToolPriceSettings } from './tool-price-settings'
 import { UpstreamRatioSync } from './upstream-ratio-sync'
-import { Button } from '@/components/ui/button'
 import {
   formatJsonForTextarea,
   normalizeJsonString,
@@ -187,6 +189,36 @@ const groupSchema = z.object({
 type ModelFormValues = z.infer<typeof modelSchema>
 type GroupFormValues = z.infer<typeof groupSchema>
 
+function groupDefaultsSnapshot(defaults: GroupFormValues): string {
+  return JSON.stringify({
+    GroupRatio: normalizeJsonString(defaults.GroupRatio),
+    TopupGroupRatio: normalizeJsonString(defaults.TopupGroupRatio),
+    UserUsableGroups: normalizeJsonString(defaults.UserUsableGroups),
+    GroupGroupRatio: normalizeJsonString(defaults.GroupGroupRatio),
+    AutoGroups: normalizeJsonString(defaults.AutoGroups),
+    DefaultUseAutoGroup: defaults.DefaultUseAutoGroup,
+    GroupSpecialUsableGroup: normalizeJsonString(
+      defaults.GroupSpecialUsableGroup
+    ),
+  })
+}
+
+function modelDefaultsSnapshot(defaults: ModelFormValues): string {
+  return JSON.stringify({
+    ModelPrice: normalizeJsonString(defaults.ModelPrice),
+    ModelRatio: normalizeJsonString(defaults.ModelRatio),
+    CacheRatio: normalizeJsonString(defaults.CacheRatio),
+    CreateCacheRatio: normalizeJsonString(defaults.CreateCacheRatio),
+    CompletionRatio: normalizeJsonString(defaults.CompletionRatio),
+    ImageRatio: normalizeJsonString(defaults.ImageRatio),
+    AudioRatio: normalizeJsonString(defaults.AudioRatio),
+    AudioCompletionRatio: normalizeJsonString(defaults.AudioCompletionRatio),
+    ExposeRatioEnabled: defaults.ExposeRatioEnabled,
+    BillingMode: normalizeJsonString(defaults.BillingMode),
+    BillingExpr: normalizeJsonString(defaults.BillingExpr),
+  })
+}
+
 type RatioSettingsCardProps = {
   modelDefaults: ModelFormValues
   groupDefaults: GroupFormValues
@@ -293,7 +325,14 @@ export function RatioSettingsCard({
     },
   })
 
+  const lastModelSnapshotRef = useRef(modelDefaultsSnapshot(modelDefaults))
+  const lastGroupSnapshotRef = useRef(groupDefaultsSnapshot(groupDefaults))
+
   useEffect(() => {
+    const snapshot = modelDefaultsSnapshot(modelDefaults)
+    if (snapshot === lastModelSnapshotRef.current) return
+    lastModelSnapshotRef.current = snapshot
+
     modelNormalizedDefaults.current = {
       ModelPrice: normalizeJsonString(modelDefaults.ModelPrice),
       ModelRatio: normalizeJsonString(modelDefaults.ModelRatio),
@@ -328,6 +367,10 @@ export function RatioSettingsCard({
   }, [modelDefaults, modelForm])
 
   useEffect(() => {
+    const snapshot = groupDefaultsSnapshot(groupDefaults)
+    if (snapshot === lastGroupSnapshotRef.current) return
+    lastGroupSnapshotRef.current = snapshot
+
     groupNormalizedDefaults.current = {
       GroupRatio: normalizeJsonString(groupDefaults.GroupRatio),
       TopupGroupRatio: normalizeJsonString(groupDefaults.TopupGroupRatio),
@@ -449,9 +492,10 @@ export function RatioSettingsCard({
       description={t(
         'Configure model, caching, and group ratios used for billing'
       )}
+      surface={false}
     >
       <Tabs defaultValue='matrix' className='space-y-6'>
-        <TabsList className='grid w-full grid-cols-6'>
+        <TabsList className='grid h-auto w-full grid-cols-3 lg:grid-cols-6'>
           <TabsTrigger value='models'>{t('Model ratios')}</TabsTrigger>
           <TabsTrigger value='groups'>{t('Group ratios')}</TabsTrigger>
           <TabsTrigger value='matrix'>{t('Pricing matrix')}</TabsTrigger>
@@ -464,13 +508,13 @@ export function RatioSettingsCard({
             {hasPendingPriceChanges && (
               <span
                 aria-hidden
-                className='absolute top-1 right-1 size-1.5 rounded-full bg-red-500'
+                className='group-data-[state=active]/tab:bg-primary-foreground absolute top-1 right-1 size-1.5 rounded-full bg-red-500'
               />
             )}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value='models'>
+        <TabsContent value='models' className={cn(surfaceClass, 'p-6')}>
           <ModelRatioForm
             form={modelForm}
             onSave={saveModelRatios}
@@ -492,21 +536,20 @@ export function RatioSettingsCard({
           <div className='space-y-4'>
             <GroupRatioMatrixEditor form={groupForm} />
             <Button
+              type='button'
               onClick={groupForm.handleSubmit(saveGroupRatios)}
               disabled={updateOption.isPending}
             >
-              {updateOption.isPending
-                ? t('Saving...')
-                : t('Save group ratios')}
+              {updateOption.isPending ? t('Saving...') : t('Save group ratios')}
             </Button>
           </div>
         </TabsContent>
 
-        <TabsContent value='tool-prices'>
+        <TabsContent value='tool-prices' className={cn(surfaceClass, 'p-6')}>
           <ToolPriceSettings defaultValue={toolPricesDefault} />
         </TabsContent>
 
-        <TabsContent value='upstream-sync'>
+        <TabsContent value='upstream-sync' className={cn(surfaceClass, 'p-6')}>
           <UpstreamRatioSync
             modelRatios={{
               ModelPrice: modelDefaults.ModelPrice,
@@ -523,7 +566,7 @@ export function RatioSettingsCard({
           />
         </TabsContent>
 
-        <TabsContent value='price-publish'>
+        <TabsContent value='price-publish' className={cn(surfaceClass, 'p-6')}>
           <PricePublishPanel />
         </TabsContent>
       </Tabs>

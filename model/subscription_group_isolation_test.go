@@ -255,7 +255,7 @@ func TestGetEligibleActiveSubscription_PicksRightGroup(t *testing.T) {
 	insertUserSubForGroupTest(t, 10, 100, 1, 0)
 	insertUserSubForGroupTest(t, 20, 100, 2, 0)
 
-	sub, plan, _, err := GetEligibleActiveSubscription(100, "claude")
+	sub, plan, _, _, err := GetEligibleActiveSubscription(100, "claude")
 	require.NoError(t, err)
 	require.NotNil(t, sub)
 	require.NotNil(t, plan)
@@ -270,7 +270,7 @@ func TestGetEligibleActiveSubscription_EmptyUsingGroupReturnsNil(t *testing.T) {
 	insertPlanForGroupTest(t, 1, "codex", 1000)
 	insertUserSubForGroupTest(t, 10, 100, 1, 0)
 
-	sub, _, _, err := GetEligibleActiveSubscription(100, "")
+	sub, _, _, _, err := GetEligibleActiveSubscription(100, "")
 	require.NoError(t, err)
 	assert.Nil(t, sub, `UsingGroup="" 不应返回任何订阅`)
 }
@@ -380,7 +380,7 @@ func TestGetEligibleActiveSubscription_ExcludesHidden(t *testing.T) {
 	// 防御性：即便 active 被强制 hidden（理论上不会发生），扣费查询也应排除
 	require.NoError(t, DB.Model(&UserSubscription{}).Where("id=?", 10).Update("is_hidden", true).Error)
 
-	sub, _, _, err := GetEligibleActiveSubscription(100, "codex")
+	sub, _, _, _, err := GetEligibleActiveSubscription(100, "codex")
 	require.NoError(t, err)
 	assert.Nil(t, sub, "is_hidden=true 的订阅不应被扣费选中")
 }
@@ -410,7 +410,7 @@ func TestGetEligibleActiveSubscription_NoMatchReturnsNil(t *testing.T) {
 	insertPlanForGroupTest(t, 1, "codex", 1000)
 	insertUserSubForGroupTest(t, 10, 100, 1, 0)
 
-	sub, _, _, err := GetEligibleActiveSubscription(100, "claude")
+	sub, _, _, _, err := GetEligibleActiveSubscription(100, "claude")
 	require.NoError(t, err)
 	assert.Nil(t, sub, "无匹配 group 应返回 nil 不报错")
 }

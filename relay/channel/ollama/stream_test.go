@@ -18,6 +18,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOllamaStreamHandlerKeepsDoneFrameToolCalls(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := strings.Join([]string{
+		`{"model":"llama3.1","created_at":"2026-05-27T12:00:00Z","message":{"role":"assistant","content":""},"done":false}`,
+		`{"model":"llama3.1","created_at":"2026-05-27T12:00:00Z","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris"}}}]},"done":true,"done_reason":"stop","prompt_eval_count":5,"eval_count":7}`,
+	}, "\n")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	usage, apiErr := ollamaStreamHandler(c, &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama3.1"},
+	}, resp)
+	require.Nil(t, apiErr)
+	require.Equal(t, 5, usage.PromptTokens)
+	require.Equal(t, 7, usage.CompletionTokens)
+	require.Contains(t, w.Body.String(), `"name":"get_weather"`)
+	require.Contains(t, w.Body.String(), `"finish_reason":"tool_calls"`)
+}
+
 func TestOllamaChatHandlerNonStreamToolCalls(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

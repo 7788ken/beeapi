@@ -144,7 +144,7 @@ const NoticeModal = ({
     return (
       <div
         dangerouslySetInnerHTML={{ __html: noticeContent }}
-        className='notice-content-scroll max-h-[55vh] overflow-y-auto pr-2'
+        className='notice-content-scroll max-h-[55vh] overflow-y-auto pr-2 break-words [overflow-wrap:anywhere]'
       />
     );
   };
@@ -180,7 +180,7 @@ const NoticeModal = ({
                 extra={
                   item.extra ? (
                     <div
-                      className='text-xs text-gray-500'
+                      className='text-xs text-gray-500 break-words [overflow-wrap:anywhere]'
                       dangerouslySetInnerHTML={{ __html: htmlExtra }}
                     />
                   ) : null
@@ -189,7 +189,7 @@ const NoticeModal = ({
               >
                 <div>
                   <div
-                    className={item.isUnread ? 'shine-text' : ''}
+                    className={`${item.isUnread ? 'shine-text' : ''} break-words [overflow-wrap:anywhere]`}
                     dangerouslySetInnerHTML={{ __html: htmlContent }}
                   />
                 </div>

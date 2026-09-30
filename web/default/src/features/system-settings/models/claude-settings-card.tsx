@@ -50,6 +50,7 @@ const schema = z.object({
       .number()
       .min(0.1, { message: 'Must be at least 0.1' })
       .max(1, { message: 'Must be 1 or less' }),
+    system_role_lift_enabled: z.boolean(),
   }),
 })
 
@@ -61,6 +62,7 @@ type FlatClaudeSettings = {
   'claude.default_max_tokens': string
   'claude.thinking_adapter_enabled': boolean
   'claude.thinking_adapter_budget_tokens_percentage': number
+  'claude.system_role_lift_enabled': boolean
 }
 
 type ClaudeSettingsCardProps = {
@@ -82,6 +84,8 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
     'claude.thinking_adapter_budget_tokens_percentage': Number(
       defaultValues.claude.thinking_adapter_budget_tokens_percentage
     ),
+    'claude.system_role_lift_enabled':
+      defaultValues.claude.system_role_lift_enabled,
   })
 
   const buildFormDefaults = (
@@ -97,6 +101,7 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
       thinking_adapter_enabled: values.claude.thinking_adapter_enabled,
       thinking_adapter_budget_tokens_percentage:
         values.claude.thinking_adapter_budget_tokens_percentage,
+      system_role_lift_enabled: values.claude.system_role_lift_enabled,
     },
   })
 
@@ -122,6 +127,8 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
       'claude.thinking_adapter_budget_tokens_percentage': Number(
         defaultValues.claude.thinking_adapter_budget_tokens_percentage
       ),
+      'claude.system_role_lift_enabled':
+        defaultValues.claude.system_role_lift_enabled,
     }
 
     form.reset(buildFormDefaults(defaultValues))
@@ -138,6 +145,7 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
       'claude.thinking_adapter_enabled': values.claude.thinking_adapter_enabled,
       'claude.thinking_adapter_budget_tokens_percentage':
         values.claude.thinking_adapter_budget_tokens_percentage,
+      'claude.system_role_lift_enabled': values.claude.system_role_lift_enabled,
     }
 
     const updates = (
@@ -250,6 +258,31 @@ export function ClaudeSettingsCard({ defaultValues }: ClaudeSettingsCardProps) {
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name='claude.system_role_lift_enabled'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between'>
+                <div className='space-y-0.5'>
+                  <FormLabel className='text-base'>
+                    {t('System Role Lift')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Lift OpenAI-style system role messages into the top-level system field on /v1/messages. Disable for pass-through-only semantics.'
+                    )}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
 
           <Button type='submit' disabled={updateOption.isPending}>
             {updateOption.isPending ? t('Saving...') : t('Save Changes')}

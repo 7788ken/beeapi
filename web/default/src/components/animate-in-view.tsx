@@ -1,4 +1,4 @@
-import { useRef, useEffect, type ReactNode } from 'react'
+import { useRef, useEffect, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 interface AnimateInViewProps {
@@ -21,6 +21,7 @@ export function AnimateInView(props: AnimateInViewProps) {
   } = props
 
   const ref = useRef<HTMLDivElement>(null)
+  const [shown, setShown] = useState(false)
 
   useEffect(() => {
     const el = ref.current
@@ -28,20 +29,17 @@ export function AnimateInView(props: AnimateInViewProps) {
 
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
     if (mq.matches) {
-      el.classList.remove('opacity-0')
-      el.classList.add(`landing-animate-${animation}`)
+      setShown(true)
       return
     }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          el.classList.remove('opacity-0')
-          el.classList.add(`landing-animate-${animation}`)
+          setShown(true)
           if (once) observer.unobserve(el)
         } else if (!once) {
-          el.classList.add('opacity-0')
-          el.classList.remove(`landing-animate-${animation}`)
+          setShown(false)
         }
       },
       { threshold, rootMargin: '0px 0px -40px 0px' }
@@ -55,7 +53,7 @@ export function AnimateInView(props: AnimateInViewProps) {
     <Tag
       ref={ref as never}
       className={cn(
-        'opacity-0 will-change-[transform,opacity]',
+        shown ? `landing-animate-${animation}` : 'opacity-0',
         props.className
       )}
       style={{ animationDelay: delay ? `${delay}ms` : undefined }}

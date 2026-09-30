@@ -45,7 +45,6 @@ const healthNumberFields = [
   ['rebounce_protection_threshold', '反弹锁定阈值', 0, 1],
   ['demote_cooldown_sec', '降级冷却时间（秒）', 0, 1],
   ['recovery_probe_minutes', '禁用渠道恢复探活间隔（分钟）', 1, 1],
-  ['shadow_sample_rate', '影子采样率', 0, 0.001, 1],
   ['degrade_probe_min_level', '降级渠道探活最低级别', 1, 1],
   ['degrade_probe_minutes', '降级渠道探活间隔（分钟）', 1, 1],
   ['degrade_probe_count', '每次降级渠道探活次数', 1, 1],
@@ -58,24 +57,6 @@ const healthBooleanFields = [
   ['notify_on_upgrade', '恢复时发送通知'],
   ['degrade_probe_enabled', '启用降级渠道探活恢复'],
 ];
-
-const parseHealthTagsFromStorage = (raw) => {
-  if (!raw || raw === 'null') return '';
-  try {
-    const tags = JSON.parse(raw);
-    return Array.isArray(tags) ? tags.join(',') : raw;
-  } catch {
-    return raw;
-  }
-};
-
-const healthTagsToStorage = (display) =>
-  JSON.stringify(
-    String(display || '')
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean),
-  );
 
 export default function SettingsMonitoring(props) {
   const { t } = useTranslation();
@@ -112,9 +93,6 @@ export default function SettingsMonitoring(props) {
     'channel_health_setting.demote_cooldown_sec': 60,
     'channel_health_setting.recovery_strategy': 'probe',
     'channel_health_setting.recovery_probe_minutes': 30,
-    'channel_health_setting.recovery_probe_model': '',
-    'channel_health_setting.shadow_sample_rate': 0,
-    'channel_health_setting.skip_channel_tags': '',
     'channel_health_setting.degrade_probe_enabled': true,
     'channel_health_setting.degrade_probe_min_level': 1,
     'channel_health_setting.degrade_probe_minutes': 10,
@@ -168,9 +146,6 @@ export default function SettingsMonitoring(props) {
           AutomaticRetryStatusCodes: parsedAutoRetryStatusCodes.normalized,
           'channel_health_setting.countable_status_codes':
             parsedChannelHealthStatusCodes.normalized,
-          'channel_health_setting.skip_channel_tags': healthTagsToStorage(
-            inputs['channel_health_setting.skip_channel_tags'],
-          ),
         };
         value = normalizedMap[item.key] ?? inputs[item.key];
       }
@@ -203,10 +178,7 @@ export default function SettingsMonitoring(props) {
     const currentInputs = {};
     for (let key in props.options) {
       if (Object.keys(inputs).includes(key)) {
-        currentInputs[key] =
-          key === 'channel_health_setting.skip_channel_tags'
-            ? parseHealthTagsFromStorage(props.options[key])
-            : props.options[key];
+        currentInputs[key] = props.options[key];
       }
     }
     setInputs(currentInputs);
@@ -444,32 +416,6 @@ export default function SettingsMonitoring(props) {
                     setInputs({
                       ...inputs,
                       'channel_health_setting.recovery_strategy': value,
-                    })
-                  }
-                />
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Input
-                  field='channel_health_setting.recovery_probe_model'
-                  label={t('恢复探活模型')}
-                  extraText={t('留空时由后端选择渠道可用模型')}
-                  onChange={(value) =>
-                    setInputs({
-                      ...inputs,
-                      'channel_health_setting.recovery_probe_model': value,
-                    })
-                  }
-                />
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Input
-                  field='channel_health_setting.skip_channel_tags'
-                  label={t('忽略的渠道标签')}
-                  extraText={t('使用英文逗号分隔')}
-                  onChange={(value) =>
-                    setInputs({
-                      ...inputs,
-                      'channel_health_setting.skip_channel_tags': value,
                     })
                   }
                 />

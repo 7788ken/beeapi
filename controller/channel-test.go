@@ -126,7 +126,9 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		constant.ChannelTypeJimeng,
 		constant.ChannelTypeDoubaoVideo,
 		constant.ChannelTypeSdVideo,
+		constant.ChannelTypeSdVideoV2,
 		constant.ChannelTypeVidu,
+		constant.ChannelTypeMiniMaxInf,
 	}
 	if lo.Contains(unsupportedTestChannelTypes, channel.Type) {
 		channelTypeName := constant.GetChannelTypeName(channel.Type)
@@ -199,6 +201,9 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	}
 	cache.WriteContext(c)
 	c.Set("id", 1)
+	c.Set("token_id", 0)
+	c.Set("token_name", channelTestLogTokenName(channel))
+	c.Set(string(constant.ContextKeyChannelTest), true)
 
 	//c.Request.Header.Set("Authorization", "Bearer "+channel.Key)
 	c.Request.Header.Set("Content-Type", "application/json")
@@ -964,6 +969,9 @@ func testAllChannels(notify bool) error {
 			if common.DerefIntOr(channel.VerifyDisabled, 0) == 1 {
 				continue // 隔离：verify 禁用的渠道由 verify 调度自管，健康度主动测试不碰
 			}
+			if channel.GetSetting().SkipAutoTest {
+				continue // 渠道设置了「不参与定时测试和可用性测试」
+			}
 			isChannelEnabled := channel.Status == common.ChannelStatusEnabled
 			tik := time.Now()
 			result := testChannelAuto(channel, shouldUseStreamForAutomaticChannelTest(channel))
@@ -1044,6 +1052,10 @@ func recoverAutoDisabledChannels() error {
 		if !channel.GetAutoBan() {
 			continue
 		}
+		// 跳过设置了「不参与定时测试和可用性测试」的渠道
+		if channel.GetSetting().SkipAutoTest {
+			continue
+		}
 		// 跳过 manually disabled（不应该出现在结果里，但兜底）
 		if channel.Status != common.ChannelStatusManuallyDisabled {
 			result := testChannelAuto(channel, shouldUseStreamForAutomaticChannelTest(channel))
@@ -1088,6 +1100,9 @@ func probeDegradedChannels() {
 		if !channel.GetAutoBan() {
 			continue
 		}
+		if channel.GetSetting().SkipAutoTest {
+			continue // 渠道设置了「不参与定时测试和可用性测试」
+		}
 		for i := 0; i < probeCount; i++ {
 			result := testChannelAuto(channel, shouldUseStreamForAutomaticChannelTest(channel))
 			if result.newAPIError == nil {
@@ -1106,10 +1121,10 @@ var autoTestChannelsOnce sync.Once
 
 // AutomaticallyTestChannels 定时探活后台 goroutine，三条互不干扰的循环：
 //
-//	1. 降级探测：channel_health_setting.enabled && degrade_probe_enabled，间隔 degrade_probe_minutes。
-//	2. 恢复探活：channel_health_setting.enabled && recovery_strategy=probe，间隔 recovery_probe_minutes，
-//	   只扫 AutoDisabled+permanent_disabled=0 的渠道。
-//	3. 全量定时测试：monitor_setting.auto_test_channel_enabled，间隔 auto_test_channel_minutes。
+//  1. 降级探测：channel_health_setting.enabled && degrade_probe_enabled，间隔 degrade_probe_minutes。
+//  2. 恢复探活：channel_health_setting.enabled && recovery_strategy=probe，间隔 recovery_probe_minutes，
+//     只扫 AutoDisabled+permanent_disabled=0 的渠道。
+//  3. 全量定时测试：monitor_setting.auto_test_channel_enabled，间隔 auto_test_channel_minutes。
 //
 // 被动健康（降级/熔断）与主动全量测试是两个正交能力：前者靠真实流量判渠道好坏，后者给无流量的
 // 渠道提供可用性证据。曾经把 1、2 与 3 写成互斥（被动模式开就跳过全量扫），结果开了被动模式后

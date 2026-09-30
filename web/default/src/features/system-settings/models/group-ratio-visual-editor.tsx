@@ -33,11 +33,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { safeJsonParse } from '../utils/json-parser'
+import {
+  normalizeUsableGroups,
+  type UsableGroupRawValue,
+} from './group-ratio-maps'
 
 type GroupRatioVisualEditorProps = {
   groupRatio: string
   topupGroupRatio: string
   groupGroupRatio: string
+  userUsableGroups: string
   autoGroups: string
   onChange: (field: string, value: string) => void
 }
@@ -56,6 +61,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   groupRatio,
   topupGroupRatio,
   groupGroupRatio,
+  userUsableGroups,
   autoGroups,
   onChange,
 }: GroupRatioVisualEditorProps) {
@@ -180,6 +186,19 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
 
     const field = type === 'groupRatio' ? 'GroupRatio' : 'TopupGroupRatio'
     onChange(field, JSON.stringify(map, null, 2))
+
+    if (type === 'groupRatio') {
+      const usable = normalizeUsableGroups(
+        safeJsonParse<Record<string, UsableGroupRawValue>>(userUsableGroups, {
+          fallback: {},
+          silent: true,
+        })
+      )
+      if (Object.prototype.hasOwnProperty.call(usable, name)) {
+        delete usable[name]
+        onChange('UserUsableGroups', JSON.stringify(usable, null, 2))
+      }
+    }
   }
 
   // Auto groups handlers
@@ -354,6 +373,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                               <Pencil className='h-4 w-4' />
                             </Button>
                             <Button
+                              type='button'
                               variant='ghost'
                               size='sm'
                               onClick={() =>

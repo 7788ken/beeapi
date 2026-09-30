@@ -2,6 +2,7 @@ import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { resolveAdminPermFlags } from '@/lib/admin-perms'
 import { Redemptions } from '@/features/redemption-codes'
 import { REDEMPTION_STATUS_VALUES } from '@/features/redemption-codes/constants'
 
@@ -17,6 +18,16 @@ export const Route = createFileRoute('/_authenticated/redemption-codes/')({
     const { auth } = useAuthStore.getState()
 
     if (!auth.user || auth.user.role < ROLE.ADMIN) {
+      throw redirect({
+        to: '/403',
+      })
+    }
+    const perms = resolveAdminPermFlags(
+      auth.user.role,
+      auth.user.permissions?.admin,
+      auth.user.admin_perms
+    )
+    if (!perms.redemption_manage) {
       throw redirect({
         to: '/403',
       })

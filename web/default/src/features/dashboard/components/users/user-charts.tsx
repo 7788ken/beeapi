@@ -4,8 +4,10 @@ import { VChart } from '@visactor/react-vchart'
 import { Users, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useTheme } from '@/context/theme-provider'
+import { surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
 import {
@@ -19,6 +21,7 @@ import {
   processUserChartData,
 } from '@/features/dashboard/lib'
 import type { ProcessedUserChartData } from '@/features/dashboard/types'
+import { dashSegItem, dashSegTrack } from '../overview/dash-emphasis'
 import { UserGroupsDialog } from './user-groups-dialog'
 
 let themeManagerPromise: Promise<
@@ -142,27 +145,26 @@ export function UserCharts() {
     [userData, isLoading, timeGranularity, t, topUserLimit]
   )
 
+  const isEmpty = !isLoading && (userData?.length ?? 0) === 0
+
   return (
-    <div className='space-y-3'>
-      <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
-        <div className='flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
+    <div className='space-y-6'>
+      <div className='flex items-center gap-2 overflow-x-auto pb-1 sm:gap-3'>
+        <div className={dashSegTrack}>
           {TIME_RANGE_PRESETS.map((preset) => (
             <button
               key={preset.days}
               type='button'
               onClick={() => handleRangeChange(preset.days)}
-              className={`rounded-[5px] px-2.5 py-1 text-xs font-medium transition-colors ${
-                selectedRange === preset.days
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
+              aria-pressed={selectedRange === preset.days}
+              className={dashSegItem(selectedRange === preset.days)}
             >
               {t(preset.label)}
             </button>
           ))}
         </div>
 
-        <div className='flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
+        <div className={dashSegTrack}>
           {TIME_GRANULARITY_OPTIONS.map((opt) => (
             <button
               key={opt.value}
@@ -170,18 +172,15 @@ export function UserCharts() {
               onClick={() =>
                 handleGranularityChange(opt.value as TimeGranularity)
               }
-              className={`rounded-[5px] px-2.5 py-1 text-xs font-medium transition-colors ${
-                timeGranularity === opt.value
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
+              aria-pressed={timeGranularity === opt.value}
+              className={dashSegItem(timeGranularity === opt.value)}
             >
               {t(opt.label)}
             </button>
           ))}
         </div>
 
-        <div className='flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
+        <div className={dashSegTrack}>
           <span className='text-muted-foreground px-2 text-xs font-medium'>
             {t('Top Users')}
           </span>
@@ -190,11 +189,8 @@ export function UserCharts() {
               key={limit}
               type='button'
               onClick={() => setTopUserLimit(limit)}
-              className={`rounded-[5px] px-2.5 py-1 text-xs font-medium transition-colors ${
-                topUserLimit === limit
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
+              aria-pressed={topUserLimit === limit}
+              className={dashSegItem(topUserLimit === limit)}
             >
               {t('Top {{count}}', { count: limit })}
             </button>
@@ -206,7 +202,7 @@ export function UserCharts() {
         )}
       </div>
 
-      <div className='grid gap-3'>
+      <div className='grid gap-6'>
         {USER_CHARTS.map((chart) => {
           const spec = chartData[chart.specKey]
           const chartSpec =
@@ -226,7 +222,7 @@ export function UserCharts() {
           return (
             <div
               key={chart.value}
-              className='overflow-hidden rounded-lg border'
+              className={cn(surfaceClass, 'overflow-hidden')}
             >
               <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
                 <Users className='text-muted-foreground/60 size-4' />
@@ -242,9 +238,19 @@ export function UserCharts() {
                 </div>
               </div>
 
-              <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
+              <div
+                className={cn(
+                  'p-1.5 sm:p-2',
+                  // 空态不需要撑满图表高度
+                  isEmpty ? 'h-40' : 'h-[300px] sm:h-96'
+                )}
+              >
                 {isLoading ? (
                   <Skeleton className='h-full w-full' />
+                ) : isEmpty ? (
+                  <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
+                    {t('No data in selected range')}
+                  </div>
                 ) : (
                   themeReady &&
                   spec && (

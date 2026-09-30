@@ -27,6 +27,16 @@ const (
 	// 默认关：管理员改得动渠道就能把 base_url 指到自己的机器把上游 key 骗出去，
 	// 所以这一项必须由超级管理员逐个显式开。
 	AdminPermChannelEdit = "channel.edit"
+	// 默认关：倍率暴露上游成本结构/利润空间，属经营敏感信息；
+	// 关闭后后端列表/单取接口直接剥离相关字段，前端同时隐藏对应列。
+	// root 恒有；管理员须由超级管理员显式开。
+	AdminPermChannelMetrics = "channel.metrics"
+	// AdminPermModelView 模型页（/api/models/* 模型元数据/定价）。默认关：定价结构属经营敏感信息。
+	AdminPermModelView = "model.view"
+	// AdminPermRedemptionManage 兑换码管理（/api/redemption/*）。默认关：发兑换码 = 发额度（钱）。
+	AdminPermRedemptionManage = "redemption.manage"
+	// AdminPermSubscriptionManage 订阅管理（/api/subscription/admin/* 套餐配置）。默认关：经营配置。
+	AdminPermSubscriptionManage = "subscription.manage"
 	// AdminPermLogView 全站日志入口（/api/log 管理端；关闭后只能看自己的日志）
 	AdminPermLogView = "log.view"
 	// AdminPermQuotaGrant 给普通用户增加额度。非 root 只能「增加」，不能扣减/覆盖
@@ -37,6 +47,12 @@ const (
 	// 这是计费行为开关，不是访问权限，因此 root 不豁免。
 	AdminPermQuotaDeductSelf = "quota.deduct_self"
 
+	// AdminPermContentBackupView 内容备份元数据查看（归档/队列/节点页）。
+	// 正文预览与下载是 Root 专属，不含在此权限内。
+	AdminPermContentBackupView = "content_backup.view"
+	// AdminPermContentBackupManage 内容备份任务重试（蕴含 view：manage 权限同时命中两者）。
+	AdminPermContentBackupManage = "content_backup.manage"
+
 	// AdminPermsNone 显式无任何权限，用于和「未配置」区分
 	AdminPermsNone = "none"
 )
@@ -45,10 +61,16 @@ const (
 var AllAdminPerms = []string{
 	AdminPermChannelView,
 	AdminPermChannelEdit,
+	AdminPermChannelMetrics,
+	AdminPermModelView,
+	AdminPermRedemptionManage,
+	AdminPermSubscriptionManage,
 	AdminPermLogView,
 	AdminPermQuotaGrant,
 	AdminPermUserManage,
 	AdminPermQuotaDeductSelf,
+	AdminPermContentBackupView,
+	AdminPermContentBackupManage,
 }
 
 // defaultAdminPerms 未配置时的默认权限。
@@ -67,9 +89,15 @@ var defaultAdminPerms = []string{
 var rootAdminPerms = []string{
 	AdminPermChannelView,
 	AdminPermChannelEdit,
+	AdminPermChannelMetrics,
+	AdminPermModelView,
+	AdminPermRedemptionManage,
+	AdminPermSubscriptionManage,
 	AdminPermLogView,
 	AdminPermQuotaGrant,
 	AdminPermUserManage,
+	AdminPermContentBackupView,
+	AdminPermContentBackupManage,
 }
 
 func IsValidAdminPerm(perm string) bool {

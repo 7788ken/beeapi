@@ -76,6 +76,15 @@ func main() {
 		return
 	}
 
+	// 采集钩子必须在服务请求前装配完毕：晚于此进入的第一个白名单请求
+	// 会因 Runtime 快照缺失而被拒收（计数，不影响中转）。
+	// 模块关闭（CONTENT_BACKUP_MODULE=off）时不装配：采集器直接放行，上传/清理/心跳都不启动。
+	if common.ContentBackupModuleEnabled {
+		initContentBackupCapture()
+	} else {
+		common.SysLog("content backup module disabled (CONTENT_BACKUP_MODULE=off)")
+	}
+
 	common.SysLog("New API " + common.Version + " started")
 
 	// 价格变动发布与通知：首启写 baseline 快照 + 断点续发中断的邮件批次（master only）
@@ -126,6 +135,14 @@ func main() {
 		model.SyncOptions(ctx, common.SyncFrequency)
 	}); err != nil {
 		common.FatalLog("failed to start option sync: " + err.Error())
+		return
+	}
+
+	// 集群内配置变更广播，多节点部署时保证秒级收敛
+	if err := backgroundtask.Start("option-subscribe", func(ctx context.Context) {
+		model.SubscribeOptionUpdates(ctx)
+	}); err != nil {
+		common.FatalLog("failed to start option subscribe: " + err.Error())
 		return
 	}
 
@@ -204,6 +221,21 @@ func main() {
 		common.FatalLog("failed to start channel verify schedule: " + err.Error())
 		return
 	}
+	if err := service.StartIQTestScheduleTask(); err != nil {
+		common.FatalLog("failed to start IQ test schedule: " + err.Error())
+		return
+	}
+
+	// 内容备份告警（设计文档 7.3）。刻意不按主节点收敛：每个节点独立评估自己看得见的
+	// 节点行，"同一故障 30 分钟最多提醒一次"由 content_backup_alerts 的发送租约在数据库
+	// 层保证，多进程可以重复判断，但只有一个进程真正发送。功能关闭时每轮直接跳过；
+	// 模块关闭时不启动。
+	if common.ContentBackupModuleEnabled {
+		if err := service.StartContentBackupAlertTask(); err != nil {
+			common.FatalLog("failed to start content backup alert task: " + err.Error())
+			return
+		}
+	}
 
 	// 用户 RPM 后台快照：废弃，改为 Redis 实时桶。
 	// service.StartUserMetricsTask()
@@ -234,6 +266,12 @@ func main() {
 	// Channel upstream model update check task
 	if err := controller.StartChannelUpstreamModelUpdateTask(); err != nil {
 		common.FatalLog("failed to start channel upstream model update task: " + err.Error())
+		return
+	}
+
+	// Channel model missing recheck task（报错移出模型后的延时复核/自动加回）
+	if err := controller.StartChannelModelMissingRecheckTask(); err != nil {
+		common.FatalLog("failed to start channel model missing recheck task: " + err.Error())
 		return
 	}
 
@@ -371,6 +409,12 @@ func main() {
 		common.SysError("graceful shutdown completed with errors: " + shutdownErr.Error())
 		common.FatalLog("server shutdown failed: " + errors.Join(shutdownErr, serveFailure).Error())
 	}
+
+	// 中转已排空，给交接池一个独立的最多 60 秒排空窗口（文档 4.5）：
+	// 已捕获的快照尽量送达 daemon，超时未送达的按结果未知计数。
+	if err := service.Shutdown(context.Background()); err != nil {
+		common.SysError("content backup handoff drain: " + err.Error())
+	}
 	common.SysLog("graceful shutdown completed")
 	if serveFailure != nil {
 		common.FatalLog("failed to serve HTTP: " + serveFailure.Error())
@@ -435,6 +479,10 @@ func InitResources() error {
 	// 加载环境变量
 	common.InitEnv()
 	schemaMigrationOnly, err := schemaMigrationOnlyEnabled()
+	if err != nil {
+		return err
+	}
+	common.ContentBackupModuleEnabled, err = contentBackupModuleEnabled()
 	if err != nil {
 		return err
 	}

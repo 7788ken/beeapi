@@ -75,4 +75,13 @@ const (
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
 	ContextKeyIsStream ContextKey = "is_stream"
+	// ContextKeyClientDisconnected 由 relay 写出层在"还有数据要发却发不出去"时置位。
+	// 不能用 c.Request.Context().Err() 代替：响应写完后客户端正常关连接也会让
+	// 该 ctx 取消，晚读会把正常结束误判成断连。
+	ContextKeyClientDisconnected ContextKey = "client_disconnected"
+
+	// ContextKeyChannelTest marks an in-process channel probe (all-channel test,
+	// degrade/recovery ping). Content backup must skip these even if the probe
+	// later starts going through the HTTP relay collector.
+	ContextKeyChannelTest ContextKey = "is_channel_test"
 )

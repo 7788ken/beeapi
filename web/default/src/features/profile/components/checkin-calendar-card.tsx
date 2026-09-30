@@ -14,6 +14,7 @@ import { formatQuotaWithCurrency } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -208,7 +209,7 @@ export function CheckinCalendarCard({
 
   if (isLoading) {
     return (
-      <div className='bg-card overflow-hidden rounded-2xl border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='p-6'>
           <div className='flex items-start justify-between gap-4'>
             <div className='flex items-center gap-3'>
@@ -258,7 +259,7 @@ export function CheckinCalendarCard({
         </DialogContent>
       </Dialog>
 
-      <div className='bg-card overflow-hidden rounded-2xl border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         {/* Header */}
         <div className='border-b p-4 sm:p-6'>
           <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4'>

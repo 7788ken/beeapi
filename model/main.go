@@ -16,7 +16,6 @@ import (
 	"github.com/QuantumNous/new-api/internal/logmigration"
 
 	"github.com/glebarez/sqlite"
-	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -171,7 +170,7 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, error) {
 		} else {
 			common.LogSqlType = common.DatabaseTypeMySQL
 		}
-		return gorm.Open(mysql.Open(dsn), newGormConfig())
+		return gorm.Open(newMySQLDialector(dsn), newGormConfig())
 	}
 	// Use SQLite
 	common.SysLog("SQL_DSN not set, using SQLite as database")
@@ -330,12 +329,22 @@ func migrateDB() error {
 		&PricePublishBatch{},
 		&PricePublishItem{},
 		&SdAsset{},
+		&IQTestModel{},
+		&IQTestRun{},
+		&IQTestResult{},
+		&IQTestLease{},
+		&IQTestControl{},
+		&IQTestAction{},
+		&IQTestNotice{},
+		&ContentBackupJob{},
+		&ContentBackupDailyStat{},
+		&ContentBackupStatDelta{},
+		&ContentBackupNodeStatus{},
+		&ContentBackupAlert{},
 	)
 	if err != nil {
 		return err
 	}
-	// MySQL: snapshot 列 text → mediumtext（大规模定价快照防截断），幂等
-	migratePricePublishSnapshotColumn()
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -402,6 +411,18 @@ func migrateDBFast() error {
 		{&SubSite{}, "SubSite"},
 		{&PricePublishBatch{}, "PricePublishBatch"},
 		{&PricePublishItem{}, "PricePublishItem"},
+		{&IQTestModel{}, "IQTestModel"},
+		{&IQTestRun{}, "IQTestRun"},
+		{&IQTestResult{}, "IQTestResult"},
+		{&IQTestLease{}, "IQTestLease"},
+		{&IQTestControl{}, "IQTestControl"},
+		{&IQTestAction{}, "IQTestAction"},
+		{&IQTestNotice{}, "IQTestNotice"},
+		{&ContentBackupJob{}, "ContentBackupJob"},
+		{&ContentBackupDailyStat{}, "ContentBackupDailyStat"},
+		{&ContentBackupStatDelta{}, "ContentBackupStatDelta"},
+		{&ContentBackupNodeStatus{}, "ContentBackupNodeStatus"},
+		{&ContentBackupAlert{}, "ContentBackupAlert"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))

@@ -607,7 +607,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	switch pref {
 	case "subscription_only":
 		// 严格按 group 匹配查询：仅当用户存在 BoundGroup == relayInfo.UsingGroup 的活跃订阅时才走订阅。
-		sub, _, _, subCheckErr := model.GetEligibleActiveSubscription(relayInfo.UserId, relayInfo.UsingGroup)
+		sub, _, _, _, subCheckErr := model.GetEligibleActiveSubscription(relayInfo.UserId, relayInfo.UsingGroup)
 		if subCheckErr != nil {
 			return nil, types.NewError(subCheckErr, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
 		}
@@ -634,7 +634,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	case "subscription_first", "subscription_then_auto":
 		fallthrough
 	default:
-		sub, _, hasExhausted, subCheckErr := model.GetEligibleActiveSubscription(relayInfo.UserId, relayInfo.UsingGroup)
+		sub, _, hasExhausted, exhaustedFallback, subCheckErr := model.GetEligibleActiveSubscription(relayInfo.UserId, relayInfo.UsingGroup)
 		if subCheckErr != nil {
 			return nil, types.NewError(subCheckErr, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
 		}
@@ -642,9 +642,10 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			if hasExhausted {
 				// 该分组无活跃订阅但存在耗尽订阅：分组套餐价只对订阅额度有效，
 				// 不得回退钱包以该分组倍率扣费（token 显式绑定订阅分组时会走到这里）。
-				if pref == "subscription_then_auto" {
+				// 文案按套餐兜底分组判定：有兜底=已切到兜底组走钱包；无兜底=停服不扣钱包。
+				if exhaustedFallback != "" {
 					return nil, types.NewErrorWithStatusCode(
-						fmt.Errorf("当前分组「%s」订阅额度已用完，已切换为按量计费。请使用未绑定分组的令牌调用，或等待额度重置/续费订阅", relayInfo.UsingGroup),
+						fmt.Errorf("当前分组「%s」订阅额度已用完，已切换到兜底分组「%s」按量计费。请使用未绑定分组的令牌调用，或等待额度重置/续费订阅", relayInfo.UsingGroup, exhaustedFallback),
 						types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
 						types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 				}
@@ -659,16 +660,16 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		if apiErr != nil {
 			if apiErr.GetErrorCode() == types.ErrorCodeInsufficientUserQuota {
 				// 订阅额度耗尽时不再静默回退钱包：回退会沿用订阅分组倍率扣余额，
-				// 计价口径与资金来源错配。耗尽的后续处理（降级 auto / 保持暂停）由
-				// ProcessExhaustedSubscriptions 定时任务按用户偏好执行。
-				if pref == "subscription_then_auto" {
+				// 计价口径与资金来源错配。耗尽的后续处理（降级到套餐兜底分组 / 保持暂停）由
+				// ProcessExhaustedSubscriptions 定时任务按套餐 FallbackGroup 执行。
+				if fallback := strings.TrimSpace(sub.FallbackGroup); fallback != "" {
 					return nil, types.NewErrorWithStatusCode(
-						fmt.Errorf("当前分组「%s」订阅额度已用完，系统将在约 1 分钟内自动切换为按量计费，请稍后重试", relayInfo.UsingGroup),
+						fmt.Errorf("当前分组「%s」订阅额度已用完，系统将在约 1 分钟内自动切换到兜底分组「%s」按量计费，请稍后重试", relayInfo.UsingGroup, fallback),
 						types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
 						types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 				}
 				return nil, types.NewErrorWithStatusCode(
-					fmt.Errorf("当前分组「%s」订阅额度已用完，调用已暂停（不会扣减钱包余额）。请续费订阅，或在「我的订阅」页将消费模式切换为「优先订阅（用完转按量）」后重试", relayInfo.UsingGroup),
+					fmt.Errorf("当前分组「%s」订阅额度已用完，调用已暂停（不会扣减钱包余额）。请续费订阅或等待额度重置", relayInfo.UsingGroup),
 					types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
 					types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 			}

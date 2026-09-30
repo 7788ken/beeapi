@@ -107,14 +107,45 @@ type SiliconFlowUsageResponse struct {
 	} `json:"data"`
 }
 
+type deepSeekBalanceInfo struct {
+	Currency        string `json:"currency"`
+	TotalBalance    string `json:"total_balance"`
+	GrantedBalance  string `json:"granted_balance"`
+	ToppedUpBalance string `json:"topped_up_balance"`
+}
+
 type DeepSeekUsageResponse struct {
-	IsAvailable  bool `json:"is_available"`
-	BalanceInfos []struct {
-		Currency        string `json:"currency"`
-		TotalBalance    string `json:"total_balance"`
-		GrantedBalance  string `json:"granted_balance"`
-		ToppedUpBalance string `json:"topped_up_balance"`
-	} `json:"balance_infos"`
+	IsAvailable  bool                  `json:"is_available"`
+	BalanceInfos []deepSeekBalanceInfo `json:"balance_infos"`
+}
+
+func pickDeepSeekBalance(infos []deepSeekBalanceInfo) (string, error) {
+	var cny, usd, first string
+	for _, info := range infos {
+		amount := strings.TrimSpace(info.TotalBalance)
+		if amount == "" {
+			continue
+		}
+		if first == "" {
+			first = amount
+		}
+		switch strings.ToUpper(strings.TrimSpace(info.Currency)) {
+		case "CNY":
+			cny = amount
+		case "USD":
+			usd = amount
+		}
+	}
+	if cny != "" {
+		return cny, nil
+	}
+	if usd != "" {
+		return usd, nil
+	}
+	if first != "" {
+		return first, nil
+	}
+	return "", errors.New("no balance info")
 }
 
 type OpenRouterCreditResponse struct {
@@ -122,6 +153,49 @@ type OpenRouterCreditResponse struct {
 		TotalCredits float64 `json:"total_credits"`
 		TotalUsage   float64 `json:"total_usage"`
 	} `json:"data"`
+}
+
+// newAPIKeyUsageResponse new-api 系上游 /api/usage/token/ 响应（key 自身鉴权）。
+// 分站场景：渠道 key 是上游分站签发的令牌，该接口返回的就是这把 key 的余额。
+type newAPIKeyUsageResponse struct {
+	Code    bool   `json:"code"`
+	Message string `json:"message"`
+	Data    *struct {
+		TotalAvailable float64 `json:"total_available"` // key 剩余 quota
+		UnlimitedQuota bool    `json:"unlimited_quota"`
+	} `json:"data"`
+}
+
+// parseNewAPIKeyUsage 解析上游 key 余额响应 → USD。无限额度无法按 key 折算，报错。
+// quota→USD 用本地 QuotaPerUnit：集群各站均默认 500000/$1，上游若改过单位则折算偏差。
+func parseNewAPIKeyUsage(body []byte) (float64, error) {
+	response := newAPIKeyUsageResponse{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return 0, err
+	}
+	if !response.Code || response.Data == nil {
+		return 0, fmt.Errorf("上游返回异常: %s", response.Message)
+	}
+	if response.Data.UnlimitedQuota {
+		return 0, errors.New("上游 key 为无限额度，无法按 key 折算余额")
+	}
+	return response.Data.TotalAvailable / common.QuotaPerUnit, nil
+}
+
+// updateChannelNewAPIBalance 查上游绑定账户余额：拿渠道 key 调上游 /api/usage/token/。
+// 上游非 new-api 系（真 OpenAI/Anthropic 官方等）会 404/解析失败，调用方回退按类型计费逻辑。
+func updateChannelNewAPIBalance(channel *model.Channel) (float64, error) {
+	url := fmt.Sprintf("%s/api/usage/token/", channel.GetBaseURL())
+	body, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
+	if err != nil {
+		return 0, err
+	}
+	balance, err := parseNewAPIKeyUsage(body)
+	if err != nil {
+		return 0, err
+	}
+	channel.UpdateBalance(balance)
+	return balance, nil
 }
 
 // GetAuthHeader get auth header
@@ -284,17 +358,11 @@ func updateChannelDeepSeekBalance(channel *model.Channel) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	index := -1
-	for i, balanceInfo := range response.BalanceInfos {
-		if balanceInfo.Currency == "CNY" {
-			index = i
-			break
-		}
+	raw, err := pickDeepSeekBalance(response.BalanceInfos)
+	if err != nil {
+		return 0, err
 	}
-	if index == -1 {
-		return 0, errors.New("currency CNY not found")
-	}
-	balance, err := strconv.ParseFloat(response.BalanceInfos[index].TotalBalance, 64)
+	balance, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return 0, err
 	}
@@ -371,6 +439,12 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() == "" {
 		channel.BaseURL = &baseURL
+	}
+	// 分站（new-api 系上游）场景：「查询余额」应查上游绑定账户、即分站所用 key 的余额。
+	// 先试 new-api 系自带的 /api/usage/token/（key 自身鉴权），成功直接返回；
+	// 失败（上游非 new-api 系，如真 OpenAI/Anthropic 官方 404）再落回下方按类型的计费逻辑。
+	if balance, err := updateChannelNewAPIBalance(channel); err == nil {
+		return balance, nil
 	}
 	switch channel.Type {
 	case constant.ChannelTypeOpenAI:

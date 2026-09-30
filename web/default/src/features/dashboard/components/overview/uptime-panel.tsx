@@ -1,152 +1,161 @@
-import { memo, useEffect, useState } from 'react'
-import { Activity, RotateCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { getUptimeStatus } from '@/features/dashboard/api'
 import type {
   UptimeGroupResult,
   UptimeMonitor,
 } from '@/features/dashboard/types'
-import { PanelWrapper } from '../ui/panel-wrapper'
+import {
+  DashBody,
+  DashCard,
+  DashSkeleton,
+  DashTitle,
+  dashSecondaryBtn,
+} from './dash-style'
 
-const STATUS_COLOR_MAP: Record<number, string> = {
-  1: 'bg-emerald-500',
-  0: 'bg-red-500',
-  2: 'bg-amber-500',
-  3: 'bg-blue-500',
+function monitorLabel(status: number, t: (key: string) => string) {
+  switch (status) {
+    case 1:
+      return t('Monitor is up')
+    case 0:
+      return t('Monitor is down')
+    case 2:
+      return t('Monitor is checking')
+    case 3:
+      return t('Maintenance')
+    default:
+      return t('No sample')
+  }
 }
-const DEFAULT_STATUS_COLOR = 'bg-muted-foreground/40'
 
-const StatusDot = memo(function StatusDot(props: { status: number }) {
-  const color = STATUS_COLOR_MAP[props.status] ?? DEFAULT_STATUS_COLOR
-  return <span className={cn('inline-block size-2 rounded-full', color)} />
-})
+function monitorTone(status: number) {
+  if (status === 1) return 'text-primary'
+  if (status === 0) return 'font-semibold text-foreground'
+  return 'text-muted-foreground'
+}
 
 export function UptimePanel() {
   const { t } = useTranslation()
   const [groups, setGroups] = useState<UptimeGroupResult[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     const abortController = new AbortController()
-
     getUptimeStatus()
       .then((res) => {
         if (abortController.signal.aborted) return
         setGroups(res?.data || [])
+        setFailed(false)
       })
       .catch(() => {
         if (abortController.signal.aborted) return
         setGroups([])
+        setFailed(true)
       })
       .finally(() => {
-        if (!abortController.signal.aborted) {
-          setLoading(false)
-        }
+        if (!abortController.signal.aborted) setLoading(false)
       })
-
     return () => {
       abortController.abort()
     }
   }, [])
 
   const handleRefresh = () => {
-    const abortController = new AbortController()
     setRefreshing(true)
-
     getUptimeStatus()
       .then((res) => {
-        if (abortController.signal.aborted) return
         setGroups(res?.data || [])
+        setFailed(false)
       })
       .catch(() => {
-        if (abortController.signal.aborted) return
-        setGroups([])
+        setFailed(true)
       })
       .finally(() => {
-        if (!abortController.signal.aborted) {
-          setRefreshing(false)
-        }
+        setRefreshing(false)
       })
   }
 
+  const hasMonitors = groups.some((group) => (group.monitors?.length ?? 0) > 0)
+
   return (
-    <PanelWrapper
-      title={
-        <span className='flex items-center gap-2'>
-          <Activity className='text-muted-foreground/60 size-4' />
-          {t('Uptime')}
-        </span>
-      }
-      loading={loading}
-      empty={!groups.length}
-      emptyMessage={t('No uptime monitoring configured')}
-      height='h-64 sm:h-80'
-      headerActions={
-        <Button
-          variant='ghost'
-          size='sm'
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className='size-7 p-0'
-        >
-          <RotateCw
-            className={cn('size-3.5', refreshing && 'animate-spin')}
-            aria-label={t('Refresh')}
-          />
-        </Button>
-      }
-    >
-      <ScrollArea className='h-64 sm:h-80'>
-        <div className='-mx-3 space-y-0 sm:-mx-5'>
-          {groups.map((group, groupIdx) => (
-            <div key={group.categoryName}>
-              <div className='bg-muted/30 border-border/60 border-b px-3 py-2 sm:px-5'>
-                <div className='flex items-center gap-2'>
-                  <h4 className='text-muted-foreground text-xs font-semibold tracking-wider uppercase'>
-                    {group.categoryName}
-                  </h4>
-                  <span className='text-muted-foreground/40 font-mono text-xs tabular-nums'>
+    <DashCard className='h-full'>
+      <DashTitle
+        title={t('Uptime')}
+        actions={
+          hasMonitors || failed ? (
+            <button
+              type='button'
+              className={dashSecondaryBtn}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-busy={refreshing}
+            >
+              {t('Refresh')}
+            </button>
+          ) : undefined
+        }
+      />
+      <DashBody>
+        {loading ? (
+          <DashSkeleton className='h-24 w-full' />
+        ) : failed && !hasMonitors ? (
+          <p className='font-sans text-sm text-pretty'>
+            {t('Could not load service monitors.')}
+          </p>
+        ) : !hasMonitors ? (
+          <p className='text-muted-foreground font-sans text-sm text-pretty'>
+            {t('Service monitoring is not set up.')}
+          </p>
+        ) : (
+          <div className='flex flex-col gap-4 md:gap-6'>
+            {failed ? (
+              <p className='font-sans text-sm text-pretty'>
+                {t('Could not load service monitors.')}
+              </p>
+            ) : null}
+            {groups.map((group) => (
+              <div key={group.categoryName}>
+                <h4 className='text-muted-foreground mb-2 font-sans text-sm'>
+                  {group.categoryName}
+                  <span className='ml-2 tabular-nums'>
                     {group.monitors?.length || 0}
                   </span>
-                </div>
+                </h4>
+                <ul>
+                  {group.monitors?.map((monitor: UptimeMonitor) => (
+                    <li
+                      key={monitor.name}
+                      className='border-border hover:bg-foreground/[0.04] flex items-center justify-between gap-3 border-t py-3 transition-colors duration-[300ms] ease-out motion-reduce:transition-none'
+                    >
+                      <span className='min-w-0 truncate font-sans text-sm'>
+                        {monitor.name}
+                        {monitor.group ? (
+                          <span className='text-muted-foreground'>
+                            {' '}
+                            · {monitor.group}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className={cn(
+                          'shrink-0 font-sans text-xs tabular-nums',
+                          monitorTone(monitor.status)
+                        )}
+                      >
+                        {monitorLabel(monitor.status, t)} ·{' '}
+                        {((monitor.uptime ?? 0) * 100).toFixed(2)}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-
-              {group.monitors?.map(
-                (monitor: UptimeMonitor, monitorIdx: number) => (
-                  <div
-                    key={monitor.name}
-                    className={cn(
-                      'hover:bg-muted/40 flex items-center justify-between gap-2 px-3 py-2 transition-colors sm:px-5 sm:py-2.5',
-                      monitorIdx < (group.monitors?.length || 0) - 1 &&
-                        'border-border/40 border-b',
-                      groupIdx < groups.length - 1 &&
-                        monitorIdx === (group.monitors?.length || 0) - 1 &&
-                        'border-border/60 border-b'
-                    )}
-                  >
-                    <div className='flex min-w-0 items-center gap-2.5'>
-                      <StatusDot status={monitor.status} />
-                      <span className='truncate text-sm'>{monitor.name}</span>
-                      {monitor.group && (
-                        <span className='text-muted-foreground/40 shrink-0 text-xs'>
-                          ({monitor.group})
-                        </span>
-                      )}
-                    </div>
-                    <span className='text-foreground shrink-0 font-mono text-sm font-semibold tabular-nums'>
-                      {((monitor.uptime ?? 0) * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                )
-              )}
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
-    </PanelWrapper>
+            ))}
+          </div>
+        )}
+      </DashBody>
+    </DashCard>
   )
 }

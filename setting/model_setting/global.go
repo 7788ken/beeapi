@@ -13,6 +13,10 @@ type ChatCompletionsToResponsesPolicy struct {
 	ChannelIDs    []int    `json:"channel_ids,omitempty"`
 	ChannelTypes  []int    `json:"channel_types,omitempty"`
 	ModelPatterns []string `json:"model_patterns,omitempty"`
+	// AutoToolsReasoningModels: 命中这些模型(正则)的 chat/completions 请求,
+	// 当同时携带 function tools 与 reasoning_effort 时,无条件自动改走 /v1/responses。
+	// 这是上游硬约束(如 gpt-5.5 该组合在 chat/completions 直接 400),独立于 Enabled。
+	AutoToolsReasoningModels []string `json:"auto_tools_reasoning_models,omitempty"`
 }
 
 func (p ChatCompletionsToResponsesPolicy) IsChannelEnabled(channelID int, channelType int) bool {
@@ -46,8 +50,9 @@ var defaultOpenaiSettings = GlobalSettings{
 		"kimi-k2-thinking",
 	},
 	ChatCompletionsToResponsesPolicy: ChatCompletionsToResponsesPolicy{
-		Enabled:     false,
-		AllChannels: true,
+		Enabled:                  false,
+		AllChannels:              true,
+		AutoToolsReasoningModels: []string{`^gpt-5\.5`},
 	},
 }
 

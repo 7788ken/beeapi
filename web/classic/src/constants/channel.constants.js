@@ -199,6 +199,16 @@ export const CHANNEL_OPTIONS = [
     color: 'purple',
     label: 'Advanced Custom',
   },
+  {
+    value: 60,
+    color: 'cyan',
+    label: 'SdVideoV2 (dreamina max)',
+  },
+  {
+    value: 61,
+    color: 'blue',
+    label: 'MiniMaxInf (minimax-h3)',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

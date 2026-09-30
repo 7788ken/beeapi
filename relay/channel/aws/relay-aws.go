@@ -115,6 +115,8 @@ func doAwsClientRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor,
 	for key, value := range headerOverride {
 		requestHeader.Set(key, value)
 	}
+	// beta 头过滤必须在 Header Override 之后：override 会把客户端原始 anthropic-beta 盖回
+	relaycommon.FilterClaudeBetaHeaderInPlace(&requestHeader, info.ChannelOtherSettings.ClaudeFilterBetaHeaderCompat)
 
 	if isNovaModel(awsModelId) {
 		var novaReq *NovaRequest

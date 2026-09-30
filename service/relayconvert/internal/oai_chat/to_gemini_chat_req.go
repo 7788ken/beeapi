@@ -12,6 +12,7 @@ import (
 	relaymeta "github.com/QuantumNous/new-api/service/relayconvert/internal/meta"
 	sharedgemini "github.com/QuantumNous/new-api/service/relayconvert/internal/shared/gemini"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
 )
 
@@ -94,7 +95,7 @@ func OpenAIChatRequestToGeminiGenerateContent(c *gin.Context, textRequest dto.Ge
 					}
 					if thinkingLevel, exists := thinkingConfig["thinking_level"]; exists {
 						if v, ok := thinkingLevel.(string); ok {
-							tempThinkingConfig.ThinkingLevel = v
+							tempThinkingConfig.ThinkingLevel = reasoning.NormalizeGeminiThinkingLevel(v)
 							hasThinkingConfig = true
 						} else {
 							return nil, errors.New("extra_body.google.thinking_config.thinking_level must be a string")

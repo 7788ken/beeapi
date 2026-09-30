@@ -4,8 +4,10 @@ import { Eye, Snowflake, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -56,7 +58,7 @@ export function BlocksTab() {
 
   return (
     <div className='space-y-3'>
-      <div className='rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <Table>
           <TableHeader>
             <TableRow>

@@ -40,7 +40,7 @@ export function checkIsActive(
   item: NavItem,
   mainNav = false
 ): boolean {
-  const hrefWithoutQuery = href.split('?')[0]
+  const hrefWithoutQuery = href.split('#')[0].split('?')[0]
 
   if (item.activeUrls?.some((url) => urlToString(url) === hrefWithoutQuery)) {
     return true

@@ -11,14 +11,18 @@ import { channelsQueryKeys } from '../lib'
 
 const UPTIME_STALE_MS = 5 * 60 * 1000 // 与后端进程内缓存 TTL 对齐
 
+// 渠道列表「可用性」图表的默认窗口小时数。刷新按钮强制重拉时必须用同一个值，
+// 否则会写到一个没人订阅的 query key 上，图表不会更新。
+export const CHANNEL_UPTIME_HOURS = 24
+
 /**
  * 渠道列表「可用性」列的数据源：整表拉一次 /api/channel/uptime，按 channel id 分发到行。
  * 返回 Map<channelId, UptimeDayPoint[]>，每个渠道都补齐成 hours 个小时槽位，无日志的小时灰显；
  * 窗口内完全没有日志的渠道不会出现在 Map 里（行内显示空态）。
  */
-export function useChannelUptime(hours = 24) {
+export function useChannelUptime(hours = CHANNEL_UPTIME_HOURS) {
   const { data } = useQuery({
-    queryKey: [...channelsQueryKeys.all, 'uptime', hours],
+    queryKey: channelsQueryKeys.uptime(hours),
     queryFn: () => getChannelUptime(hours),
     staleTime: UPTIME_STALE_MS,
     refetchOnWindowFocus: false,

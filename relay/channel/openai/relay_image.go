@@ -60,13 +60,14 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 }
 
 // normalizeOpenAIUsage maps the OpenAI Images usage shape (input_tokens /
-// output_tokens / input_tokens_details) onto the canonical prompt/completion
-// fields. It is used only on the OpenAI image relay paths (generations/edits,
-// streaming and non-streaming): the image API never returns prompt_tokens /
-// completion_tokens, so the overwrite (=) semantics here are equivalent to the
-// previous additive (+=) behavior while avoiding any future double-counting if
-// both field sets are ever populated. Do not reuse this on chat/embedding paths
-// without revisiting the overwrite semantics.
+// output_tokens / input_tokens_details / output_tokens_details) onto the
+// canonical prompt/completion fields. It is used only on the OpenAI image
+// relay paths (generations/edits, streaming and non-streaming): the image API
+// never returns prompt_tokens / completion_tokens, so the overwrite (=)
+// semantics here are equivalent to the previous additive (+=) behavior while
+// avoiding any future double-counting if both field sets are ever populated.
+// Do not reuse this on chat/embedding paths without revisiting the overwrite
+// semantics.
 func normalizeOpenAIUsage(usage *dto.Usage) {
 	if usage == nil {
 		return
@@ -84,8 +85,30 @@ func normalizeOpenAIUsage(usage *dto.Usage) {
 		usage.PromptTokensDetails.TextTokens = usage.InputTokensDetails.TextTokens
 		usage.PromptTokensDetails.AudioTokens = usage.InputTokensDetails.AudioTokens
 	}
+	fillEmptyOutputTokenDetails(&usage.CompletionTokenDetails, usage.OutputTokensDetails)
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	}
+}
+
+// fillEmptyOutputTokenDetails copies output_*_details onto completion_tokens_details
+// only when the destination field is still zero. OpenAI Images and some xAI
+// bodies send one shape or the other; adding both would double-count img_o.
+func fillEmptyOutputTokenDetails(dest *dto.OutputTokenDetails, src *dto.OutputTokenDetails) {
+	if dest == nil || src == nil {
+		return
+	}
+	if dest.ImageTokens == 0 {
+		dest.ImageTokens = src.ImageTokens
+	}
+	if dest.TextTokens == 0 {
+		dest.TextTokens = src.TextTokens
+	}
+	if dest.AudioTokens == 0 {
+		dest.AudioTokens = src.AudioTokens
+	}
+	if dest.ReasoningTokens == 0 {
+		dest.ReasoningTokens = src.ReasoningTokens
 	}
 }
 

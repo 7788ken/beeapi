@@ -42,15 +42,16 @@ func requestOpenAI2Zhipu(request dto.GeneralOpenAIRequest) *dto.GeneralOpenAIReq
 		Stop, _ = request.Stop.([]string)
 	}
 	out := &dto.GeneralOpenAIRequest{
-		Model:       request.Model,
-		Stream:      request.Stream,
-		Messages:    messages,
-		Temperature: request.Temperature,
-		TopP:        request.TopP,
-		Stop:        Stop,
-		Tools:       request.Tools,
-		ToolChoice:  request.ToolChoice,
-		THINKING:    request.THINKING,
+		Model:           request.Model,
+		Stream:          request.Stream,
+		Messages:        messages,
+		Temperature:     request.Temperature,
+		TopP:            request.TopP,
+		Stop:            Stop,
+		Tools:           request.Tools,
+		ToolChoice:      request.ToolChoice,
+		THINKING:        request.THINKING,
+		ReasoningEffort: request.ReasoningEffort, // #7124 glm-5 思考强度只认这个字段，丢掉会按 max 狂想
 	}
 	if request.MaxTokens != nil || request.MaxCompletionTokens != nil {
 		maxTokens := request.GetMaxTokens()

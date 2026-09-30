@@ -15,6 +15,12 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { formatQuota } from '@/lib/format'
+import { RankBadge } from '../channels/format'
+import {
+  dashPrimaryShadow,
+  dashSegItem,
+  dashSegTrack,
+} from '../overview/dash-emphasis'
 import { getRuntimeSnapshot, triggerRecomputeRuntime, RuntimeRateLimitedError } from './api'
 import type {
   RuntimeSnapshot,
@@ -39,30 +45,6 @@ function fmtRelative(ts: number, t: (key: string) => string): string {
   if (diff < 60) return `${diff}${t('s ago')}`
   if (diff < 3600) return `${Math.floor(diff / 60)}${t('m ago')}`
   return `${Math.floor(diff / 3600)}${t('h ago')}`
-}
-
-interface RankBadgeProps {
-  rank: number
-}
-function RankBadge({ rank }: RankBadgeProps) {
-  const color =
-    rank === 1
-      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-      : rank === 2
-        ? 'bg-slate-400/15 text-slate-700 dark:text-slate-300'
-        : rank === 3
-          ? 'bg-orange-500/15 text-orange-700 dark:text-orange-400'
-          : 'bg-muted text-muted-foreground'
-  return (
-    <span
-      className={cn(
-        'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-semibold tabular-nums',
-        color
-      )}
-    >
-      {rank}
-    </span>
-  )
 }
 
 // 通用面板壳：标题 + 副标签（如 "按 RPM"） + 内容
@@ -364,20 +346,19 @@ export function RuntimePanel() {
       {/* 工具栏 */}
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <div className='flex items-center gap-2'>
-          {/* segmented control: 3 个 Button 拼成排序切换 */}
-          <div className='inline-flex rounded-md border bg-muted/30 p-0.5'>
+          {/* segmented control: 3 个原生 button 拼成排序切换 */}
+          <div className={dashSegTrack}>
             {(['rpm', 'cost', 'balance'] as RuntimeSortMode[]).map((m) => (
-              <Button
+              <button
                 key={m}
-                variant={sortMode === m ? 'default' : 'ghost'}
-                size='sm'
-                className='h-7 px-3 text-xs'
+                type='button'
+                className={dashSegItem(sortMode === m)}
                 onClick={() => setSortMode(m)}
                 aria-pressed={sortMode === m}
               >
-                {m === 'rpm' && <TrendingUp className='h-3.5 w-3.5 mr-1' />}
+                {m === 'rpm' && <TrendingUp className='h-3.5 w-3.5' />}
                 {m === 'rpm' ? 'RPM' : m === 'cost' ? t('Cost') : t('Balance')}
-              </Button>
+              </button>
             ))}
           </div>
           {data && (
@@ -408,6 +389,7 @@ export function RuntimePanel() {
               <Button
                 variant={autoRefresh ? 'default' : 'outline'}
                 size='sm'
+                className={cn(autoRefresh && dashPrimaryShadow)}
                 onClick={() => setAutoRefresh((v) => !v)}
                 aria-pressed={autoRefresh}
               >

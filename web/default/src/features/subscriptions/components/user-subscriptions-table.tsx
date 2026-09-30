@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { surfaceClass } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -121,7 +123,7 @@ export function UserSubscriptionsTable() {
   return (
     <div className='space-y-3'>
       <div className='flex flex-wrap items-center gap-1.5 sm:gap-2'>
-        <div className='flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
+        <div className='bg-card flex shrink-0 items-center gap-1.5 rounded-md border p-0.5'>
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.value}
@@ -149,7 +151,7 @@ export function UserSubscriptionsTable() {
               if (e.key === 'Enter') applyUsername()
             }}
             placeholder='按用户名筛选'
-            className='h-8 w-44 text-xs'
+            className='bg-card h-8 w-44 text-xs'
           />
           <Button
             size='sm'
@@ -173,7 +175,7 @@ export function UserSubscriptionsTable() {
         </div>
 
         <Select value={boundGroup} onValueChange={handleGroupChange}>
-          <SelectTrigger className='h-8 w-56 text-xs'>
+          <SelectTrigger className='bg-card h-8 w-56 text-xs'>
             <SelectValue placeholder='全部绑定分组' />
           </SelectTrigger>
           <SelectContent>
@@ -194,7 +196,7 @@ export function UserSubscriptionsTable() {
         ) : null}
       </div>
 
-      <div className='overflow-hidden rounded-md border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <Table>
           <TableHeader>
             <TableRow>

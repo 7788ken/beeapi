@@ -1,14 +1,18 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
+/**
+ * 控制台卡片表面：实底 + 边框 + 多层阴影（STYLE.md）。
+ * 页面网格上的任何独立区块都用它，否则网格会从盒子里透过去。
+ */
+export const surfaceClass =
+  'bg-card text-card-foreground rounded-xl border shadow-surface'
+
 function Card({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot='card'
-      className={cn(
-        'bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm',
-        className
-      )}
+      className={cn(surfaceClass, 'flex flex-col gap-6 py-6', className)}
       {...props}
     />
   )

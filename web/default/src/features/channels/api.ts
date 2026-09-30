@@ -766,12 +766,15 @@ export interface ChannelUptimeResponse {
 }
 
 export async function getChannelUptime(
-  hours = 24
+  hours = 24,
+  force = false
 ): Promise<ChannelUptimeResponse> {
   const res = await api.get('/api/channel/uptime', {
     params: {
       hours,
       tz_offset_sec: -new Date().getTimezoneOffset() * 60,
+      // force=true 时带 refresh=1，让后端绕过 5 分钟进程内缓存重查（渠道列表刷新按钮）
+      ...(force ? { refresh: 1 } : {}),
     },
   })
   return res.data

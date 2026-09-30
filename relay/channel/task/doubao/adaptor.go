@@ -47,8 +47,9 @@ func getMetaString(m map[string]interface{}, key string) (string, bool) {
 	}
 }
 
-// resolveSeedanceDuration 取客户端实际传的时长（秒），优先 Seconds 字符串，
-// 回退 Duration int。返回 (seconds, hasValue, parseErr)。
+// resolveSeedanceDuration 取客户端实际传的时长（秒），优先级与 convertToRequestPayload 一致：
+// 顶层 seconds(string) > 顶层 duration(int) > metadata.duration。返回 (seconds, hasValue, parseErr)。
+// -1（自适应/视频编辑哨兵）视为有效取值参与校验，不再被当作"未传"忽略。
 func resolveSeedanceDuration(req *relaycommon.TaskSubmitReq) (int, bool, error) {
 	if req.Seconds != "" {
 		sec, err := strconv.Atoi(req.Seconds)
@@ -57,10 +58,38 @@ func resolveSeedanceDuration(req *relaycommon.TaskSubmitReq) (int, bool, error) 
 		}
 		return sec, true, nil
 	}
-	if req.Duration > 0 {
+	if req.Duration != 0 {
 		return req.Duration, true, nil
 	}
+	if sec, ok := getMetaInt(req.Metadata, "duration"); ok {
+		return sec, true, nil
+	}
 	return 0, false, nil
+}
+
+// getMetaInt 从 metadata 取整数字段：JSON 数字解析为 float64，multipart 路径为 int，
+// 数字字符串也接受（与 dto.IntValue 的宽松反序列化一致）。第二个返回值表示字段存在且可解析。
+func getMetaInt(m map[string]interface{}, key string) (int, bool) {
+	if m == nil {
+		return 0, false
+	}
+	v, exists := m[key]
+	if !exists || v == nil {
+		return 0, false
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case string:
+		if i, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // ============================
@@ -146,7 +175,8 @@ type TaskAdaptor struct {
 	taskcommon.BaseBilling
 	ChannelType int
 	// UpstreamFlavor 上游线协议风格：空/UpstreamFlavorArk = 火山方舟原生；
-	// UpstreamFlavorSd = sd 网关风格（/v1/video/generate + /v1/video/tasks，见 sd_flavor.go）。
+	// UpstreamFlavorSd = sd 网关风格（/v1/video/generate + /v1/video/tasks，见 sd_flavor.go）；
+	// UpstreamFlavorSdV2 = sd 网关 v2（/v2/video/generate + /v2/video/tasks，dreamina max 线路）。
 	// 轮询链路不经过 Init，由 GetTaskAdaptor 按渠道类型注入；提交链路在 Init 中按 ChannelType 兜底。
 	UpstreamFlavor string
 	apiKey         string
@@ -159,11 +189,13 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.apiKey = info.ApiKey
 	if info.ChannelType == constant.ChannelTypeSdVideo {
 		a.UpstreamFlavor = UpstreamFlavorSd
+	} else if info.ChannelType == constant.ChannelTypeSdVideoV2 {
+		a.UpstreamFlavor = UpstreamFlavorSdV2
 	}
 }
 
 func (a *TaskAdaptor) isSdFlavor() bool {
-	return a.UpstreamFlavor == UpstreamFlavorSd
+	return a.UpstreamFlavor == UpstreamFlavorSd || a.UpstreamFlavor == UpstreamFlavorSdV2
 }
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
@@ -186,9 +218,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 	if sec, hasValue, parseErr := resolveSeedanceDuration(&req); parseErr != nil {
 		return service.TaskErrorWrapperLocal(parseErr, "invalid_duration", http.StatusBadRequest)
-	} else if hasValue && (sec < seedanceDurationMin || sec > seedanceDurationMax) {
+	} else if hasValue && !isSeedanceDurationAllowed(modelName, sec) {
 		return service.TaskErrorWrapperLocal(
-			fmt.Errorf("duration must be between %d and %d seconds, got %d", seedanceDurationMin, seedanceDurationMax, sec),
+			seedanceDurationError(modelName, sec),
 			"invalid_duration", http.StatusBadRequest)
 	}
 
@@ -323,6 +355,9 @@ func normalizeAssetURL(u string) string {
 
 // BuildRequestURL constructs the upstream URL.
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+	if a.UpstreamFlavor == UpstreamFlavorSdV2 {
+		return fmt.Sprintf("%s/v2/video/generate", a.baseURL), nil
+	}
 	if a.isSdFlavor() {
 		return fmt.Sprintf("%s/v1/video/generate", a.baseURL), nil
 	}
@@ -471,7 +506,10 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 
 	uri := fmt.Sprintf("%s/api/v3/contents/generations/tasks/%s", baseUrl, taskID)
-	if a.isSdFlavor() {
+	switch a.UpstreamFlavor {
+	case UpstreamFlavorSdV2:
+		uri = fmt.Sprintf("%s/v2/video/tasks/%s", baseUrl, taskID)
+	case UpstreamFlavorSd:
 		uri = fmt.Sprintf("%s/v1/video/tasks/%s", baseUrl, taskID)
 	}
 
@@ -539,10 +577,11 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		r.Content = items
 	}
 
-	// 时长优先级：顶层 seconds(string) > 顶层 duration(int) > metadata.duration
-	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
+	// 时长优先级：顶层 seconds(string) > 顶层 duration(int) > metadata.duration（已由 UnmarshalMetadata 写入）。
+	// -1 是视频编辑的自适应时长哨兵，必须以数值原样下送，不能被当作"未传"丢弃或覆写为默认值。
+	if sec, err := strconv.Atoi(req.Seconds); err == nil && sec != 0 {
 		r.Duration = lo.ToPtr(dto.IntValue(sec))
-	} else if req.Duration > 0 {
+	} else if req.Duration != 0 {
 		r.Duration = lo.ToPtr(dto.IntValue(req.Duration))
 	}
 

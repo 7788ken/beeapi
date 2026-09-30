@@ -457,6 +457,7 @@ type GeminiChatPromptFeedback struct {
 type GeminiChatResponse struct {
 	Candidates       []GeminiChatCandidate     `json:"candidates"`
 	PromptFeedback   *GeminiChatPromptFeedback `json:"promptFeedback,omitempty"`
+	ModelVersion     string                    `json:"modelVersion,omitempty"`
 	UsageMetadata    GeminiUsageMetadata       `json:"usageMetadata"`
 	HasUsageMetadata bool                      `json:"-"`
 }
@@ -467,6 +468,7 @@ func (r *GeminiChatResponse) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Candidates     []GeminiChatCandidate     `json:"candidates"`
 		PromptFeedback *GeminiChatPromptFeedback `json:"promptFeedback,omitempty"`
+		ModelVersion   string                    `json:"modelVersion"`
 		UsageMetadata  *GeminiUsageMetadata      `json:"usageMetadata"`
 	}
 	if err := common.Unmarshal(data, &aux); err != nil {
@@ -474,6 +476,7 @@ func (r *GeminiChatResponse) UnmarshalJSON(data []byte) error {
 	}
 	r.Candidates = aux.Candidates
 	r.PromptFeedback = aux.PromptFeedback
+	r.ModelVersion = aux.ModelVersion
 	r.HasUsageMetadata = aux.UsageMetadata != nil
 	if aux.UsageMetadata != nil {
 		r.UsageMetadata = *aux.UsageMetadata

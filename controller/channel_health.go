@@ -144,6 +144,9 @@ func RecoverChannelHealth(c *gin.Context) {
 			model.UpdateChannelStatus(id, "", common.ChannelStatusEnabled, "")
 		}
 	}
+	// 手动健康度恢复也必须清掉模型级摘除连击计数；否则恢复后的首个同模型错误
+	// 可能继承恢复前的历史计数，直接达到摘除门槛。
+	service.ClearChannelHealthRuntime(id)
 
 	// 3. 写审计
 	userId := c.GetInt("id")

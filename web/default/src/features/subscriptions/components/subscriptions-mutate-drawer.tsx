@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CalendarClock, CreditCard, RefreshCw, Settings2 } from 'lucide-react'
+import {
+  ArrowUpCircle,
+  CalendarClock,
+  CreditCard,
+  Network,
+  Settings2,
+  ShieldCheck,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -15,6 +22,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { MultiSelectCombobox } from '@/components/ui/multi-select-combobox'
 import {
   Select,
   SelectContent,
@@ -114,6 +122,7 @@ export function SubscriptionsMutateDrawer({
 
   const durationUnitOpts = getDurationUnitOptions(t)
   const resetPeriodOpts = getResetPeriodOptions(t)
+  const groupSelectOptions = groupOptions.map((g) => ({ value: g, label: g }))
 
   return (
     <Sheet
@@ -144,7 +153,7 @@ export function SubscriptionsMutateDrawer({
             onSubmit={form.handleSubmit(onSubmit)}
             className='flex-1 space-y-4 overflow-y-auto px-3 py-3 pb-4 sm:space-y-6 sm:px-4'
           >
-            {/* Basic Info */}
+            {/* ── 基础信息 ── */}
             <div className='space-y-4'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <Settings2 className='h-4 w-4' />
@@ -264,172 +273,6 @@ export function SubscriptionsMutateDrawer({
 
                 <FormField
                   control={form.control}
-                  name='total_amount'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Total Quota')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type='number'
-                          min={0}
-                          onChange={(e) =>
-                            field.onChange(parseFloat(e.target.value) || 0)
-                          }
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t('0 means unlimited')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-                <FormField
-                  control={form.control}
-                  name='upgrade_group'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Upgrade Group')}</FormLabel>
-                      <Select
-                        onValueChange={(v) =>
-                          field.onChange(v === '__none__' ? '' : v)
-                        }
-                        value={field.value || ''}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('No Upgrade')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value='__none__'>
-                            {t('No Upgrade')}
-                          </SelectItem>
-                          {groupOptions.map((g) => (
-                            <SelectItem key={g} value={g}>
-                              {g}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name='bound_group'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Bound Group')}</FormLabel>
-                      <Select
-                        onValueChange={(v) =>
-                          field.onChange(v === '__none__' ? '' : v)
-                        }
-                        value={field.value || ''}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('No Restriction')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value='__none__'>
-                            {t('No Restriction')}
-                          </SelectItem>
-                          {groupOptions.map((g) => (
-                            <SelectItem key={g} value={g}>
-                              {g}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        {t(
-                          'Subscription is consumed only when the request hits this group; leave empty for no restriction.'
-                        )}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
-                <FormField
-                  control={form.control}
-                  name='max_purchase_per_user'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Per-User Limit')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type='number'
-                          min={0}
-                          onChange={(e) =>
-                            field.onChange(parseInt(e.target.value, 10) || 0)
-                          }
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t('0 means unlimited')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name='stock_total'
-                  render={({ field }) => {
-                    const sold = Number(currentRow?.plan?.stock_sold || 0)
-                    const stockTotal = Number(field.value ?? -1)
-                    const remaining =
-                      stockTotal < 0 ? -1 : Math.max(0, stockTotal - sold)
-                    return (
-                      <FormItem>
-                        <FormLabel>{t('Stock')}</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type='number'
-                            min={-1}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              if (v === '') {
-                                field.onChange(-1)
-                                return
-                              }
-                              const n = parseInt(v, 10)
-                              field.onChange(
-                                Number.isFinite(n) ? Math.max(-1, n) : -1
-                              )
-                            }}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          {stockTotal < 0
-                            ? t('-1 means unlimited stock')
-                            : t('Sold {{sold}} / Remaining {{remaining}}', {
-                                sold,
-                                remaining,
-                              })}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )
-                  }}
-                />
-
-                <FormField
-                  control={form.control}
                   name='sort_order'
                   render={({ field }) => (
                     <FormItem>
@@ -470,12 +313,34 @@ export function SubscriptionsMutateDrawer({
               </div>
             </div>
 
-            {/* Duration Settings */}
+            {/* ── 配额与周期 ── */}
             <div className='space-y-4'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <CalendarClock className='h-4 w-4' />
-                {t('Duration Settings')}
+                {t('Quota & Cycle')}
               </h3>
+
+              <FormField
+                control={form.control}
+                name='total_amount'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Total Quota')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type='number'
+                        min={0}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>{t('0 means unlimited')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
@@ -550,14 +415,6 @@ export function SubscriptionsMutateDrawer({
                   />
                 )}
               </div>
-            </div>
-
-            {/* Quota Reset */}
-            <div className='space-y-4'>
-              <h3 className='flex items-center gap-2 text-sm font-medium'>
-                <RefreshCw className='h-4 w-4' />
-                {t('Quota Reset')}
-              </h3>
 
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
@@ -612,7 +469,242 @@ export function SubscriptionsMutateDrawer({
               </div>
             </div>
 
-            {/* Payment Config */}
+            {/* ── 渠道控制 ── */}
+            <div className='space-y-4'>
+              <h3 className='flex items-center gap-2 text-sm font-medium'>
+                <Network className='h-4 w-4' />
+                {t('Channel Control')}
+              </h3>
+
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='bound_group'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Bound Group')}</FormLabel>
+                      <Select
+                        onValueChange={(v) =>
+                          field.onChange(v === '__none__' ? '' : v)
+                        }
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('No Restriction')} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value='__none__'>
+                            {t('No Restriction')}
+                          </SelectItem>
+                          {groupOptions.map((g) => (
+                            <SelectItem key={g} value={g}>
+                              {g}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {t(
+                          'Subscription is consumed only when the request hits this group; leave empty for no restriction.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='fallback_group'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Fallback Group')}</FormLabel>
+                      <Select
+                        onValueChange={(v) =>
+                          field.onChange(v === '__none__' ? '' : v)
+                        }
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('No Fallback')} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value='__none__'>
+                            {t('No Fallback')}
+                          </SelectItem>
+                          {groupOptions.map((g) => (
+                            <SelectItem key={g} value={g}>
+                              {g}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {t(
+                          'After quota is exhausted, switch to this group and keep billing from wallet balance; leave empty to stop service on exhaustion.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* ── 购买限制 ── */}
+            <div className='space-y-4'>
+              <h3 className='flex items-center gap-2 text-sm font-medium'>
+                <ShieldCheck className='h-4 w-4' />
+                {t('Purchase Limits')}
+              </h3>
+
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='max_purchase_per_user'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Per-User Limit')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min={0}
+                          onChange={(e) =>
+                            field.onChange(parseInt(e.target.value, 10) || 0)
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('0 means unlimited')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='stock_total'
+                  render={({ field }) => {
+                    const sold = Number(currentRow?.plan?.stock_sold || 0)
+                    const stockTotal = Number(field.value ?? -1)
+                    const remaining =
+                      stockTotal < 0 ? -1 : Math.max(0, stockTotal - sold)
+                    return (
+                      <FormItem>
+                        <FormLabel>{t('Stock')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='number'
+                            min={-1}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              if (v === '') {
+                                field.onChange(-1)
+                                return
+                              }
+                              const n = parseInt(v, 10)
+                              field.onChange(
+                                Number.isFinite(n) ? Math.max(-1, n) : -1
+                              )
+                            }}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {stockTotal < 0
+                            ? t('-1 means unlimited stock')
+                            : t('Sold {{sold}} / Remaining {{remaining}}', {
+                                sold,
+                                remaining,
+                              })}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )
+                  }}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name='allowed_user_groups'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Allowed User Groups')}</FormLabel>
+                    <FormControl>
+                      <MultiSelectCombobox
+                        options={groupSelectOptions}
+                        value={field.value || []}
+                        onValueChange={field.onChange}
+                        placeholder={t('All Users')}
+                        searchPlaceholder={t('Search groups')}
+                        emptyText={t('No group found')}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Only users in these groups can purchase this plan; leave empty to allow all users.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* ── 升级策略 ── */}
+            <div className='space-y-4'>
+              <h3 className='flex items-center gap-2 text-sm font-medium'>
+                <ArrowUpCircle className='h-4 w-4' />
+                {t('Upgrade Strategy')}
+              </h3>
+
+              <FormField
+                control={form.control}
+                name='upgrade_group'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Upgrade Group')}</FormLabel>
+                    <Select
+                      onValueChange={(v) =>
+                        field.onChange(v === '__none__' ? '' : v)
+                      }
+                      value={field.value || ''}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('No Upgrade')} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='__none__'>
+                          {t('No Upgrade')}
+                        </SelectItem>
+                        {groupOptions.map((g) => (
+                          <SelectItem key={g} value={g}>
+                            {g}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {t(
+                        'Upgrade the user to this group after purchase; the fallback group only takes effect when this is set.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* ── 第三方支付配置 ── */}
             <div className='space-y-4'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <CreditCard className='h-4 w-4' />

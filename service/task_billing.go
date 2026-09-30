@@ -154,6 +154,9 @@ func recordTaskRefundLog(ctx context.Context, task *model.Task, record *model.As
 		Group:     task.Group,
 		Other:     other,
 	})
+	if err := model.UpdateUserAndChannelUsedQuotaDeltaWithContext(ctx, task.UserId, task.ChannelId, -record.Quota); err != nil {
+		logger.LogError(ctx, "failed to reverse task refund usage statistics: "+err.Error())
+	}
 }
 
 // RecalculateTaskQuota 通用的异步差额结算。
@@ -198,6 +201,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	} else {
 		logType = model.LogTypeRefund
 		logQuota = -quotaDelta
+		if err := model.UpdateUserAndChannelUsedQuotaDeltaWithContext(ctx, task.UserId, task.ChannelId, quotaDelta); err != nil {
+			logger.LogError(ctx, "failed to reverse task settlement usage statistics: "+err.Error())
+		}
 	}
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
@@ -248,14 +254,20 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		return
 	}
 
-	groupRatio := ratio_setting.GetGroupRatio(group)
-	userGroupRatio, hasUserGroupRatio := ratio_setting.GetGroupGroupRatio(group, group)
-
+	// 优先沿用提交时快照的分组倍率：预扣阶段 HandleGroupRatio 用的是（用户组 → 调用组）的
+	// 专属倍率，而此处只有 task.Group（调用组），按 (group, group) 查不到专属倍率会退回
+	// 调用组的公共倍率，导致结算倍率与预扣/报价不一致（线上曾出现预扣 ×7、结算 ×8）。
 	var finalGroupRatio float64
-	if hasUserGroupRatio {
-		finalGroupRatio = userGroupRatio
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
+		finalGroupRatio = bc.GroupRatio
 	} else {
-		finalGroupRatio = groupRatio
+		groupRatio := ratio_setting.GetGroupRatio(group)
+		userGroupRatio, hasUserGroupRatio := ratio_setting.GetGroupGroupRatio(group, group)
+		if hasUserGroupRatio {
+			finalGroupRatio = userGroupRatio
+		} else {
+			finalGroupRatio = groupRatio
+		}
 	}
 
 	// 计算 OtherRatios 乘积（视频折扣、时长等）

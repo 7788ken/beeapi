@@ -184,6 +184,9 @@ var SyncFrequency int // unit is second
 var BatchUpdateEnabled = false
 var BatchUpdateInterval int
 
+// ContentBackupModuleEnabled 内容备份模块开关，默认开启；容器环境变量 CONTENT_BACKUP_MODULE=off 时关闭（启动时解析一次）。
+var ContentBackupModuleEnabled = true
+
 var RelayTimeout int // unit is second
 
 var RelayMaxIdleConns int

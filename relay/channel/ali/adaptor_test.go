@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	relayhelper "github.com/QuantumNous/new-api/relay/helper"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -169,4 +170,22 @@ func TestGeneralOpenAIRequestGatesThinkingBudgetOnSerialize(t *testing.T) {
 	value := gjson.GetBytes(encoded, "thinking_budget")
 	require.True(t, value.Exists())
 	assert.Equal(t, int64(128), value.Int())
+}
+
+func TestConvertImageRequestSetsResponseFormat(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/v1/images/generations", nil)
+
+	info := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeImagesGenerations,
+		OriginModelName: "wanx-v1",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "wanx-v1"},
+	}
+
+	req := dto.ImageRequest{Model: "wanx-v1", Prompt: "a cat", ResponseFormat: "b64_json"}
+	_, err := (&Adaptor{}).ConvertImageRequest(c, info, req)
+	require.NoError(t, err)
+	assert.Equal(t, "b64_json", c.GetString("response_format"))
 }

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 import { getStatus } from '@/lib/api'
 import type { SystemStatus } from '@/features/auth/types'
@@ -17,41 +17,45 @@ function getInitialStatus(): SystemStatus | undefined {
   return undefined
 }
 
+async function fetchStatus() {
+  const status = await getStatus()
+  try {
+    if (status) {
+      const { setConfig } = useSystemConfigStore.getState()
+      setConfig(mapStatusDataToConfig(status))
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn('[useStatus] Failed to sync status to system config', err)
+    }
+  }
+  // Save to localStorage
+  try {
+    if (typeof window !== 'undefined' && status) {
+      window.localStorage.setItem('status', JSON.stringify(status))
+    }
+  } catch {
+    /* empty */
+  }
+  return status as SystemStatus | null
+}
+
+// useStatus 与路由守卫（queryClient.fetchQuery）共用同一份 ['status'] 缓存
+export const statusQueryOptions = queryOptions({
+  queryKey: ['status'],
+  queryFn: fetchStatus,
+  // Data becomes stale after 5 minutes
+  staleTime: 5 * 60 * 1000,
+  // Cache expires after 30 minutes
+  gcTime: 30 * 60 * 1000,
+})
+
 export function useStatus() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['status'],
-    queryFn: async () => {
-      const status = await getStatus()
-      try {
-        if (status) {
-          const { setConfig } = useSystemConfigStore.getState()
-          setConfig(mapStatusDataToConfig(status))
-        }
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[useStatus] Failed to sync status to system config',
-            err
-          )
-        }
-      }
-      // Save to localStorage
-      try {
-        if (typeof window !== 'undefined' && status) {
-          window.localStorage.setItem('status', JSON.stringify(status))
-        }
-      } catch {
-        /* empty */
-      }
-      return status as SystemStatus | null
-    },
+    ...statusQueryOptions,
     // Use localStorage data as initial data
     placeholderData: getInitialStatus(),
-    // Data becomes stale after 5 minutes
-    staleTime: 5 * 60 * 1000,
-    // Cache expires after 30 minutes
-    gcTime: 30 * 60 * 1000,
   })
 
   return {

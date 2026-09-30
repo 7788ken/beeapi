@@ -127,24 +127,11 @@ export function useNotifications() {
     readPriceBatchIds,
   ])
 
-  // Handle dialog open
-  const handleOpenDialog = (tab?: NotificationTab) => {
-    // Mark Notice as read when opening dialog
-    if (noticeContent) {
+  // 标签页显示出来才算已读：停在哪个标签，只标记哪个
+  const markTabRead = (tab: NotificationTab) => {
+    if (tab === 'notice' && noticeContent) {
       markNoticeRead(noticeContent)
     }
-
-    if (tab === 'price-changes' && priceChangeBatches.length > 0) {
-      markPriceBatchesRead(priceChangeBatches.map((batch) => batch.id))
-    }
-
-    setActiveTab(tab || 'notice')
-    setDialogOpen(true)
-  }
-
-  // Handle tab change - mark announcements as read when switching to that tab
-  const handleTabChange = (tab: NotificationTab) => {
-    setActiveTab(tab)
 
     if (tab === 'announcements' && announcements.length > 0) {
       const allKeys = announcements.map((item: Record<string, unknown>) =>
@@ -156,6 +143,28 @@ export function useNotifications() {
     if (tab === 'price-changes' && priceChangeBatches.length > 0) {
       markPriceBatchesRead(priceChangeBatches.map((batch) => batch.id))
     }
+  }
+
+  // 打开时停在第一个有新内容的标签（按标签顺序），都没有新内容时停在「通知」
+  const firstUnreadTab = (): NotificationTab => {
+    if (unreadCounts.notice > 0) return 'notice'
+    if (unreadCounts.announcements > 0) return 'announcements'
+    if (unreadCounts.priceChanges > 0) return 'price-changes'
+    return 'notice'
+  }
+
+  // Handle dialog open
+  const handleOpenDialog = (tab?: NotificationTab) => {
+    const target = tab ?? firstUnreadTab()
+    markTabRead(target)
+    setActiveTab(target)
+    setDialogOpen(true)
+  }
+
+  // Handle tab change
+  const handleTabChange = (tab: NotificationTab) => {
+    setActiveTab(tab)
+    markTabRead(tab)
   }
 
   // Handle "Close Today" action

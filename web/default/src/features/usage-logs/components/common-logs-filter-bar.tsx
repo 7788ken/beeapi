@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
-import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
-import { ChevronDown, Eye, EyeOff, Loader2, RotateCcw, Search } from 'lucide-react'
+import { useNavigate, getRouteApi } from '@tanstack/react-router'
+import {
+  BarChart3,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Loader2,
+  RotateCcw,
+  Search,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useCanViewAllLogs } from '@/hooks/use-admin'
@@ -16,11 +24,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { LOG_TYPES } from '../constants'
-import { useFilterOptions, useUsernameSearch } from '../hooks/use-filter-options'
+import {
+  useFilterOptions,
+  useUsernameSearch,
+} from '../hooks/use-filter-options'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
+import { CacheChartDialog } from './dialogs/cache-chart-dialog'
 import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -52,6 +64,7 @@ export function CommonLogsFilterBar({
   const { modelOptions, groupOptions } = useFilterOptions()
 
   const [expanded, setExpanded] = useState(true)
+  const [chartOpen, setChartOpen] = useState(false)
   const [filters, setFilters] = useState<CommonLogFilters>(() => {
     const { start, end } = getDefaultTimeRange()
     return { startTime: start, endTime: end }
@@ -73,6 +86,9 @@ export function CommonLogsFilterBar({
     if (searchParams.requestId) next.requestId = searchParams.requestId
 
     if (Object.keys(next).length > 0) {
+      // The URL is the source of truth after navigation; sync the local form
+      // state so opening the chart uses exactly the visible table filters.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFilters((prev) => ({ ...prev, ...next }))
     }
 
@@ -149,7 +165,7 @@ export function CommonLogsFilterBar({
   return (
     <div className='space-y-2 sm:space-y-3'>
       {/* Primary filter row */}
-      <div className='grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2 lg:grid-cols-[minmax(280px,2fr)_minmax(140px,1fr)_minmax(120px,1fr)_minmax(120px,0.8fr)_auto]'>
+      <div className='grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2 xl:grid-cols-[minmax(280px,2fr)_minmax(140px,1fr)_minmax(120px,1fr)_minmax(120px,0.8fr)_auto_auto]'>
         <CompactDateTimeRangePicker
           start={filters.startTime}
           end={filters.endTime}
@@ -157,7 +173,7 @@ export function CommonLogsFilterBar({
             handleChange('startTime', start)
             handleChange('endTime', end)
           }}
-          className='col-span-2 lg:col-span-1'
+          className='col-span-2 xl:col-span-1'
         />
         <ComboboxInput
           placeholder={t('Model Name')}
@@ -194,6 +210,17 @@ export function CommonLogsFilterBar({
             ))}
           </SelectContent>
         </Select>
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          className='h-9 gap-1.5 px-2 text-xs'
+          onClick={() => setChartOpen(true)}
+          aria-label={t('Cache Chart')}
+        >
+          <BarChart3 className='size-3.5' />
+          {t('Cache Chart')}
+        </Button>
         <button
           type='button'
           className={cn(
@@ -212,13 +239,13 @@ export function CommonLogsFilterBar({
         </button>
       </div>
 
+      <CacheChartDialog open={chartOpen} onOpenChange={setChartOpen} />
+
       {/* Expandable filter row */}
       <div
         className={cn(
           'grid gap-2 overflow-hidden transition-all duration-200',
-          expanded
-            ? 'grid-rows-[1fr] opacity-100'
-            : 'grid-rows-[0fr] opacity-0'
+          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         )}
       >
         <div className='min-h-0 overflow-hidden'>
@@ -268,7 +295,7 @@ export function CommonLogsFilterBar({
           {stats && <div className='min-w-0'>{stats}</div>}
         </div>
 
-        <div className='flex shrink-0 items-center gap-2 self-end sm:self-auto'>
+        <div className='flex shrink-0 flex-wrap items-center justify-end gap-2 self-end sm:self-auto'>
           <button
             type='button'
             className='text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-md border transition-colors'
@@ -291,7 +318,12 @@ export function CommonLogsFilterBar({
             <RotateCcw className='size-3.5' />
             {t('Reset')}
           </Button>
-          <Button size='sm' className='h-8' onClick={handleApply} disabled={fetchingLogs > 0}>
+          <Button
+            size='sm'
+            className='h-8'
+            onClick={handleApply}
+            disabled={fetchingLogs > 0}
+          >
             {fetchingLogs > 0 ? (
               <Loader2 className='size-3.5 animate-spin' />
             ) : (

@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, surfaceClass } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import {
   Select,
@@ -343,7 +343,7 @@ export function SubscriptionPlansCard({
         {/* ==================== Tab 1: 我的订阅 ==================== */}
         <TabsContent value='my' className='mt-4 space-y-4 sm:space-y-5'>
           {/* 顶部：状态摘要 + 偏好选择 + 刷新 */}
-          <div className='rounded-xl border p-3 sm:p-4'>
+          <div className={cn(surfaceClass, 'p-3 sm:p-4')}>
             <div className='flex flex-wrap items-center justify-between gap-2.5 sm:gap-3'>
               <div className='flex min-w-0 flex-wrap items-center gap-2'>
                 <span className='text-sm font-medium'>
@@ -486,12 +486,12 @@ export function SubscriptionPlansCard({
                     ? CircleX
                     : CircleAlert
                 const accent = isActive
-                  ? 'border-emerald-300/70 bg-gradient-to-br from-emerald-50/80 to-transparent shadow-sm dark:border-emerald-500/30 dark:from-emerald-950/40 dark:to-transparent'
+                  ? 'border-emerald-300/70 bg-linear-to-br from-emerald-50/80 to-transparent shadow-sm dark:border-emerald-500/30 dark:from-emerald-950/40 dark:to-transparent'
                   : isExhausted
-                    ? 'border-amber-300/70 bg-gradient-to-br from-amber-50/70 to-transparent dark:border-amber-500/30 dark:from-amber-950/30 dark:to-transparent'
+                    ? 'border-amber-300/70 bg-linear-to-br from-amber-50/70 to-transparent dark:border-amber-500/30 dark:from-amber-950/30 dark:to-transparent'
                     : isCancelled
-                      ? 'border-rose-200/60 bg-gradient-to-br from-rose-50/60 to-transparent dark:border-rose-500/20 dark:from-rose-950/30 dark:to-transparent'
-                      : 'border-muted-foreground/15 bg-gradient-to-br from-muted/40 to-transparent'
+                      ? 'border-rose-200/60 bg-linear-to-br from-rose-50/60 to-transparent dark:border-rose-500/20 dark:from-rose-950/30 dark:to-transparent'
+                      : 'border-muted-foreground/15 bg-linear-to-br from-muted/40 to-transparent'
                 const headerIconBg = isActive
                   ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
                   : isExhausted
@@ -662,7 +662,12 @@ export function SubscriptionPlansCard({
               })}
             </div>
           ) : (
-            <div className='from-muted/30 flex flex-col items-center gap-2 rounded-xl border border-dashed bg-gradient-to-br to-transparent p-8 text-center'>
+            <div
+              className={cn(
+                surfaceClass,
+                'from-muted/30 flex flex-col items-center gap-2 border-dashed bg-linear-to-br to-transparent p-8 text-center'
+              )}
+            >
               <div className='bg-primary/10 text-primary flex h-12 w-12 items-center justify-center rounded-full'>
                 <Gift className='h-6 w-6' />
               </div>
@@ -834,8 +839,8 @@ export function SubscriptionPlansCard({
                       className={cn(
                         'flex h-full flex-col gap-0 overflow-hidden p-0 transition-shadow hover:shadow-md',
                         isPopular
-                          ? 'border-primary/70 from-primary/8 via-primary/2 ring-primary/10 dark:from-primary/15 dark:via-primary/5 bg-gradient-to-br to-transparent shadow-sm ring-1'
-                          : 'bg-gradient-to-br from-sky-50/50 to-transparent dark:from-sky-950/20'
+                          ? 'border-primary/70 from-primary/8 via-primary/2 ring-primary/10 dark:from-primary/15 dark:via-primary/5 bg-linear-to-br to-transparent shadow-sm ring-1'
+                          : 'bg-linear-to-br from-sky-50/50 to-transparent dark:from-sky-950/20'
                       )}
                     >
                       {coverUrl && (

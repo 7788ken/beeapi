@@ -51,7 +51,7 @@ export async function searchUsers(
 ): Promise<GetUsersResponse> {
   const { keyword = '', group = '', p = 1, page_size = 10 } = params
   const res = await api.get(
-    `/api/user/search?keyword=${keyword}&group=${group}&p=${p}&page_size=${page_size}`
+    `/api/user/search?keyword=${encodeURIComponent(keyword)}&group=${encodeURIComponent(group)}&p=${p}&page_size=${page_size}`
   )
   return res.data
 }

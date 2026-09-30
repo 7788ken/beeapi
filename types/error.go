@@ -43,16 +43,16 @@ const (
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// new api error
-	ErrorCodeCountTokenFailed       ErrorCode = "count_token_failed"
-	ErrorCodeModelPriceError        ErrorCode = "model_price_error"
-	ErrorCodeInvalidApiType         ErrorCode = "invalid_api_type"
-	ErrorCodeJsonMarshalFailed      ErrorCode = "json_marshal_failed"
-	ErrorCodeDoRequestFailed        ErrorCode = "do_request_failed"
-	ErrorCodeUpstreamNoResponse     ErrorCode = "upstream_no_response" // 节点网络无响应（连不上/TLS/header不回）→ 可切 base_url
-	ErrorCodeUpstreamTimeout        ErrorCode = "upstream_timeout"     // 上游慢但有连接（model/total timeout）→ 不切 URL
-	ErrorCodeGetChannelFailed       ErrorCode = "get_channel_failed"
-	ErrorCodeGenRelayInfoFailed     ErrorCode = "gen_relay_info_failed"
-	ErrorCodeRelayDeadlineExceeded  ErrorCode = "relay_deadline_exceeded"
+	ErrorCodeCountTokenFailed      ErrorCode = "count_token_failed"
+	ErrorCodeModelPriceError       ErrorCode = "model_price_error"
+	ErrorCodeInvalidApiType        ErrorCode = "invalid_api_type"
+	ErrorCodeJsonMarshalFailed     ErrorCode = "json_marshal_failed"
+	ErrorCodeDoRequestFailed       ErrorCode = "do_request_failed"
+	ErrorCodeUpstreamNoResponse    ErrorCode = "upstream_no_response" // 节点网络无响应（连不上/TLS/header不回）→ 可切 base_url
+	ErrorCodeUpstreamTimeout       ErrorCode = "upstream_timeout"     // 上游慢但有连接（model/total timeout）→ 不切 URL
+	ErrorCodeGetChannelFailed      ErrorCode = "get_channel_failed"
+	ErrorCodeGenRelayInfoFailed    ErrorCode = "gen_relay_info_failed"
+	ErrorCodeRelayDeadlineExceeded ErrorCode = "relay_deadline_exceeded"
 	// 非流式断连重试短路：同一请求刚被客户端取消（疑似 SDK 超时自动重试），TTL 内直接 400 拒绝
 	ErrorCodeRetryShortCircuitActive ErrorCode = "retry_short_circuit_active"
 
@@ -79,9 +79,12 @@ const (
 	ErrorCodeBadResponse            ErrorCode = "bad_response"
 	ErrorCodeBadResponseBody        ErrorCode = "bad_response_body"
 	ErrorCodeEmptyResponse          ErrorCode = "empty_response"
-	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
-	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
-	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"
+	// 回复质量闸门：上游 200 但内容是道歉或过短，网关按配置返回状态码和文案，不换渠道。
+	ErrorCodeResponseQualityApology  ErrorCode = "response_quality_apology"
+	ErrorCodeResponseQualityLowToken ErrorCode = "response_quality_low_token"
+	ErrorCodeAwsInvokeError          ErrorCode = "aws_invoke_error"
+	ErrorCodeModelNotFound           ErrorCode = "model_not_found"
+	ErrorCodePromptBlocked           ErrorCode = "prompt_blocked"
 
 	// sql error
 	ErrorCodeQueryDataError  ErrorCode = "query_data_error"
@@ -384,6 +387,18 @@ func IsSkipRetryError(err *NewAPIError) bool {
 	}
 
 	return err.skipRetry
+}
+
+func IsResponseQualityFilterError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	switch err.GetErrorCode() {
+	case ErrorCodeResponseQualityApology, ErrorCodeResponseQualityLowToken:
+		return true
+	default:
+		return false
+	}
 }
 
 func ErrOptionWithSkipRetry() NewAPIErrorOptions {

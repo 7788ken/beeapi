@@ -24,7 +24,7 @@ export function MaintenanceSettings() {
 
   if (isLoading) {
     return (
-      <div className='text-muted-foreground flex h-full w-full flex-1 items-center justify-center'>
+      <div className='text-muted-foreground flex items-center justify-center py-12'>
         {t('Loading maintenance settings...')}
       </div>
     )
@@ -45,10 +45,6 @@ export function MaintenanceSettings() {
   )
 
   return (
-    <div className='flex h-full w-full flex-1 flex-col'>
-      <div className='faded-bottom h-full w-full overflow-y-auto scroll-smooth pe-4 pb-12'>
-        <div className='space-y-4'>{sectionContent}</div>
-      </div>
-    </div>
+    <div className='space-y-4'>{sectionContent}</div>
   )
 }

@@ -18,6 +18,7 @@ import {
   formatQuota as formatQuotaValue,
 } from '@/lib/format'
 import { getLobeIcon } from '@/lib/lobe-icon'
+import { browserTzOffsetSec, fillHourlyUptimeSlots } from '@/lib/uptime-slots'
 import { cn, truncateText } from '@/lib/utils'
 import { useAdminPerms } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
@@ -43,7 +44,10 @@ import {
   MODEL_FETCHABLE_TYPES,
   RATIO_BADGE_WINDOW_DAYS,
 } from '../constants'
-import { useChannelUptime } from '../hooks/use-channel-uptime'
+import {
+  CHANNEL_UPTIME_HOURS,
+  useChannelUptime,
+} from '../hooks/use-channel-uptime'
 import {
   formatBalance,
   formatRatioSummary,
@@ -58,6 +62,7 @@ import {
   parseModelsList,
   parseGroupsList,
   parseChannelSettings,
+  parseModelRemovalMeta,
   handleUpdateChannelField,
   handleUpdateTagField,
   handleUpdateChannelBalance,
@@ -73,6 +78,7 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
+import { IQScoreCell } from './iq-score-cell'
 import { NumericSpinnerInput } from './numeric-spinner-input'
 
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
@@ -206,6 +212,72 @@ function UpstreamUpdateTags({ channel }: { channel: Channel }) {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * 模型级摘除角标（-N），挂在渠道名上，表示该渠道当前有模型被摘掉。
+ * 只有 tooltip，不做点击弹窗（没有摘除详情弹窗）。
+ */
+function ModelRemovalTag({ channel }: { channel: Channel }) {
+  const { t } = useTranslation()
+  const meta = parseModelRemovalMeta(channel.settings)
+  const removedCount = meta.removedModels.length
+  if (removedCount === 0) return null
+
+  // 原因字段是后加的，存量渠道没记 => 落到「未知原因」而不是留空
+  const reasonLabel = (reason?: string) => {
+    switch (reason) {
+      case 'model_missing':
+        return t('Not offered by upstream')
+      case 'rate_limit':
+        return t('Rate limited')
+      case 'forbidden':
+        return t('Access forbidden')
+      default:
+        return t('Unknown reason')
+    }
+  }
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <StatusBadge
+              label={`-${removedCount}`}
+              variant='warning'
+              size='sm'
+              copyable={false}
+              className='cursor-help'
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side='top' className='max-w-xs'>
+          <div className='space-y-1 text-xs'>
+            <div className='font-medium'>
+              {t('{{count}} model(s) currently removed', {
+                count: removedCount,
+              })}
+            </div>
+            {meta.removedModels.map((model) => (
+              <div key={model}>
+                <span className='font-mono'>{model}</span>
+                {' — '}
+                {reasonLabel(meta.reasons[model])}
+              </div>
+            ))}
+            <div>
+              {meta.recheckAt > 0
+                ? t('Next recheck: {{time}}', {
+                    time: formatTimestampToDate(meta.recheckAt),
+                  })
+                : t('No recheck scheduled')}
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 
@@ -515,9 +587,17 @@ function BalanceCell({ channel }: { channel: Channel }) {
 export function useChannelsColumns(): ColumnDef<Channel>[] {
   const { t } = useTranslation()
   const { setOpen, setCurrentRow } = useChannels()
+  // channel.metrics：无权限的非 root 管理员不看倍率/评分列（后端同步剥字段，这里整列隐藏）
+  const perms = useAdminPerms()
   // 可用性条形图：整表只拉一次 /api/channel/uptime，行内按 channel id 取序列
-  const uptimeByChannel = useChannelUptime(24)
-  return [
+  const uptimeByChannel = useChannelUptime(CHANNEL_UPTIME_HOURS)
+  // 「不参与定时测试和可用性测试」的渠道不看数据，只借同样多的空槽位画满格绿
+  const exemptUptimeSlots = fillHourlyUptimeSlots(
+    new Map(),
+    CHANNEL_UPTIME_HOURS,
+    browserTzOffsetSec()
+  )
+  const columns: ColumnDef<Channel>[] = [
     // Checkbox column
     {
       id: 'select',
@@ -675,6 +755,17 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
         if (isTagAggregateRow(row.original)) {
           return null
         }
+        if (
+          parseChannelSettings(row.original.setting).skip_auto_test === true
+        ) {
+          return (
+            <UptimeSparkline
+              size='sm'
+              series={exemptUptimeSlots}
+              exemptLabel={t('Excluded from scheduled and availability tests')}
+            />
+          )
+        }
         return (
           <UptimeSparkline
             size='sm'
@@ -780,6 +871,22 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
         )
       },
       size: 100,
+    },
+
+    // IQ score column: latest valid channel-level decision and change.
+    {
+      accessorKey: 'iq_score',
+      meta: { label: t('IQ') },
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('IQ')} />
+      ),
+      cell: ({ row }) => {
+        if (isTagAggregateRow(row.original))
+          return <span className='text-muted-foreground'>-</span>
+        return <IQScoreCell channel={row.original} />
+      },
+      size: 92,
+      enableSorting: false,
     },
 
     // 上游分组倍率变化角标（docs/2026-08-05-upstream-group-ratio-monitor.md）
@@ -1117,6 +1224,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                   />
                 )}
                 <UpstreamUpdateTags channel={channel} />
+                <ModelRemovalTag channel={channel} />
               </div>
               {channel.remark && (
                 <TooltipProvider delayDuration={200}>
@@ -1392,9 +1500,8 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
         const permLocked = (channel.permanent_disabled ?? 0) === 1
         const status = channel.status
 
-        let label = 'L0'
-        let variant: 'success' | 'warning' | 'orange' | 'danger' | 'red' =
-          'success'
+        let label: string
+        let variant: 'success' | 'warning' | 'orange' | 'danger' | 'red'
         let showDot = true
         if (permLocked) {
           label = t('Locked')
@@ -1717,4 +1824,15 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
       enableHiding: false,
     },
   ]
+  if (!perms.channel_metrics) {
+    return columns.filter(
+      (c) =>
+        c.id !== 'ratio_change' &&
+        (!('accessorKey' in c) ||
+          !['quality_score', 'iq_score', 'verify_score'].includes(
+            String(c.accessorKey)
+          ))
+    )
+  }
+  return columns
 }

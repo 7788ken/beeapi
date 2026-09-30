@@ -5,10 +5,23 @@ import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/relay"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
+
+// rejectUnsupportedGeminiCountTokens answers :countTokens like an unregistered
+// route before auth / channel selection / preconsume. The Gemini adaptor
+// otherwise rewrites every /models/* POST into :generateContent (#7388 / BE-59).
+func rejectUnsupportedGeminiCountTokens() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if relayconstant.IsUnsupportedGeminiCountTokensPath(c.Request.URL.Path) {
+			controller.RelayNotFound(c)
+			c.Abort()
+		}
+	}
+}
 
 func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.CORS())
@@ -68,6 +81,7 @@ func SetRelayRouter(router *gin.Engine) {
 	}
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(middleware.RouteTag("relay"))
+	relayV1Router.Use(rejectUnsupportedGeminiCountTokens())
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
 	relayV1Router.Use(middleware.TokenAuth())
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
@@ -86,6 +100,9 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter := relayV1Router.Group("")
 		httpRouter.Use(middleware.Distribute())
 		httpRouter.Use(middleware.SensitiveCollector())
+		// 只挂 http 组：必须在 Distribute 之后（渠道已选定才能做归属与门禁），
+		// 且 realtime 走上面的 wsRouter，WebSocket 升级后不安装正文捕获器。
+		httpRouter.Use(middleware.ContentBackupCollector())
 
 		// claude related routes
 		httpRouter.POST("/messages", func(c *gin.Context) {
@@ -190,6 +207,10 @@ func SetRelayRouter(router *gin.Engine) {
 	}
 
 	relayGeminiRouter := router.Group("/v1beta")
+	// :countTokens is not implemented. Answer it like an unregistered route
+	// before auth/channel selection instead of silently relaying it as
+	// generateContent (#7283 / #7388).
+	relayGeminiRouter.Use(rejectUnsupportedGeminiCountTokens())
 	relayGeminiRouter.Use(middleware.RouteTag("relay"))
 	relayGeminiRouter.Use(middleware.SystemPerformanceCheck())
 	relayGeminiRouter.Use(middleware.TokenAuth())

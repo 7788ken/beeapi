@@ -39,6 +39,11 @@ type UptimeSparklineProps = {
   /** 展示尾部数字（最新一个桶的可用率）。 */
   showLatest?: boolean
   emptyLabel?: string
+  /**
+   * 设置后表示该对象不参与可用性统计（渠道开了「不参与定时测试和可用性测试」）：
+   * 每个槽位都画满格绿、悬停只显示这段说明、不显示尾部数字；series 只决定槽位个数。
+   */
+  exemptLabel?: string
   className?: string
 }
 
@@ -62,10 +67,17 @@ export function overallTextColour(pct: number): string {
   return 'text-rose-600 dark:text-rose-400'
 }
 
+function barClass(day: UptimeDayPoint, exempt: boolean): string {
+  if (exempt) return cn(colourFor(100), heightFor(100))
+  if (day.no_data) return 'bg-muted-foreground/25 h-[18%]'
+  return cn(colourFor(day.uptime_pct), heightFor(day.uptime_pct))
+}
+
 export function UptimeSparkline(props: UptimeSparklineProps) {
   const { t } = useTranslation()
   const size = props.size ?? 'md'
-  const showLatest = props.showLatest ?? true
+  const exempt = props.exemptLabel !== undefined
+  const showLatest = (props.showLatest ?? true) && !exempt
   const noDataLabel = props.emptyLabel ?? '—'
 
   if (props.series.length === 0) {
@@ -92,7 +104,11 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
       <div
         className={cn('flex items-end', containerHeight, gap)}
         role='img'
-        aria-label={`uptime ${latestPct === null ? noDataLabel : `${latestPct.toFixed(2)}%`}`}
+        aria-label={
+          exempt
+            ? props.exemptLabel
+            : `uptime ${latestPct === null ? noDataLabel : `${latestPct.toFixed(2)}%`}`
+        }
       >
         {props.series.map((day) => (
           <Tooltip key={day.date}>
@@ -106,31 +122,32 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
                 )}
               >
                 <div
-                  className={cn(
-                    'w-full rounded-[1px]',
-                    day.no_data
-                      ? 'bg-muted-foreground/25 h-[18%]'
-                      : cn(colourFor(day.uptime_pct), heightFor(day.uptime_pct))
-                  )}
+                  className={cn('w-full rounded-[1px]', barClass(day, exempt))}
                   aria-hidden
                 />
               </div>
             </TooltipTrigger>
-            <TooltipContent side='top' className='font-mono text-xs'>
-              <div className='font-medium'>{day.date}</div>
-              {day.no_data ? (
-                <div className='text-muted-foreground'>{noDataLabel}</div>
-              ) : (
-                <>
-                  <div>{day.uptime_pct.toFixed(2)}%</div>
-                  {day.outage_minutes > 0 && (
-                    <div className='text-muted-foreground'>
-                      {day.outage_minutes} min outage
-                    </div>
-                  )}
-                </>
-              )}
-            </TooltipContent>
+            {exempt ? (
+              <TooltipContent side='top' className='text-xs'>
+                {props.exemptLabel}
+              </TooltipContent>
+            ) : (
+              <TooltipContent side='top' className='font-mono text-xs'>
+                <div className='font-medium'>{day.date}</div>
+                {day.no_data ? (
+                  <div className='text-muted-foreground'>{noDataLabel}</div>
+                ) : (
+                  <>
+                    <div>{day.uptime_pct.toFixed(2)}%</div>
+                    {day.outage_minutes > 0 && (
+                      <div className='text-muted-foreground'>
+                        {day.outage_minutes} min outage
+                      </div>
+                    )}
+                  </>
+                )}
+              </TooltipContent>
+            )}
           </Tooltip>
         ))}
       </div>

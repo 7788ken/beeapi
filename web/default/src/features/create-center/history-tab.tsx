@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { History as HistoryIcon, ImagePlus, Clock, CircleAlert } from 'lucide-react'
-import { Card } from '@/components/ui/card'
+import { Card, surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Tooltip,
@@ -94,9 +94,9 @@ function HistoryTile({ task }: { task: MidjourneyTask }) {
       <TooltipTrigger asChild>
         <div
           className={cn(
-            'group relative aspect-square overflow-hidden rounded-lg border',
+            surfaceClass, 'group relative aspect-square overflow-hidden',
             isFailed && 'border-rose-300/50',
-            src && 'cursor-pointer hover:ring-2 hover:ring-violet-400 hover:ring-offset-2'
+            src && 'cursor-pointer hover:ring-2 hover:ring-violet-400 hover:ring-offset-2 ring-offset-background'
           )}
           onClick={() => src && window.open(src, '_blank')}
         >

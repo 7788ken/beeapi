@@ -37,3 +37,4 @@ electron/dist
 .test
 token_estimator_test.go
 skills-lock.json
+.worktrees

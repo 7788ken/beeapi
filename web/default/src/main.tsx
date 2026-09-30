@@ -14,6 +14,7 @@ import { getStatus } from '@/lib/api'
 import '@/lib/dayjs'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import { handleServerError } from '@/lib/handle-server-error'
+import { shouldShowErrorPage } from '@/lib/query-error'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
@@ -57,7 +58,7 @@ const queryClient = new QueryClient({
     },
   },
   queryCache: new QueryCache({
-    onError: (error) => {
+    onError: (error, query) => {
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
           toast.error(i18next.t('Session expired!'))
@@ -65,7 +66,7 @@ const queryClient = new QueryClient({
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
-        if (error.response?.status === 500) {
+        if (shouldShowErrorPage(error.response?.status, query.meta)) {
           toast.error(i18next.t('Internal Server Error!'))
           router.navigate({ to: '/500' })
         }

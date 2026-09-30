@@ -235,11 +235,7 @@ func (r *GeneralOpenAIRequest) ToMap() map[string]any {
 }
 
 func (r *GeneralOpenAIRequest) GetSystemRoleName() string {
-	if strings.HasPrefix(r.Model, "o") {
-		if !strings.HasPrefix(r.Model, "o1-mini") && !strings.HasPrefix(r.Model, "o1-preview") {
-			return "developer"
-		}
-	} else if strings.HasPrefix(r.Model, "gpt-5") {
+	if GetOpenAIChatCapabilities(r.Model, r.ReasoningEffort).UseDeveloperRole {
 		return "developer"
 	}
 	return "system"

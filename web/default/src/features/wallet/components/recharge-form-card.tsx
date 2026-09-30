@@ -592,15 +592,18 @@ export function RechargeFormCard({
                         presetHasDiscount && discount > 0
                           ? actualPrice / discount - actualPrice
                           : 0
+                      // 选中项实心主色白字（STYLE.md「层级与强调」）；紫底上的折扣和实付也用白字
+                      const selected = selectedPreset === preset.value
                       return (
                         <Button
                           key={index}
-                          variant='outline'
+                          variant={selected ? 'default' : 'outline'}
+                          aria-pressed={selected}
                           className={cn(
-                            'hover:border-foreground flex min-h-16 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal sm:min-h-[72px] sm:p-4',
-                            selectedPreset === preset.value
-                              ? 'border-foreground bg-foreground/5'
-                              : 'border-muted'
+                            'flex min-h-16 flex-col items-start rounded-lg px-3 py-2.5 text-left whitespace-normal sm:min-h-[72px] sm:p-4',
+                            selected
+                              ? 'border-primary border shadow-[0_2px_5px_rgba(99,91,255,0.4),inset_0_1px_0_rgba(255,255,255,0.2)]'
+                              : 'hover:border-foreground border-muted'
                           )}
                           onClick={() => onSelectPreset(preset)}
                         >
@@ -609,15 +612,31 @@ export function RechargeFormCard({
                               {formatNumber(displayValue)}
                             </div>
                             {presetHasDiscount && (
-                              <div className='text-xs font-medium text-green-600'>
+                              <div
+                                className={cn(
+                                  'text-xs font-medium',
+                                  selected
+                                    ? 'text-primary-foreground'
+                                    : 'text-green-600'
+                                )}
+                              >
                                 {getDiscountLabel(discount)}
                               </div>
                             )}
                           </div>
-                          <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
+                          <div
+                            className={cn(
+                              'mt-1.5 w-full text-xs sm:mt-2',
+                              selected
+                                ? 'text-primary-foreground'
+                                : 'text-muted-foreground'
+                            )}
+                          >
                             Pay {formatCurrency(actualPrice)}
                             {presetHasDiscount && presetSaved > 0 && (
-                              <span className='text-green-600'>
+                              <span
+                                className={cn(!selected && 'text-green-600')}
+                              >
                                 {' '}
                                 • Save {formatCurrency(presetSaved)}
                               </span>

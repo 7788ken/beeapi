@@ -58,7 +58,9 @@ func ClassifyErrorAttribution(err *NewAPIError) ErrorAttribution {
 		ErrorCodeBadResponseBody,
 		ErrorCodeEmptyResponse,
 		ErrorCodeReadResponseBodyFailed,
-		ErrorCodeAwsInvokeError:
+		ErrorCodeAwsInvokeError,
+		ErrorCodeResponseQualityApology,
+		ErrorCodeResponseQualityLowToken:
 		return AttributionUpstream
 
 	// ── 上游侧：返回了非 2xx，按状态码归属 ──

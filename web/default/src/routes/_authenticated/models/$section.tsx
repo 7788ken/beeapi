@@ -2,6 +2,7 @@ import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { resolveAdminPermFlags } from '@/lib/admin-perms'
 import { Models } from '@/features/models'
 import {
   MODELS_SECTION_IDS,
@@ -26,6 +27,16 @@ export const Route = createFileRoute('/_authenticated/models/$section')({
     const { auth } = useAuthStore.getState()
 
     if (!auth.user || auth.user.role < ROLE.ADMIN) {
+      throw redirect({
+        to: '/403',
+      })
+    }
+    const perms = resolveAdminPermFlags(
+      auth.user.role,
+      auth.user.permissions?.admin,
+      auth.user.admin_perms
+    )
+    if (!perms.model_view) {
       throw redirect({
         to: '/403',
       })

@@ -67,7 +67,7 @@ function ProjectAttribution(props: { currentYear: number }) {
           href='https://github.com/QuantumNous/new-api'
           target='_blank'
           rel='noopener noreferrer'
-          className='text-foreground/70 font-medium transition-colors hover:text-foreground'
+          className='text-foreground/70 hover:text-foreground font-medium transition-colors'
         >
           {t('New API')}
         </a>
@@ -150,10 +150,61 @@ export function Footer(props: FooterProps) {
 
   const displayColumns = props.columns ?? fallbackColumns
 
+  // 品牌与链接列：两个分支共用
+  const brandAndLinks = (
+    <div className='flex flex-col justify-between gap-10 md:flex-row md:gap-16'>
+      {/* Brand column */}
+      <div className='shrink-0'>
+        <Link to='/' className='group flex items-center gap-2.5'>
+          <img
+            src={displayLogo}
+            alt={displayName}
+            className='size-7 rounded-lg object-contain'
+          />
+          <span className='text-sm font-semibold tracking-tight'>
+            {displayName}
+          </span>
+        </Link>
+        <p className='text-muted-foreground/60 mt-3 max-w-[200px] text-xs leading-relaxed'>
+          {t('Powerful API Management Platform')}
+        </p>
+      </div>
+
+      {/* Links columns */}
+      {(props.columns || isDemoSiteMode) && (
+        <div className='grid grid-cols-3 gap-8 md:gap-16'>
+          {displayColumns.map((column, index) => (
+            <div key={index}>
+              <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
+                {t(column.title)}
+              </p>
+              <ul className='space-y-2.5'>
+                {column.links.map((link, linkIndex) => (
+                  <li key={linkIndex}>
+                    <FooterLinkItem link={link} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   if (footerHtml) {
     return (
-      <footer className={cn('border-border/40 relative z-10 border-t', props.className)}>
+      <footer
+        className={cn(
+          'border-border/40 relative z-10 border-t',
+          props.className
+        )}
+      >
         <div className='mx-auto w-full max-w-6xl px-6 py-5'>
+          {/* 页面显式传了链接列时，后台自定义页脚之上照样渲染品牌与链接列 */}
+          {props.columns && (
+            <div className='pt-7 pb-8 md:pt-11'>{brandAndLinks}</div>
+          )}
           <div className='bg-muted/20 border-border/50 flex flex-col items-center justify-between gap-4 rounded-2xl border px-4 py-4 backdrop-blur-sm sm:flex-row sm:px-5'>
             <div
               className='custom-footer text-muted-foreground min-w-0 text-center text-sm sm:text-left'
@@ -173,44 +224,7 @@ export function Footer(props: FooterProps) {
       className={cn('border-border/40 relative z-10 border-t', props.className)}
     >
       <div className='mx-auto max-w-6xl px-6 py-12 md:py-16'>
-        <div className='flex flex-col justify-between gap-10 md:flex-row md:gap-16'>
-          {/* Brand column */}
-          <div className='shrink-0'>
-            <Link to='/' className='group flex items-center gap-2.5'>
-              <img
-                src={displayLogo}
-                alt={displayName}
-                className='size-7 rounded-lg object-contain'
-              />
-              <span className='text-sm font-semibold tracking-tight'>
-                {displayName}
-              </span>
-            </Link>
-            <p className='text-muted-foreground/60 mt-3 max-w-[200px] text-xs leading-relaxed'>
-              {t('Powerful API Management Platform')}
-            </p>
-          </div>
-
-          {/* Links columns */}
-          {isDemoSiteMode && (
-            <div className='grid grid-cols-3 gap-8 md:gap-16'>
-              {displayColumns.map((column, index) => (
-                <div key={index}>
-                  <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
-                    {t(column.title)}
-                  </p>
-                  <ul className='space-y-2.5'>
-                    {column.links.map((link, linkIndex) => (
-                      <li key={linkIndex}>
-                        <FooterLinkItem link={link} />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {brandAndLinks}
 
         {/* Bottom section */}
         <div className='border-border/30 mt-12 flex flex-col items-center justify-between gap-3 border-t pt-6 sm:flex-row'>

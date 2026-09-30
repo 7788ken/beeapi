@@ -3,6 +3,7 @@ import {
   Settings,
   Shield,
   ShieldAlert,
+  Activity,
   Layout,
   Plug,
   Box,
@@ -43,6 +44,12 @@ export function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
           title: t('Request Limits'),
           icon: ShieldAlert,
           items: getRequestLimitsSectionNavItems(t),
+        },
+        {
+          title: t('Channel Governance'),
+          icon: Activity,
+          url: '/system-settings/channel-governance',
+          activeUrls: ['/system-settings/channel-governance'],
         },
         {
           title: t('Content'),

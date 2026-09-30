@@ -15,7 +15,13 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot='scroll-area-viewport'
-        className='focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1'
+        // Radix wraps children in an inline `display:table; min-width:100%` div,
+        // which shrink-to-fits to the content's min-content width. Wide content
+        // (e.g. nowrap tables) then propagates its intrinsic width upward and can
+        // stretch grid/flex ancestors (dialogs) beyond their max-width. Forcing
+        // block keeps children at the viewport width so inner `overflow-x-auto`
+        // containers handle horizontal scrolling instead.
+        className='focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1 [&>div]:block!'
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

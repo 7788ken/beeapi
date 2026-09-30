@@ -83,6 +83,7 @@ func handleGeminiFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 	if geminiResponse == nil {
 		return nil
 	}
+	service.NoteGeminiStreamDelta(c, geminiResponse)
 
 	geminiResponseStr, err := common.Marshal(geminiResponse)
 	if err != nil {
@@ -134,33 +135,35 @@ func ProcessStreamResponse(c *gin.Context, streamResponse dto.ChatCompletionsStr
 	return nil
 }
 
-func processToken(c *gin.Context, relayMode int, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
+func processToken(c *gin.Context, info *relaycommon.RelayInfo, relayMode int, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
 	if streamItem == "" || streamItem == "[DONE]" {
 		return nil
 	}
 	switch relayMode {
 	case relayconstant.RelayModeChatCompletions:
-		return processChatCompletionToken(c, streamItem, responseTextBuilder, toolCount)
+		return processChatCompletionToken(c, info, streamItem, responseTextBuilder, toolCount)
 	case relayconstant.RelayModeCompletions:
-		return processCompletionToken(c, streamItem, responseTextBuilder)
+		return processCompletionToken(c, info, streamItem, responseTextBuilder)
 	}
 	return nil
 }
 
-func processChatCompletionToken(c *gin.Context, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
+func processChatCompletionToken(c *gin.Context, info *relaycommon.RelayInfo, streamItem string, responseTextBuilder *strings.Builder, toolCount *int) error {
 	var streamResponse dto.ChatCompletionsStreamResponse
 	if err := json.Unmarshal(common.StringToByteSlice(streamItem), &streamResponse); err != nil {
 		return err
 	}
+	info.ObserveResponseModel(streamResponse.Model)
 	// content_filter 拒绝标记在 ProcessStreamResponse 内完成（xai 等直调方共用同一入口）
 	return ProcessStreamResponse(c, streamResponse, responseTextBuilder, toolCount)
 }
 
-func processCompletionToken(c *gin.Context, streamItem string, responseTextBuilder *strings.Builder) error {
+func processCompletionToken(c *gin.Context, info *relaycommon.RelayInfo, streamItem string, responseTextBuilder *strings.Builder) error {
 	var streamResponse dto.CompletionsStreamResponse
 	if err := json.Unmarshal(common.StringToByteSlice(streamItem), &streamResponse); err != nil {
 		return err
 	}
+	info.ObserveResponseModel(streamResponse.Model)
 	for _, choice := range streamResponse.Choices {
 		maybeMarkOpenAIContentFilter(c, choice.FinishReason)
 		responseTextBuilder.WriteString(choice.Text)
@@ -182,6 +185,7 @@ func handleLastResponse(lastStreamData string, responseId *string, createAt *int
 	*createAt = lastStreamResponse.Created
 	*systemFingerprint = lastStreamResponse.GetSystemFingerprint()
 	*model = lastStreamResponse.Model
+	info.ObserveResponseModel(lastStreamResponse.Model)
 
 	if service.ValidUsage(lastStreamResponse.Usage) {
 		*containStreamUsage = true

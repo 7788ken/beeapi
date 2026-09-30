@@ -128,7 +128,7 @@ export function AnomalyMonitor() {
             >
               {t('Last 7 days')}
             </Button>
-            <div className="flex items-center gap-1 ml-2">
+            <div className="flex flex-wrap items-center gap-1 ml-2">
               <input
                 type="datetime-local"
                 className="h-8 rounded-md border border-input bg-background px-2 text-xs"

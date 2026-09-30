@@ -413,13 +413,13 @@ export function PaymentSettingsSection({
     >
       {/* eslint-disable react-hooks/refs */}
       {/* 限高 + flex 列布局，让 tab 内容长时只在 TabsContent 内部滚动，
-          外层 SettingsPage overflow-y-auto 不被撑开。220px 是顶部 nav +
-          页头 + tabs list 的预估总高度，需要时再调。 */}
+          外层 SettingsPage overflow-y-auto 不被撑开。270px 是顶部 nav +
+          页头 + tabs list + 分区卡片内边距的预估总高度，需要时再调。 */}
       <Tabs
         defaultValue='general'
-        className='flex h-[calc(100vh-220px)] flex-col gap-4'
+        className='flex h-[calc(100vh-270px)] flex-col gap-4'
       >
-        <TabsList className='flex shrink-0 flex-wrap'>
+        <TabsList className='flex h-auto shrink-0 flex-wrap'>
           <TabsTrigger value='general'>通用</TabsTrigger>
           <TabsTrigger value='epay'>Epay</TabsTrigger>
           <TabsTrigger value='stripe'>Stripe</TabsTrigger>

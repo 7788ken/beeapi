@@ -632,6 +632,14 @@ func TestShouldRefundNoOutputUpstreamRefusalAndDeniedReasons(t *testing.T) {
 			RelayFormat:       types.RelayFormatClaude,
 		}
 	}
+	// 渠道级排除零产出免单（渠道编辑页人工勾选），经 ChannelMeta 承载，与生产路径一致
+	buildRelayNoRefundDisabled := func(ss *relaycommon.StreamStatus) *relaycommon.RelayInfo {
+		ri := buildRelay(ss)
+		ri.ChannelMeta = &relaycommon.ChannelMeta{
+			ChannelSetting: dto.ChannelSettings{DisableNoOutputRefund: true},
+		}
+		return ri
+	}
 	empty := textQuotaSummary{CompletionTokens: 0}
 
 	cases := []struct {
@@ -669,6 +677,12 @@ func TestShouldRefundNoOutputUpstreamRefusalAndDeniedReasons(t *testing.T) {
 		{"shutdown_denied_reason", false, "", buildRelay(newStreamStatus(relaycommon.StreamEndReasonShutdown)), textQuotaSummary{CompletionTokens: 0, UseTimeSeconds: 120}, false, refundDeniedShutdown},
 		// ── refusal 优先于 client_gone 秒断 ────────────────────────────
 		{"refusal_takes_precedence_over_client_gone", true, "claude_stop_reason=refusal", buildRelay(newStreamStatus(relaycommon.StreamEndReasonClientGone)), textQuotaSummary{CompletionTokens: 0, UseTimeSeconds: 3}, false, refundDeniedUpstreamRefusal},
+		// ── 渠道级排除：渠道明确不参与零产出免单，照常计费并落拒退标记 ──
+		{"channel_no_refund_denied", false, "", buildRelayNoRefundDisabled(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, false, refundDeniedChannelNoRefund},
+		// 渠道排除优先于上游拒绝判定（渠道不免单时连 refusal 场景也无从谈起）
+		{"channel_no_refund_takes_precedence_over_refusal", true, "claude_stop_reason=refusal", buildRelayNoRefundDisabled(newStreamStatus(relaycommon.StreamEndReasonEOF)), empty, false, refundDeniedChannelNoRefund},
+		// 门控顺序锁定：混合计费组件护栏先于渠道排除判定，不产出拒退标记
+		{"channel_no_refund_with_image_component_no_denied_marker", true, "", buildRelayNoRefundDisabled(newStreamStatus(relaycommon.StreamEndReasonEOF)), textQuotaSummary{CompletionTokens: 0, ImageTokens: 100}, false, ""},
 	}
 
 	for _, c := range cases {

@@ -72,6 +72,62 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+// channelMetricsVisible 判定请求方能否看渠道倍率/评分等经营敏感字段。
+// root 恒有；管理员须显式授 channel.metrics（现读库，收回立刻生效，同 GetUserAdminPermsRaw 口径）。
+func channelMetricsVisible(c *gin.Context) bool {
+	if c.GetInt("role") >= common.RoleRootUser {
+		return true
+	}
+	ok, err := model.UserHasAnyAdminPerm(c.GetInt("id"), c.GetInt("role"), model.AdminPermChannelMetrics)
+	if err != nil {
+		common.SysError("channelMetricsVisible: " + err.Error())
+		return false
+	}
+	return ok
+}
+
+// redactChannelMetrics 剥离倍率/评分快照字段（上游成本结构属经营敏感信息）。
+// 无 channel.metrics 权限的管理员：后端不吐字段，前端对应列整列隐藏。
+func redactChannelMetrics(channels []*model.Channel) {
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		ch.RatioDetail = ""
+		ch.RatioUpCount = 0
+		ch.RatioDownCount = 0
+		ch.RatioChangedAt = 0
+		ch.QualityScore = nil
+		ch.QualityUpdatedAt = 0
+		ch.QualityDetail = ""
+		ch.VerifyScore = nil
+		ch.VerifyGrade = ""
+		ch.VerifyTestedAt = 0
+		ch.VerifyPrevScore = nil
+		ch.IQScore = nil
+		ch.IQScoreDelta = nil
+		ch.IQScoreTrend = ""
+		ch.IQScoreAt = 0
+		ch.IQScoreModel = ""
+		ch.IQScoreStatus = ""
+		ch.IQScorePrevious = nil
+		ch.IQScoreBaseline = nil
+		ch.IQScoreError = ""
+		ch.IQAttemptAt = 0
+	}
+}
+
+// redactChannelRemarks 列表接口对非 root 剥离渠道备注（内部拓扑/同步来源属运营敏感信息）。
+// 仅列表剥：单取（编辑对话框）保留，避免有 channel.edit 的管理员保存时把备注清空。
+func redactChannelRemarks(channels []*model.Channel) {
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		ch.Remark = nil
+	}
+}
+
 // RecomputeChannelMetrics 手动触发渠道质量评分重算。
 // 异步执行，立即返回；正常运行靠后台 5min tick，此接口主要用于调试/调整公式后立即看效果。
 // admin-only + CriticalRateLimit 防刷。
@@ -185,8 +241,21 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	metricsVisible := channelMetricsVisible(c)
+	if !metricsVisible {
+		redactChannelMetrics(channelData)
+	}
+	if c.GetInt("role") < common.RoleRootUser {
+		redactChannelRemarks(channelData)
+	}
 
 	overlayRealtimeChannelRPM(channelData)
+	if metricsVisible {
+		if err := overlayIQChannelScores(channelData); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 
 	countQuery := model.DB.Model(&model.Channel{})
 	if statusFilter == common.ChannelStatusEnabled {
@@ -367,6 +436,42 @@ func SearchChannels(c *gin.Context) {
 		channelData = filtered
 	}
 
+	// ORDER BY 支持：与 GetAllChannels 对齐，让带分组/关键词过滤（走 search 端）时也能按
+	// rpm_24h（Redis 实时值）或 used_quota（DB 列）排序。search 端已在内存持有完整过滤集，
+	// 故顺序为：（rpm 排序时）先覆盖实时 RPM → 稳定排序整个集合 → 再分页；
+	// 若只覆盖当前页会漏排。同值口径与 listChannelsOrderedByRealtimeRPM 一致：启用渠道优先、id desc 兜底。
+	orderBy := c.Query("order_by")
+	if orderBy == "rpm_24h" || orderBy == "used_quota" {
+		if orderBy == "rpm_24h" {
+			overlayRealtimeChannelRPM(channelData)
+		}
+		desc := c.Query("order") != "asc"
+		sort.SliceStable(channelData, func(i, j int) bool {
+			a, b := channelData[i], channelData[j]
+			if orderBy == "rpm_24h" {
+				if a.RpmLast24h != b.RpmLast24h {
+					if desc {
+						return a.RpmLast24h > b.RpmLast24h
+					}
+					return a.RpmLast24h < b.RpmLast24h
+				}
+			} else if a.UsedQuota != b.UsedQuota {
+				if desc {
+					return a.UsedQuota > b.UsedQuota
+				}
+				return a.UsedQuota < b.UsedQuota
+			}
+			// 同值：启用渠道排在禁用渠道之前（禁用恒沉底）
+			ea := a.Status == common.ChannelStatusEnabled
+			eb := b.Status == common.ChannelStatusEnabled
+			if ea != eb {
+				return ea
+			}
+			// 二级排序：id desc 保稳定，避免翻页错位
+			return a.Id > b.Id
+		})
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("p", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	if page < 1 {
@@ -393,6 +498,14 @@ func SearchChannels(c *gin.Context) {
 	}
 
 	overlayRealtimeChannelRPM(pagedData)
+	if channelMetricsVisible(c) {
+		if err := overlayIQChannelScores(pagedData); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else {
+		redactChannelMetrics(pagedData)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -498,6 +611,52 @@ func overlayRealtimeChannelRPM(channels []*model.Channel) {
 	}
 }
 
+func overlayIQChannelScores(channels []*model.Channel) error {
+	if len(channels) == 0 {
+		return nil
+	}
+	ids := make([]int, 0, len(channels))
+	for _, ch := range channels {
+		if ch != nil {
+			ids = append(ids, ch.Id)
+		}
+	}
+	snapshots, err := model.GetLatestIQChannelScores(ids)
+	if err != nil {
+		return fmt.Errorf("overlay IQ channel scores: %w", err)
+	}
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		if s, ok := snapshots[ch.Id]; ok {
+			ch.IQScore = s.Score
+			ch.IQScorePrevious = s.Previous
+			base := s.Baseline
+			ch.IQScoreBaseline = &base
+			ch.IQScoreError = s.ErrorClass
+			ch.IQAttemptAt = s.AttemptAt
+			ch.IQScoreAt = s.At
+			ch.IQScoreModel = s.Model
+			ch.IQScoreStatus = s.Status
+			if s.Previous != nil && s.Score != nil {
+				d := *s.Score - *s.Previous
+				ch.IQScoreDelta = &d
+				if d > 0 {
+					ch.IQScoreTrend = "up"
+				} else if d < 0 {
+					ch.IQScoreTrend = "down"
+				} else {
+					ch.IQScoreTrend = "flat"
+				}
+			} else {
+				ch.IQScoreTrend = "unknown"
+			}
+		}
+	}
+	return nil
+}
+
 func GetChannel(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -511,6 +670,12 @@ func GetChannel(c *gin.Context) {
 	}
 	if channel != nil {
 		clearChannelInfo(channel)
+		if !channelMetricsVisible(c) {
+			redactChannelMetrics([]*model.Channel{channel})
+		} else if err := overlayIQChannelScores([]*model.Channel{channel}); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -892,10 +1057,22 @@ func EnableTagChannels(c *gin.Context) {
 		})
 		return
 	}
+	// 按标签启用直接走 model 层批量更新，不会经过单渠道启用钩子；先取出受影响渠道，
+	// 成功更新后逐个清理其运行时计数，避免模型级摘除 streak 跨批量恢复残留。
+	tagChannels, err := model.GetChannelsByTag(channelTag.Tag, false, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	err = model.EnableChannelByTag(channelTag.Tag)
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	for _, channel := range tagChannels {
+		if channel != nil {
+			service.ClearChannelHealthRuntime(channel.Id)
+		}
 	}
 	model.InitChannelCache()
 	c.JSON(http.StatusOK, gin.H{

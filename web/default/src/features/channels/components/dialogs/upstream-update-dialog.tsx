@@ -123,7 +123,7 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
                 {t('Add Models')}
                 <StatusBadge
                   variant='neutral'
-                  className='ml-1'
+                  className='group-data-[state=active]/tab:text-primary-foreground group-data-[state=active]/tab:[&>span[aria-hidden]]:bg-primary-foreground ml-1'
                   copyable={false}
                 >
                   {selectedAdd.size}/{props.addModels.length}
@@ -133,7 +133,7 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
                 {t('Remove Models')}
                 <StatusBadge
                   variant='neutral'
-                  className='ml-1'
+                  className='group-data-[state=active]/tab:text-primary-foreground group-data-[state=active]/tab:[&>span[aria-hidden]]:bg-primary-foreground ml-1'
                   copyable={false}
                 >
                   {selectedRemove.size}/{props.removeModels.length}

@@ -241,8 +241,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	defer func() {
-		// Only return quota if downstream failed and quota was actually pre-consumed
+		// Only return quota if downstream failed and quota was actually pre-consumed.
+		// 拦截后重试打开时，质量门先不结算；请求最终仍以质量门错误结束才在退款前结掉。
 		if newAPIError != nil {
+			service.SettleDeferredQualityCharge(c, relayInfo, newAPIError)
 			newAPIError = service.NormalizeViolationFeeError(newAPIError)
 			if relayInfo.Billing != nil {
 				relayInfo.Billing.Refund(c)
@@ -331,6 +333,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		addUsedChannel(c, channel.Id)
+		// 每轮成功选到渠道后快照其身份与备份开关：归档按"最终实际尝试的渠道"归属，
+		// 取最后一个被记录的轮次。上面 channelErr != nil 的 break 路径刻意不记录，
+		// 这样选不到渠道的那一轮不会成为归属目标，自动回落到上一次实际尝试的渠道。
+		if service.ContentBackupCaptureActive(c) {
+			service.ContentBackupRecordChannelRound(c, service.ContentBackupChannelRound{
+				ChannelID:     channel.Id,
+				ChannelName:   channel.Name,
+				ChannelType:   channel.Type,
+				BackupEnabled: channel.GetSetting().ContentBackupEnabled,
+			})
+		}
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
 			// Ensure consistent 413 for oversized bodies even when error occurs later (e.g., retry path)
@@ -436,6 +449,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			// 渠道健康度：记录成功（被动机制，零额外 token）
 			channelId := channel.Id
 			usingKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
+			originModel := c.GetString("original_model")
+			// 同步清零 (渠道,模型) 连击计数：与失败路径 processChannelError→tryHandle 的同步 INCR 对称。
+			// 若放进异步 backgroundtask，提交失败会被忽略、停机时丢失，或延迟执行晚于后续 INCR 把新计数
+			// 误清——都会让计数只增不减、误触发摘除。单个 Redis DEL 开销可忽略，且此处响应已发出。
+			service.ResetModelRemovalStreak(channelId, originModel)
 			var ttftMs int64 = -1
 			if relayInfo.IsStream && relayInfo.HasSendResponse() {
 				ttftMs = relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds()
@@ -617,7 +635,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
 
-	// 渠道健康度：记录错误（被动机制，零额外 token）。
+	// 渠道健康度：记录错误（被动机制，零额外 token）。质量闸门拦截也记，按它返回的状态码计入降级连击。
 	// 在 ShouldDisableChannel 之前调用：状态机内部按阈值决定降级 / 禁用 / 单 key 失效。
 	chId := channelError.ChannelId
 	chKey := channelError.UsingKey
@@ -626,10 +644,17 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		service.RecordChannelResult(chId, chKey, chErr, -1)
 	})
 
-	if service.ShouldDisableChannel(err) && channelError.AutoBan {
-		_ = backgroundtask.Submit("disable-channel", func(context.Context) {
-			service.DisableChannel(channelError, err.ErrorWithStatusCode())
-		})
+	// 质量闸门拦截：按配置返回给客户端，不换渠道、不单次禁用、不摘模型，但仍写错误日志。
+	if !types.IsResponseQualityFilterError(err) {
+		// 「渠道中没有该模型」类错误（典型 404 model does not exist）：接管处理，异步同步上游模型
+		// 核实后移出单个模型，避免整渠道被禁；核实未确认移出时在异步任务内回退原禁用判定。
+		handledModelMissing := tryHandleChannelModelMissing(c, channelError, err)
+
+		if !handledModelMissing && service.ShouldDisableChannel(err) && channelError.AutoBan {
+			_ = backgroundtask.Submit("disable-channel", func(context.Context) {
+				service.DisableChannel(channelError, err.ErrorWithStatusCode())
+			})
+		}
 	}
 
 	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
@@ -769,6 +794,8 @@ func RelayTask(c *gin.Context) {
 
 	var result *relay.TaskSubmitResult
 	var taskErr *dto.TaskError
+	// 记录 task relay 成功时命中的渠道，供循环外的成功分支同步清零该 (渠道,模型) 连击计数。
+	var taskSuccessChannelId int
 	defer func() {
 		if taskErr != nil && relayInfo.Billing != nil {
 			relayInfo.Billing.Refund(c)
@@ -886,6 +913,7 @@ func RelayTask(c *gin.Context) {
 		}
 
 		if taskErr == nil {
+			taskSuccessChannelId = channel.Id
 			break
 		}
 
@@ -912,6 +940,9 @@ func RelayTask(c *gin.Context) {
 
 	// ── 成功：结算 + 日志 + 插入任务 ──
 	if taskErr == nil {
+		// 与主 relay 成功路径同理：task 失败经 processChannelError 同步累加连击计数，成功必须同步清零，
+		// 否则视频/Suno 等任务型请求的失败会跨成功请求累计、误触发摘除。
+		service.ResetModelRemovalStreak(taskSuccessChannelId, c.GetString("original_model"))
 		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
 			common.SysError("settle task billing error: " + settleErr.Error())
 		}

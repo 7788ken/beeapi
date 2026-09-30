@@ -58,6 +58,16 @@ export const channelSchema = z.object({
   quality_score: z.number().int().min(0).max(100).nullable().optional(), // 0-100 综合评分；null=无流量
   quality_updated_at: z.number().default(0), // 上次重算 unix sec
   quality_detail: z.string().default(''), // 评分原始指标 JSON 快照（success_cnt/error_cnt/avg_use_time_ms/avg_frt_ms）；空=未算过
+  iq_score: z.number().int().min(0).max(100).nullable().optional(),
+  iq_score_delta: z.number().int().nullable().optional(),
+  iq_score_previous: z.number().int().nullable().optional(),
+  iq_score_baseline: z.number().int().nullable().optional(),
+  iq_score_error: z.string().nullish(),
+  iq_attempt_at: z.number().nullish(),
+  iq_score_trend: z.enum(['up', 'down', 'flat', 'unknown']).nullish(),
+  iq_score_at: z.number().nullish(),
+  iq_score_model: z.string().nullish(),
+  iq_score_status: z.string().nullish(),
   // 外部测评分数快照（由管理员主动触发 /api/channel/:id/verify，外部测评网关健康分）；
   // 历史报告完整记录在 channel_verify_reports 表中。
   verify_score: z.number().int().min(0).max(100).nullable().optional(), // null=未测过
@@ -120,6 +130,14 @@ export interface ChannelSettings {
   pass_through_body_enabled?: boolean
   system_prompt?: string
   system_prompt_override?: boolean
+  // 渠道级排除零产出免单；未设置=跟随全局开关
+  disable_no_output_refund?: boolean
+  // 该渠道是否纳入内容备份采集范围；未设置=不采集（docs/2026-09-15-channel-content-backup-upload.md）
+  content_backup_enabled?: boolean
+  block_apology_enabled?: boolean
+  block_low_token_enabled?: boolean
+  // 不参与定时测试和可用性测试：全量测试/恢复探活/降级探测都跳过；「可用性」列画全绿、不显示百分比
+  skip_auto_test?: boolean
 }
 
 export interface ChannelOtherSettings {
@@ -134,6 +152,10 @@ export interface ChannelOtherSettings {
   allow_inference_geo?: boolean
   allow_speed?: boolean
   claude_beta_query?: boolean
+  claude_thinking_adaptive_compat?: boolean
+  claude_thinking_signature_strip?: boolean
+  claude_strip_server_tools_compat?: boolean
+  claude_filter_beta_header_compat?: boolean
   upstream_model_update_check_enabled?: boolean
   upstream_model_update_auto_sync_enabled?: boolean
   upstream_model_update_ignored_models?: string[]
@@ -284,6 +306,10 @@ export interface SearchChannelsParams {
   tag_mode?: boolean
   p?: number
   page_size?: number
+  // 后端 ORDER BY：与 GetAllChannels 同口径，支持 rpm_24h（Go 层按 Redis 实时值排序）
+  // 与 used_quota，见 controller.SearchChannels；tag_mode 路径不支持。
+  order_by?: string
+  order?: 'asc' | 'desc'
 }
 
 export interface ChannelTestParams {

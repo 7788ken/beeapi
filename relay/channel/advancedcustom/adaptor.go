@@ -500,6 +500,7 @@ func isJSONRequest(c *gin.Context) bool {
 }
 
 func (a *Adaptor) convertOpenAICompatibleRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
+	relaycommon.ApplyOpenAIChatStreamUsage(request, info)
 	old := info.ChannelType
 	info.ChannelType = constant.ChannelTypeOpenAI
 	converted, err := a.openaiAdaptor.ConvertOpenAIRequest(c, info, request)

@@ -17,6 +17,7 @@ const defaultContentSettings: ContentSettings = {
   'console_setting.announcements_enabled': true,
   'console_setting.faq_enabled': true,
   'console_setting.uptime_kuma_enabled': false,
+  'console_setting.support_widget_code': '',
   DataExportEnabled: false,
   DataExportDefaultTime: 'hour',
   DataExportInterval: 5,
@@ -103,10 +104,6 @@ export function ContentSettings() {
   const sectionContent = getContentSectionContent(activeSection, settings)
 
   return (
-    <div className='flex h-full w-full flex-1 flex-col'>
-      <div className='faded-bottom h-full w-full overflow-y-auto scroll-smooth pe-4 pb-12'>
-        <div className='space-y-4'>{sectionContent}</div>
-      </div>
-    </div>
+    <div className='space-y-4'>{sectionContent}</div>
   )
 }

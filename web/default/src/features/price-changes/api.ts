@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios'
 import { api } from '@/lib/api'
 import type {
   PendingPriceChanges,
@@ -10,10 +11,13 @@ import type {
 // Price Changes APIs
 // ----------------------------------------------------------------------------
 
-const silentConfig = {
+const silentConfig: AxiosRequestConfig & {
+  skipErrorHandler: boolean
+  skipBusinessError: boolean
+} = {
   skipErrorHandler: true,
   skipBusinessError: true,
-} as unknown as Parameters<typeof api.get>[1]
+}
 
 /**
  * User-side price changes feed (works for both logged-in and anonymous users).
@@ -26,7 +30,7 @@ export async function getPriceChanges(
     const res = await api.get('/api/price_changes', {
       ...silentConfig,
       params: { days },
-    })
+    } as AxiosRequestConfig)
     const body = res.data as { success?: boolean; data?: PriceChangesData }
     if (!body?.success || !body.data) return null
     return body.data
@@ -49,7 +53,11 @@ export async function getPendingPriceChanges(): Promise<PendingPriceChanges> {
 export async function publishPriceChanges(payload: {
   note: string
   send_email: boolean
-}): Promise<{ success: boolean; message?: string; data?: { batch_id: number } }> {
+}): Promise<{
+  success: boolean
+  message?: string
+  data?: { batch_id: number }
+}> {
   const res = await api.post('/api/price_changes/publish', payload)
   return res.data
 }

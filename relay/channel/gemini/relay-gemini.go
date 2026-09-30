@@ -171,7 +171,7 @@ func ThinkingAdaptor(geminiRequest *dto.GeminiChatRequest, info *relaycommon.Rel
 		} else if _, level, ok := reasoning.TrimEffortSuffix(info.UpstreamModelName); ok && level != "" {
 			geminiRequest.GenerationConfig.ThinkingConfig = &dto.GeminiThinkingConfig{
 				IncludeThoughts: true,
-				ThinkingLevel:   level,
+				ThinkingLevel:   reasoning.NormalizeGeminiThinkingLevel(level),
 			}
 			info.ReasoningEffort = level
 		}
@@ -273,7 +273,7 @@ func CovertOpenAI2Gemini(c *gin.Context, textRequest dto.GeneralOpenAIRequest, i
 					}
 					if thinkingLevel, exists := thinkingConfig["thinking_level"]; exists {
 						if v, ok := thinkingLevel.(string); ok {
-							tempThinkingConfig.ThinkingLevel = v
+							tempThinkingConfig.ThinkingLevel = reasoning.NormalizeGeminiThinkingLevel(v)
 							hasThinkingConfig = true
 						} else {
 							return nil, errors.New("extra_body.google.thinking_config.thinking_level must be a string")
@@ -1093,6 +1093,20 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 	return nil
 }
 
+func noteGeminiOutputMedia(c *gin.Context, resp *dto.GeminiChatResponse) {
+	if resp == nil {
+		return
+	}
+	for _, candidate := range resp.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && part.InlineData.MimeType != "" {
+				service.NoteQualityStreamDelta(c, service.QualityStreamDelta{Media: true})
+				return
+			}
+		}
+	}
+}
+
 // maybeMarkGeminiBlockedFinishReason 与 promptFeedback.blockReason 检查互补：
 // blockReason 只覆盖"整个 prompt 被拦、candidates 为空"；这里覆盖"candidate 存在但
 // 生成被安全策略掐断"（finishReason=SAFETY 等）。candidates 为空时天然 no-op。
@@ -1125,11 +1139,13 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			sr.Stop(fmt.Errorf("unmarshal: %w", err))
 			return
 		}
+		info.ObserveResponseModel(geminiResponse.ModelVersion)
 
 		if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
 			relaycommon.MarkAdminRejectReason(c, constant.RejectReasonGeminiBlockPrefix+*geminiResponse.PromptFeedback.BlockReason)
 		}
 		maybeMarkGeminiBlockedFinishReason(c, &geminiResponse)
+		noteGeminiOutputMedia(c, &geminiResponse)
 
 		// 统计图片数量
 		for _, candidate := range geminiResponse.Candidates {
@@ -1282,6 +1298,8 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	info.ObserveResponseModel(geminiResponse.ModelVersion)
+	service.NoteQualityInspectFromGemini(info, &geminiResponse)
 	maybeMarkGeminiBlockedFinishReason(c, &geminiResponse)
 	if len(geminiResponse.Candidates) == 0 {
 		usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)

@@ -3,8 +3,10 @@ import { VChart } from '@visactor/react-vchart'
 import { AreaChart, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { TimeGranularity } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useTheme } from '@/context/theme-provider'
+import { surfaceClass } from '@/components/ui/card'
 import {
   CONSUMPTION_DISTRIBUTION_CHART_OPTIONS,
   DEFAULT_TIME_GRANULARITY,
@@ -14,6 +16,7 @@ import type {
   ConsumptionDistributionChartType,
   QuotaDataItem,
 } from '@/features/dashboard/types'
+import { dashSegItem, dashSegTrack } from '../overview/dash-emphasis'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -26,11 +29,13 @@ interface ConsumptionDistributionChartProps {
   defaultChartType?: ConsumptionDistributionChartType
 }
 
-const CHART_TYPE_ICONS: Record<ConsumptionDistributionChartType, typeof BarChart3> =
-  {
-    bar: BarChart3,
-    area: AreaChart,
-  }
+const CHART_TYPE_ICONS: Record<
+  ConsumptionDistributionChartType,
+  typeof BarChart3
+> = {
+  bar: BarChart3,
+  area: AreaChart,
+}
 
 export function ConsumptionDistributionChart(
   props: ConsumptionDistributionChartProps
@@ -83,20 +88,20 @@ export function ConsumptionDistributionChart(
     resolvedTheme,
   ].join('-')
 
+  const isEmpty = !props.loading && props.data.length === 0
+
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'overflow-hidden')}>
       <div className='flex w-full flex-col gap-1.5 border-b px-3 py-2 sm:gap-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
         <div className='flex items-center gap-2'>
           <WalletCards className='text-muted-foreground/60 size-4' />
-          <div className='text-sm font-semibold'>
-            {t('Quota Distribution')}
-          </div>
+          <div className='text-sm font-semibold'>{t('Quota Distribution')}</div>
           <span className='text-muted-foreground text-xs'>
             {t('Total:')} {chartData.totalQuotaDisplay}
           </span>
         </div>
 
-        <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-md border p-0.5 sm:h-8 sm:w-auto'>
+        <div className={cn(dashSegTrack, 'w-full overflow-x-auto sm:w-auto')}>
           {CONSUMPTION_DISTRIBUTION_CHART_OPTIONS.map((item) => {
             const Icon = CHART_TYPE_ICONS[item.value]
             return (
@@ -104,11 +109,8 @@ export function ConsumptionDistributionChart(
                 key={item.value}
                 type='button'
                 onClick={() => setChartType(item.value)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-[5px] px-3 text-xs font-medium transition-colors ${
-                  chartType === item.value
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                aria-pressed={chartType === item.value}
+                className={dashSegItem(chartType === item.value)}
               >
                 <Icon className='size-3.5' />
                 {t(item.labelKey)}
@@ -118,8 +120,18 @@ export function ConsumptionDistributionChart(
         </div>
       </div>
 
-      <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
-        {themeReady && spec && (
+      <div
+        className={cn(
+          'p-1.5 sm:p-2',
+          // 空态不需要撑满图表高度
+          isEmpty ? 'h-40' : 'h-[300px] sm:h-96'
+        )}
+      >
+        {isEmpty ? (
+          <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
+            {t('No data in selected range')}
+          </div>
+        ) : themeReady && spec ? (
           <VChart
             key={chartKey}
             spec={{
@@ -129,7 +141,7 @@ export function ConsumptionDistributionChart(
             }}
             option={VCHART_OPTION}
           />
-        )}
+        ) : null}
       </div>
     </div>
   )

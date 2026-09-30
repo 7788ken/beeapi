@@ -6,10 +6,17 @@ export type UserPermissions = {
   /** 超级管理员给该管理员配置的细粒度权限，见 lib/admin-perms.ts */
   admin?: {
     channel_view?: boolean
+    channel_edit?: boolean
+    channel_metrics?: boolean
+    model_view?: boolean
+    redemption_manage?: boolean
+    subscription_manage?: boolean
     log_view?: boolean
     quota_grant?: boolean
     user_manage?: boolean
     quota_deduct_self?: boolean
+    content_backup_view?: boolean
+    content_backup_manage?: boolean
   }
 }
 

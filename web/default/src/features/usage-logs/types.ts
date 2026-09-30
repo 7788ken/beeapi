@@ -77,7 +77,8 @@ export interface LogOtherData {
   admin_info?: {
     is_multi_key?: boolean
     multi_key_index?: number
-    use_channel?: number[]
+    // 后端按字符串写入渠道 ID；旧数据也可能是数字。
+    use_channel?: Array<number | string>
     local_count_tokens?: boolean
     channel_affinity?: ChannelAffinityInfo
     // Top-up audit fields (type=1, admin only)
@@ -100,9 +101,15 @@ export interface LogOtherData {
   text_input?: number
   text_output?: number
   cache_tokens?: number
+  // Normalized totals written by newer log billing paths.
+  input_tokens_total?: number
+  cache_write_tokens?: number
   cache_creation_tokens?: number
   cache_creation_tokens_5m?: number
   cache_creation_tokens_1h?: number
+  prompt_cache_hit_tokens?: number
+  cached_token_rate_mode?: string
+  usage_semantic?: string
   claude?: boolean
   model_ratio?: number
   completion_ratio?: number
@@ -115,6 +122,12 @@ export interface LogOtherData {
   cache_creation_ratio_1h?: number
   is_model_mapped?: boolean
   upstream_model_name?: string
+  response_model?: {
+    requested_model?: string
+    upstream_model?: string
+    returned_model?: string
+    mismatch?: boolean
+  }
   audio_ratio?: number
   audio_completion_ratio?: number
   frt?: number
@@ -283,6 +296,60 @@ export interface GetLogStatsResponse {
   success: boolean
   message?: string
   data?: LogStatistics
+}
+
+// ============================================================================
+// Aggregated Common Log Trend Types
+// ============================================================================
+
+/**
+ * Filters accepted by the server-side usage-log trend query.
+ *
+ * The endpoint returns one row per time bucket instead of log details. Keep
+ * pagination and `type` out of this contract: the server always aggregates
+ * consume logs (type=2) and applies its own bucket limit.
+ */
+export interface GetLogTrendParams {
+  username?: string
+  token_name?: string
+  model_name?: string
+  start_timestamp?: number
+  end_timestamp?: number
+  channel?: number
+  group?: string
+  request_id?: string
+  bucket_seconds?: number
+  tz_offset_sec?: number
+}
+
+export interface LogTrendPoint {
+  bucket_start: number
+  input_tokens: number
+  output_tokens: number
+  cache_write_tokens: number
+  cache_read_tokens: number
+  cache_hit_tokens: number
+  cache_hit_denominator: number
+  cache_hit_rate?: number | null
+  request_count?: number
+}
+
+export interface LogTrendData {
+  points: LogTrendPoint[]
+  bucket_seconds: number
+  start_ts?: number
+  end_ts?: number
+  total_rows?: number
+  partial?: boolean
+  truncated?: boolean
+  generated_at?: number
+  cache_hit_rate_mode?: string
+}
+
+export interface GetLogTrendResponse {
+  success: boolean
+  message?: string
+  data?: LogTrendData
 }
 
 // ============================================================================

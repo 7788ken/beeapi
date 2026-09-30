@@ -6,6 +6,7 @@ import { ChatSettingsSection } from './chat-settings-section'
 import { DashboardSection } from './dashboard-section'
 import { DrawingSettingsSection } from './drawing-settings-section'
 import { FAQSection } from './faq-section'
+import { SupportWidgetSection } from './support-widget-section'
 import { UptimeKumaSection } from './uptime-kuma-section'
 
 /**
@@ -77,6 +78,16 @@ const CONTENT_SECTIONS = [
       <UptimeKumaSection
         enabled={settings['console_setting.uptime_kuma_enabled']}
         data={settings['console_setting.uptime_kuma_groups']}
+      />
+    ),
+  },
+  {
+    id: 'support-widget',
+    titleKey: 'Live Chat',
+    descriptionKey: 'Show a live chat entry on every page',
+    build: (settings: ContentSettings) => (
+      <SupportWidgetSection
+        defaultValue={settings['console_setting.support_widget_code']}
       />
     ),
   },

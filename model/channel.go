@@ -72,6 +72,21 @@ type Channel struct {
 	VerifyGrade    string `json:"verify_grade" gorm:"column:verify_grade;type:varchar(8);default:''"`
 	VerifyTestedAt int64  `json:"verify_tested_at" gorm:"column:verify_tested_at;type:bigint;not null;default:0"`
 	VerifyReportId int64  `json:"verify_report_id" gorm:"column:verify_report_id;type:bigint;not null;default:0"`
+	// IQ test list snapshot fields are computed in batch from iq_test_results.
+	IQScore            *int   `json:"iq_score,omitempty" gorm:"-"`
+	IQScoreDelta       *int   `json:"iq_score_delta,omitempty" gorm:"-"`
+	IQScoreTrend       string `json:"iq_score_trend,omitempty" gorm:"-"`
+	IQScoreAt          int64  `json:"iq_score_at,omitempty" gorm:"-"`
+	IQScoreModel       string `json:"iq_score_model,omitempty" gorm:"-"`
+	IQScoreStatus      string `json:"iq_score_status,omitempty" gorm:"-"`
+	IQScorePrevious    *int   `json:"iq_score_previous,omitempty" gorm:"-"`
+	IQScoreBaseline    *int   `json:"iq_score_baseline,omitempty" gorm:"-"`
+	IQScoreError       string `json:"iq_score_error,omitempty" gorm:"-"`
+	IQAttemptAt        int64  `json:"iq_attempt_at,omitempty" gorm:"-"`
+	IQRevision         int64  `json:"-" gorm:"not null;default:0"`
+	IQBaselinePriority *int64 `json:"-" gorm:"type:bigint"`
+	IQAppliedPriority  *int64 `json:"-" gorm:"type:bigint"`
+	IQDisabled         bool   `json:"-" gorm:"not null;default:false"`
 
 	// 自动定时测评 + 阈值启停 + 隔离标记（docs/2026-06-18-channel-verify-auto-schedule-plan.md）
 	VerifyPrevScore        *int `json:"verify_prev_score" gorm:"column:verify_prev_score;default:null"`    // 上次成功分数：着色 + 告警对比
@@ -95,7 +110,7 @@ type Channel struct {
 	RatioDetail string `json:"ratio_detail" gorm:"column:ratio_detail;type:varchar(512);not null;default:''"`
 	// 本渠道 key 在上游所属的分组名。标准 new-api 不把 token 所属分组回显给 key 持有者，
 	// 故：管理员显式指定 > 按模型集合自动反推（唯一命中才采纳）> 都没有则退回展示全表区间。
-	RatioUpstreamGroup *string `json:"ratio_upstream_group" gorm:"column:ratio_upstream_group;type:varchar(191);default:null"` // 人工指定，权威
+	RatioUpstreamGroup *string `json:"ratio_upstream_group" gorm:"column:ratio_upstream_group;type:varchar(191);default:null"`        // 人工指定，权威
 	RatioResolvedGroup string  `json:"ratio_resolved_group" gorm:"column:ratio_resolved_group;type:varchar(191);not null;default:''"` // 实际采用的分组名（人工或自动反推）
 
 	// 实付倍率反推（docs 第十一节）：/api/pricing 的 group_ratio 只反映"抓取者身份"的价格，
@@ -366,6 +381,7 @@ func GetAutoDisabledChannelsForRecovery() ([]*Channel, error) {
 		Where("status = ?", common.ChannelStatusAutoDisabled).
 		Where("permanent_disabled = ? OR permanent_disabled IS NULL", 0).
 		Where("verify_disabled = ? OR verify_disabled IS NULL", 0). // 隔离：健康度恢复探活不碰 verify 禁用的渠道
+		Where("iq_disabled = ?", false).
 		Order("priority desc").
 		Find(&channels).Error
 	return channels, err
@@ -1352,6 +1368,47 @@ func GetAllChannelsLite(ctx context.Context) ([]ChannelLite, error) {
 	out := make([]ChannelLite, 0)
 	err := DB.WithContext(ctx).Table("channels").
 		Select("id, name, " + commonGroupCol + ", status, type, peak_rpm, peak_rpm_at").
+		Scan(&out).Error
+	return out, err
+}
+
+// ChannelGovernanceRow 治理状态分布用的最小投影。
+// 刻意不含 settings / used_quota / 任何 logs 派生列：治理分布只需要 channels 表的处置状态，
+// 是百行级扫描；用量口径（额度/调用量/RPM）走 GetChannelStatsRows 那条扫 logs 的重查询。
+type ChannelGovernanceRow struct {
+	Status            int  `gorm:"column:status"`
+	DegradeLevel      *int `gorm:"column:degrade_level"`
+	PermanentDisabled *int `gorm:"column:permanent_disabled"`
+	VerifyDisabled    *int `gorm:"column:verify_disabled"`
+}
+
+// GetChannelGovernanceRows 全量扫 channels 表的处置状态列。
+// 纯 GORM Select + Scan，无方言相关函数，三库通用。
+func GetChannelGovernanceRows(ctx context.Context) ([]ChannelGovernanceRow, error) {
+	out := make([]ChannelGovernanceRow, 0)
+	err := DB.WithContext(ctx).Table("channels").
+		Select("status, degrade_level, permanent_disabled, verify_disabled").
+		Scan(&out).Error
+	return out, err
+}
+
+// ChannelRemovedModelsRow 模型摘除清单投影：只有 settings 里真的带摘除记录的渠道才捞出来。
+type ChannelRemovedModelsRow struct {
+	Id       int    `gorm:"column:id"`
+	Name     string `gorm:"column:name"`
+	Settings string `gorm:"column:settings"`
+}
+
+// GetChannelsWithRemovedModels 捞出带模型摘除记录的渠道及其 settings JSON。
+//
+// settings 是 TEXT 存 JSON，没法在三库通用地在 SQL 里聚合（PostgreSQL 的 JSONB 运算符
+// SQLite/MySQL 没有），所以必须把命中行读回来在 Go 里解。代价用 LIKE 预筛压住：
+// 与复核任务同一个模式，正常站点只有个位数渠道处于摘除态，读回来的行数远小于全表。
+func GetChannelsWithRemovedModels(ctx context.Context) ([]ChannelRemovedModelsRow, error) {
+	out := make([]ChannelRemovedModelsRow, 0)
+	err := DB.WithContext(ctx).Table("channels").
+		Select("id, name, settings").
+		Where("settings LIKE ?", "%model_missing_removed_models%").
 		Scan(&out).Error
 	return out, err
 }

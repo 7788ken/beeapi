@@ -1,9 +1,14 @@
+import { cn } from '@/lib/utils'
+import { surfaceClass } from '@/components/ui/card'
+
 type SettingsSectionProps = {
   title: string
   titleProps?: React.HTMLAttributes<HTMLHeadingElement>
   description?: string
   children: React.ReactNode
   className?: string
+  /** 内容自带 Card、或本分区嵌在另一个分区的实底里时关掉，避免卡片套卡片 */
+  surface?: boolean
 }
 
 export function SettingsSection({
@@ -12,22 +17,19 @@ export function SettingsSection({
   description,
   children,
   className,
+  surface = true,
 }: SettingsSectionProps) {
-  const baseClassName = 'space-y-4'
-  const sectionClassName = className
-    ? `${baseClassName} ${className}`
-    : baseClassName
+  const { className: titleClassName, ...restTitleProps } = titleProps ?? {}
 
   return (
-    <section className={sectionClassName}>
-      <div className='space-y-1'>
+    <section className={cn('space-y-4', className)}>
+      <div className='space-y-1 border-s-2 border-primary ps-3'>
         <h3
-          {...titleProps}
-          className={
-            titleProps?.className
-              ? `text-base font-semibold ${titleProps.className}`
-              : 'text-base font-semibold'
-          }
+          {...restTitleProps}
+          className={cn(
+            'text-base font-semibold tracking-tight text-foreground',
+            titleClassName
+          )}
         >
           {title}
         </h3>
@@ -35,7 +37,11 @@ export function SettingsSection({
           <p className='text-muted-foreground text-sm'>{description}</p>
         )}
       </div>
-      {children}
+      {surface ? (
+        <div className={cn(surfaceClass, 'space-y-4 p-6')}>{children}</div>
+      ) : (
+        children
+      )}
     </section>
   )
 }

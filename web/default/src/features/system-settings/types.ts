@@ -47,6 +47,7 @@ export type GeneralSettings = {
   AffiliateCommissionEnabled: boolean
   AffiliateCommissionRatio: number
   TopUpLink: string
+  QuotaRemindThreshold: string
   'general_setting.docs_link': string
   'quota_setting.enable_free_model_pre_consume': boolean
   'quota_setting.billing_refund_when_no_output': boolean
@@ -57,7 +58,6 @@ export type GeneralSettings = {
   'general_setting.quota_display_type': string
   'general_setting.custom_currency_symbol': string
   'general_setting.custom_currency_exchange_rate': number
-  RetryTimes: number
   DisplayInCurrencyEnabled: boolean
   DisplayTokenStatEnabled: boolean
   DefaultCollapseSidebar: boolean
@@ -66,34 +66,6 @@ export type GeneralSettings = {
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number
-  'channel_affinity_setting.enabled': boolean
-  'channel_affinity_setting.switch_on_success': boolean
-  'channel_affinity_setting.max_entries': number
-  'channel_affinity_setting.default_ttl_seconds': number
-  'channel_affinity_setting.rules': string
-  'relay_retry_setting.total_timeout_seconds': number
-  'relay_retry_setting.backoff_base_ms': number
-  'relay_retry_setting.backoff_max_ms': number
-  'relay_retry_setting.model_timeouts': string
-  'url_health_setting.fail_threshold': number
-  'url_health_setting.cooldown_seconds': number
-  'url_health_setting.ewma_alpha': number
-  'url_health_setting.hysteresis_ratio': number
-  'url_health_setting.hysteresis_min_ms': number
-  'url_health_setting.exploration_gap_seconds': number
-  'channel_routing_setting.mode': string
-  'channel_routing_setting.capacity_window_sec': number
-  'channel_routing_setting.full_strategy': string
-  'channel_routing_setting.fail_mode': string
-  'channel_routing_setting.dry_run': boolean
-  'channel_routing_setting.dry_run_sample_rate': number
-  'channel_routing_setting.queue_max_wait_ms': number
-  'channel_routing_setting.queue_poll_interval_ms': number
-  'channel_verify_setting.auto_verify_enabled': boolean
-  'channel_verify_setting.global_interval_minutes': number
-  'channel_verify_setting.score_drop_threshold': number
-  'channel_verify_setting.notify_on_failure': boolean
-  'channel_verify_setting.scheduler_tick_minutes': number
 }
 
 export type AuthSettings = {
@@ -149,6 +121,7 @@ export type ContentSettings = {
   'console_setting.announcements_enabled': boolean
   'console_setting.faq_enabled': boolean
   'console_setting.uptime_kuma_enabled': boolean
+  'console_setting.support_widget_code': string
   DataExportEnabled: boolean
   DataExportDefaultTime: string
   DataExportInterval: number
@@ -174,41 +147,6 @@ export type IntegrationSettings = {
   WorkerAllowHttpImageRequestEnabled: boolean
   ReconcileBalancePanelBaseURL: string
   ReconcileBalancePanelToken: string
-  ChannelDisableThreshold: string
-  QuotaRemindThreshold: string
-  AutomaticDisableChannelEnabled: boolean
-  AutomaticEnableChannelEnabled: boolean
-  AutomaticDisableKeywords: string
-  AutomaticDisableStatusCodes: string
-  AutomaticRetryStatusCodes: string
-  'monitor_setting.auto_test_channel_enabled': boolean
-  'monitor_setting.auto_test_channel_minutes': number
-  'channel_health_setting.enabled': boolean
-  'channel_health_setting.base_degrade_threshold': number
-  'channel_health_setting.level_step_threshold': number
-  'channel_health_setting.max_degrade_level': number
-  'channel_health_setting.min_weight_factor': number
-  'channel_health_setting.max_ttft_ms': number
-  'channel_health_setting.latency_degrade_base': number
-  'channel_health_setting.latency_degrade_step': number
-  'channel_health_setting.count_latency_as_error': boolean
-  'channel_health_setting.disable_threshold': number
-  'channel_health_setting.upgrade_threshold': number
-  'channel_health_setting.degrade_probe_minutes': number
-  'channel_health_setting.degrade_probe_count': number
-  'channel_health_setting.count_429_as_error': boolean
-  'channel_health_setting.countable_status_codes': string
-  'channel_health_setting.notify_on_degrade': boolean
-  'channel_health_setting.notify_on_upgrade': boolean
-  'channel_health_setting.streak_window_sec': number
-  'channel_health_setting.rebounce_protection_minutes': number
-  'channel_health_setting.rebounce_protection_threshold': number
-  'channel_health_setting.demote_cooldown_sec': number
-  'channel_health_setting.recovery_strategy': string
-  'channel_health_setting.recovery_probe_minutes': number
-  'channel_health_setting.recovery_probe_model': string
-  'channel_health_setting.shadow_sample_rate': number
-  'channel_health_setting.skip_channel_tags': string
   'model_deployment.ionet.api_key': string
   'model_deployment.ionet.enabled': boolean
   PayAddress: string
@@ -311,9 +249,7 @@ export type ModelSettings = {
   'claude.default_max_tokens': string
   'claude.thinking_adapter_enabled': boolean
   'claude.thinking_adapter_budget_tokens_percentage': number
-  'retry_short_circuit_setting.enabled': boolean
-  'retry_short_circuit_setting.min_duration_seconds': number
-  'retry_short_circuit_setting.ttl_minutes': number
+  'claude.system_role_lift_enabled': boolean
   'grok.violation_deduction_enabled': boolean
   'grok.violation_deduction_amount': number
   ModelPrice: string
@@ -354,6 +290,103 @@ export type MaintenanceSettings = {
   'perf_metrics_setting.flush_interval': number
   'perf_metrics_setting.bucket_time': 'hour' | 'minute' | '5min'
   'perf_metrics_setting.retention_days': number
+}
+
+/**
+ * 渠道治理：自动禁用／恢复／降级／巡检。字段来源横跨 common/constants.go、
+ * setting/operation_setting/{monitor_setting,channel_health_setting}.go 与 model_missing.go。
+ */
+export type ChannelGovernanceSettings = {
+  'monitor_setting.auto_test_channel_enabled': boolean
+  'monitor_setting.auto_test_channel_minutes': number
+  'channel_health_setting.enabled': boolean
+  'channel_health_setting.base_degrade_threshold': number
+  'channel_health_setting.level_step_threshold': number
+  'channel_health_setting.max_degrade_level': number
+  'channel_health_setting.min_weight_factor': number
+  'channel_health_setting.upgrade_threshold': number
+  'channel_health_setting.streak_window_sec': number
+  'channel_health_setting.demote_cooldown_sec': number
+  'channel_health_setting.disable_threshold': number
+  'channel_health_setting.max_ttft_ms': number
+  'channel_health_setting.latency_degrade_base': number
+  'channel_health_setting.latency_degrade_step': number
+  'channel_health_setting.count_latency_as_error': boolean
+  'channel_health_setting.rebounce_protection_minutes': number
+  'channel_health_setting.rebounce_protection_threshold': number
+  'channel_health_setting.notify_on_degrade': boolean
+  'channel_health_setting.notify_on_upgrade': boolean
+  'channel_health_setting.count_429_as_error': boolean
+  'channel_health_setting.countable_status_codes': string
+  'channel_health_setting.degrade_probe_enabled': boolean
+  'channel_health_setting.degrade_probe_min_level': number
+  'channel_health_setting.degrade_probe_minutes': number
+  'channel_health_setting.degrade_probe_count': number
+  'channel_health_setting.recovery_strategy': string
+  'channel_health_setting.recovery_probe_minutes': number
+  ChannelDisableThreshold: string
+  AutomaticDisableChannelEnabled: boolean
+  AutomaticEnableChannelEnabled: boolean
+  AutomaticDisableKeywords: string
+  AutomaticDisableStatusCodes: string
+  AutomaticRetryStatusCodes: string
+  ModelMissingKeywords: string
+  ModelMissingRemovalEnabled: boolean
+  ModelMissingRemovalCooldownSeconds: number
+  ModelMissingRecheckIntervalSeconds: number
+  ModelRateLimitRemovalEnabled: boolean
+  ModelRateLimitRecheckIntervalSeconds: number
+  ModelForbiddenKeywords: string
+  ModelForbiddenStatusCodes: string
+  ModelForbiddenRemovalEnabled: boolean
+  ModelForbiddenRecheckIntervalSeconds: number
+  ModelRemovalMaxRemovedPerChannel: number
+  ModelRemovalConsecutiveThreshold: number
+  ModelRemovalCapAction: string
+  ModelMissingRemovalCapEnabled: boolean
+  ModelRemovalNotifyEnabled: boolean
+  'channel_verify_setting.auto_verify_enabled': boolean
+  'channel_verify_setting.global_interval_minutes': number
+  'channel_verify_setting.score_drop_threshold': number
+  'channel_verify_setting.notify_on_failure': boolean
+  'channel_verify_setting.scheduler_tick_minutes': number
+  RetryTimes: number
+  'relay_retry_setting.total_timeout_seconds': number
+  'relay_retry_setting.backoff_base_ms': number
+  'relay_retry_setting.backoff_max_ms': number
+  'relay_retry_setting.model_timeouts': string
+  'retry_short_circuit_setting.enabled': boolean
+  'retry_short_circuit_setting.min_duration_seconds': number
+  'retry_short_circuit_setting.ttl_minutes': number
+  'response_quality_setting.block_apology_enabled': boolean
+  'response_quality_setting.apology_status_code': number
+  'response_quality_setting.apology_message': string
+  'response_quality_setting.apology_keywords': string
+  'response_quality_setting.apply_all_channels': boolean
+  'response_quality_setting.block_low_token_enabled': boolean
+  'response_quality_setting.low_token_threshold': number
+  'response_quality_setting.low_token_status_code': number
+  'response_quality_setting.low_token_message': string
+  'response_quality_setting.retry_on_block': boolean
+  'channel_routing_setting.mode': string
+  'channel_routing_setting.capacity_window_sec': number
+  'channel_routing_setting.full_strategy': string
+  'channel_routing_setting.fail_mode': string
+  'channel_routing_setting.dry_run': boolean
+  'channel_routing_setting.dry_run_sample_rate': number
+  'channel_routing_setting.queue_max_wait_ms': number
+  'channel_routing_setting.queue_poll_interval_ms': number
+  'url_health_setting.fail_threshold': number
+  'url_health_setting.cooldown_seconds': number
+  'url_health_setting.ewma_alpha': number
+  'url_health_setting.hysteresis_ratio': number
+  'url_health_setting.hysteresis_min_ms': number
+  'url_health_setting.exploration_gap_seconds': number
+  'channel_affinity_setting.enabled': boolean
+  'channel_affinity_setting.switch_on_success': boolean
+  'channel_affinity_setting.max_entries': number
+  'channel_affinity_setting.default_ttl_seconds': number
+  'channel_affinity_setting.rules': string
 }
 
 export type RequestLimitsSettings = {

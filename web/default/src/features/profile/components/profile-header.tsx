@@ -2,7 +2,9 @@ import { Activity, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { surfaceClass } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/status-badge'
 import { getUserInitials, getDisplayName } from '../lib'
@@ -22,7 +24,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
 
   if (loading) {
     return (
-      <div className='bg-card overflow-hidden rounded-lg border'>
+      <div className={cn(surfaceClass, 'overflow-hidden')}>
         <div className='p-4 sm:p-5'>
           <div className='flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left'>
             <Skeleton className='h-16 w-16 rounded-2xl' />
@@ -81,7 +83,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   ]
 
   return (
-    <div className='bg-card overflow-hidden rounded-lg border'>
+    <div className={cn(surfaceClass, 'overflow-hidden')}>
       <div className='p-3 sm:p-5'>
         <div className='flex items-center gap-3 text-left sm:gap-4'>
           <Avatar className='ring-background h-12 w-12 rounded-xl text-sm ring-2 sm:h-16 sm:w-16 sm:rounded-2xl sm:text-lg sm:ring-4'>

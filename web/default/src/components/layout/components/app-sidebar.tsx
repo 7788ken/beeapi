@@ -13,6 +13,10 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import {
+  useContentBackupModuleEnabled,
+  withoutContentBackupNav,
+} from '@/features/content-backup/module'
 import { getNavGroupsForPath } from '../lib/workspace-registry'
 import { NavGroup } from './nav-group'
 import { WorkspaceSwitcher } from './workspace-switcher'
@@ -32,6 +36,7 @@ export function AppSidebar() {
   const userRole = useAuthStore((state) => state.auth.user?.role)
   const adminPerms = useAdminPerms()
   const sidebarData = useSidebarData()
+  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
 
   // Get navigation group configuration corresponding to current path from workspace registry
   // If workspace has its own nav groups, prepend them before the default nav groups
@@ -41,7 +46,12 @@ export function AppSidebar() {
     : sidebarData.navGroups
 
   // Filter sidebar navigation items based on backend configuration
-  const configFilteredNavGroups = useSidebarConfig(allNavGroups)
+  // 本部署关闭内容备份模块时，先摘掉所有内容备份入口
+  const configFilteredNavGroups = useSidebarConfig(
+    contentBackupModuleEnabled
+      ? allNavGroups
+      : withoutContentBackupNav(allNavGroups)
+  )
 
   // Filter navigation groups based on user role
   // Non-Admin users cannot see Admin navigation group
@@ -56,8 +66,21 @@ export function AppSidebar() {
           items: group.items.filter((item) => {
             const url = 'url' in item ? item.url : undefined
             if (url === '/channels') return adminPerms.channel_view
+            if (url === '/iq-test')
+              return (
+                adminPerms.channel_metrics &&
+                (adminPerms.channel_view || adminPerms.channel_edit)
+              )
+            if (url === '/models/metadata') return adminPerms.model_view
+            if (url === '/redemption-codes') return adminPerms.redemption_manage
+            if (url === '/subscriptions') return adminPerms.subscription_manage
             if (url === '/users')
               return adminPerms.user_manage || adminPerms.quota_grant
+            if (url === '/content-backup')
+              return (
+                adminPerms.content_backup_view ||
+                adminPerms.content_backup_manage
+              )
             return true
           }),
         }

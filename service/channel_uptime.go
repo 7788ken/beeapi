@@ -42,7 +42,8 @@ var (
 )
 
 // GetChannelUptime 返回 map[channelId]桶序列（按桶时间升序）；窗口内无日志的渠道不出现在结果里。
-func GetChannelUptime(ctx context.Context, hours int, tzOffsetSec int64) (map[string][]ChannelUptimePoint, error) {
+// force=true 时跳过缓存读取直接查库（用于渠道列表「刷新」按钮强制拉新），查完仍写回缓存供后续复用。
+func GetChannelUptime(ctx context.Context, hours int, tzOffsetSec int64, force bool) (map[string][]ChannelUptimePoint, error) {
 	if hours < ChannelUptimeMinHours || hours > ChannelUptimeMaxHours {
 		return nil, fmt.Errorf("invalid hours: must be between %d and %d", ChannelUptimeMinHours, ChannelUptimeMaxHours)
 	}
@@ -53,8 +54,10 @@ func GetChannelUptime(ctx context.Context, hours int, tzOffsetSec int64) (map[st
 	defer channelUptimeMu.Unlock()
 
 	now := time.Now()
-	if entry, ok := channelUptimeCache[cacheKey]; ok && now.Before(entry.expiresAt) {
-		return entry.data, nil
+	if !force {
+		if entry, ok := channelUptimeCache[cacheKey]; ok && now.Before(entry.expiresAt) {
+			return entry.data, nil
+		}
 	}
 	for k, entry := range channelUptimeCache {
 		if !now.Before(entry.expiresAt) {

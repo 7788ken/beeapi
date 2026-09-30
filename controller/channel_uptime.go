@@ -11,10 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetChannelUptime GET /api/channel/uptime?hours=24&tz_offset_sec=
+// GetChannelUptime GET /api/channel/uptime?hours=24&tz_offset_sec=&refresh=1
 //
 // 渠道列表「可用性」列的批量数据源：一次返回全部渠道近 N 小时的每小时成功/失败计数。
 // hours 取值 1..168（默认 24）；结果在 service 层按 (hours, tz) 进程内缓存 5 分钟。
+// refresh=1 时强制绕过缓存重查（渠道列表刷新按钮使用）。
 func GetChannelUptime(c *gin.Context) {
 	hours, _ := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("hours", "24")))
 	if hours <= 0 {
@@ -28,8 +29,11 @@ func GetChannelUptime(c *gin.Context) {
 	if tzOffsetSec < -14*3600 || tzOffsetSec > 14*3600 {
 		tzOffsetSec = 0
 	}
+	// refresh=1/true 时绕过 service 层进程内缓存，保证手动刷新拿到最新可用率
+	refreshRaw := strings.ToLower(strings.TrimSpace(c.Query("refresh")))
+	force := refreshRaw == "1" || refreshRaw == "true"
 
-	data, err := service.GetChannelUptime(c.Request.Context(), hours, tzOffsetSec)
+	data, err := service.GetChannelUptime(c.Request.Context(), hours, tzOffsetSec, force)
 	if err != nil {
 		common.ApiError(c, err)
 		return
