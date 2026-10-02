@@ -1,6 +1,5 @@
-import { Link } from '@tanstack/react-router'
+import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
-  Archive,
   Copy,
   Check,
   Route,
@@ -18,7 +17,6 @@ import { useTranslation } from 'react-i18next'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { useAdminPerms } from '@/hooks/use-admin'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,9 +29,9 @@ import {
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
-import { useContentBackupModuleEnabled } from '@/features/content-backup/module'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import type { UsageLog } from '../../data/schema'
+import { buildChainLogSearch } from '../../lib/chain-search'
 import {
   parseLogOther,
   getParamOverrideActionLabel,
@@ -52,6 +50,8 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+
+const logsRoute = getRouteApi('/_authenticated/usage-logs/$section')
 
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
@@ -387,13 +387,9 @@ interface DetailsDialogProps {
 
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const search = logsRoute.useSearch()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
-  const contentBackupPerms = useAdminPerms()
-  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
-  const canViewContentBackup =
-    contentBackupModuleEnabled &&
-    (contentBackupPerms.content_backup_view ||
-      contentBackupPerms.content_backup_manage)
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
@@ -547,48 +543,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
 
-              {canViewContentBackup &&
-                (props.log.request_id ? (
-                  <DetailRow
-                    label={t('Content backup')}
-                    value={
-                      <Button
-                        asChild
-                        variant='outline'
-                        size='sm'
-                        className='h-6 gap-1 px-2 text-xs'
-                      >
-                        <Link
-                          to='/content-backup'
-                          search={{ requestId: props.log.request_id }}
-                          target='_blank'
-                        >
-                          <Archive className='size-3' />
-                          {t('View captured request')}
-                        </Link>
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <DetailRow
-                    label={t('Content backup')}
-                    value={
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        disabled
-                        className='h-6 gap-1 px-2 text-xs'
-                        title={t(
-                          'No request ID was recorded for this log entry'
-                        )}
-                      >
-                        <Archive className='size-3' />
-                        {t('View captured request')}
-                      </Button>
-                    }
-                  />
-                ))}
-
               {props.isAdmin && props.log.channel > 0 && (
                 <DetailRow
                   label={t('Channel')}
@@ -608,7 +562,43 @@ export function DetailsDialog(props: DetailsDialogProps) {
               )}
 
               {channelChain && props.isAdmin && (
-                <DetailRow label={t('Retry Chain')} value={channelChain} mono />
+                <DetailRow
+                  label={t('Retry Chain')}
+                  value={
+                    <span className='inline-flex flex-wrap items-center gap-2'>
+                      <span>{channelChain}</span>
+                      {props.log.request_id?.trim() && (
+                        <button
+                          type='button'
+                          className='text-[#635bff] rounded-sm font-sans underline-offset-2 hover:underline focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(99,91,255,0.3)]'
+                          onClick={() => {
+                            const requestId = props.log.request_id?.trim()
+                            if (!requestId) return
+                            props.onOpenChange(false)
+                            navigate({
+                              to: '/usage-logs/$section',
+                              params: { section: 'common' },
+                              search: buildChainLogSearch({
+                                requestId,
+                                createdAtSec: props.log.created_at,
+                                startTime: search.startTime,
+                                endTime: search.endTime,
+                                pageSize: search.pageSize,
+                                model: search.model,
+                                token: search.token,
+                                group: search.group,
+                                username: search.username,
+                              }),
+                            })
+                          }}
+                        >
+                          {t('View this chain from the first record')}
+                        </button>
+                      )}
+                    </span>
+                  }
+                  mono
+                />
               )}
 
               {props.log.token_name && (

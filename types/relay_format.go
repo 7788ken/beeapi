@@ -13,6 +13,9 @@ const (
 	RelayFormatOpenAIRealtime                        = "openai_realtime"
 	RelayFormatRerank                                = "rerank"
 	RelayFormatEmbedding                             = "embedding"
+	// RelayFormatSystemOne TypeSafe 决策模型 API：state + 带类型 questions 进，类型化答案与概率出。
+	// 不是聊天形态，原样透传。
+	RelayFormatSystemOne = "system_one"
 
 	RelayFormatTask    = "task"
 	RelayFormatMjProxy = "mj_proxy"

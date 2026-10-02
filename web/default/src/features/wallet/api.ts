@@ -19,6 +19,8 @@ import type {
   WaffoPancakePaymentResponse,
   CryptomusPaymentRequest,
   CryptomusPaymentResponse,
+  BepusdtPaymentRequest,
+  BepusdtPaymentResponse,
   AgouPaymentRequest,
   AgouPaymentResponse,
 } from './types'
@@ -158,6 +160,30 @@ export async function calculateCryptomusAmount(
   request: AmountRequest
 ): Promise<AmountResponse> {
   const res = await api.post('/api/user/cryptomus/amount', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Calculate payment amount for BEpusdt (USDT) payment
+ */
+export async function calculateBepusdtAmount(
+  request: AmountRequest
+): Promise<AmountResponse> {
+  const res = await api.post('/api/user/bepusdt/amount', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/**
+ * Request BEpusdt (USDT) payment
+ */
+export async function requestBepusdtPayment(
+  request: BepusdtPaymentRequest
+): Promise<BepusdtPaymentResponse> {
+  const res = await api.post('/api/user/bepusdt/pay', request, {
     skipBusinessError: true,
   } as Record<string, unknown>)
   return res.data

@@ -3,19 +3,19 @@ import { describe, expect, test } from 'bun:test'
 import type { Channel } from '../types'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
+  createChannelFormDefaults,
   transformChannelToFormDefaults,
   transformFormDataToUpdatePayload,
 } from './channel-form.ts'
 
-// T12: 渠道 settings 更新走最小 payload，不得覆盖 proxy/system_prompt 等既有字段。
-// buildSettingJSON() 以 formData.setting（编辑回显时的原始 JSON）为基底展开，
-// 这里验证加入 content_backup_enabled 开关后，该基底展开逻辑仍然成立。
-describe('content backup toggle preserves unrelated channel setting fields', () => {
-  test('toggling content_backup_enabled keeps proxy/system_prompt and unknown fields intact', () => {
+// 渠道页不编辑内容备份开关。保存时基底展开必须原样留下 content_backup_enabled，
+// 不能因为表单里没有这个字段就把它写成 false。
+describe('channel save leaves content backup ownership to the console', () => {
+  test('keeps an enabled backup flag and unrelated setting fields', () => {
     const existingSetting = JSON.stringify({
       proxy: 'socks5://user:pass@10.0.0.1:1080',
       system_prompt: 'You are a helpful assistant.',
-      // 模拟后端已新增、前端尚未适配的字段：必须原样透传，不能被整体覆盖清空
+      content_backup_enabled: true,
       base_url_strategy: 'fastest',
     })
 
@@ -24,7 +24,6 @@ describe('content backup toggle preserves unrelated channel setting fields', () 
       setting: existingSetting,
       proxy: 'socks5://user:pass@10.0.0.1:1080',
       system_prompt: 'You are a helpful assistant.',
-      content_backup_enabled: true,
       block_apology_enabled: true,
       block_low_token_enabled: true,
     }
@@ -40,24 +39,38 @@ describe('content backup toggle preserves unrelated channel setting fields', () 
     expect(saved.block_low_token_enabled).toBe(true)
   })
 
-  test('leaving content_backup_enabled unset defaults to false without touching other fields', () => {
+  test('does not add a backup flag when the stored setting has none', () => {
     const existingSetting = JSON.stringify({
       proxy: 'socks5://user:pass@10.0.0.1:1080',
-      content_backup_enabled: true,
     })
 
     const formData = {
       ...CHANNEL_FORM_DEFAULT_VALUES,
       setting: existingSetting,
       proxy: 'socks5://user:pass@10.0.0.1:1080',
-      content_backup_enabled: false,
     }
 
     const payload = transformFormDataToUpdatePayload(formData, 42)
     const saved = JSON.parse(payload.setting as string)
 
     expect(saved.proxy).toBe('socks5://user:pass@10.0.0.1:1080')
-    expect(saved.content_backup_enabled).toBe(false)
+    expect(saved.content_backup_enabled).toBeUndefined()
+  })
+})
+
+describe('create channel quality block defaults', () => {
+  test('stays off unless this site turns the new-channel options on', () => {
+    const off = createChannelFormDefaults()
+    expect(off.block_apology_enabled).toBe(false)
+    expect(off.block_low_token_enabled).toBe(false)
+
+    const on = createChannelFormDefaults({
+      blockApology: true,
+      blockLowToken: true,
+    })
+    expect(on.block_apology_enabled).toBe(true)
+    expect(on.block_low_token_enabled).toBe(true)
+    expect(on.skip_auto_test).toBe(false)
   })
 })
 

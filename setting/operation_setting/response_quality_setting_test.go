@@ -90,6 +90,8 @@ func TestResponseQualitySettingExportKeys(t *testing.T) {
 		"response_quality_setting.low_token_status_code",
 		"response_quality_setting.low_token_message",
 		"response_quality_setting.retry_on_block",
+		"response_quality_setting.new_channel_block_apology",
+		"response_quality_setting.new_channel_block_low_token",
 	} {
 		if _, ok := all[key]; !ok {
 			t.Errorf("option key %q missing from ExportAllConfigs", key)

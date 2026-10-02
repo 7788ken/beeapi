@@ -98,6 +98,7 @@ func cozeChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Res
 }
 
 func cozeChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	defer service.CloseResponseBodyGracefully(resp)
 	scanner := helper.NewStreamScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 	helper.SetEventStreamHeaders(c)
@@ -117,6 +118,9 @@ func cozeChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *ht
 				handleCozeEvent(c, currentEvent, currentData, &responseText, usage, id, info)
 				currentEvent = ""
 				currentData = ""
+				if service.QualityStreamBlocked(c) {
+					break
+				}
 			}
 			continue
 		}

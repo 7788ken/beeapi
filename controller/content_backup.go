@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/contentbackup"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -317,16 +318,18 @@ func ContentBackupRetry(c *gin.Context) {
 // password never leaves the server: the config is redacted and a boolean says
 // whether a password is stored, so the form can show "set" without echoing it.
 func ContentBackupGetConfig(c *gin.Context) {
-	cfg := operation_setting.GetContentBackupConfig()
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data": gin.H{
-			"config":                 cfg.Redacted(),
-			"remote_password_set":    cfg.RemotePassword != "",
-			"remote_credentials_set": cfg.RemoteCredentialsSet(),
-		},
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": contentBackupConfigData(operation_setting.GetContentBackupConfig())})
+}
+
+// contentBackupConfigData 是 GET / PUT /config 成功回复的 data，两处共用，避免只改一处。
+// smtp_configured 让管理端在打开告警邮件之前就能看出本站发不出信。
+func contentBackupConfigData(cfg contentbackup.Config) gin.H {
+	return gin.H{
+		"config":                 cfg.Redacted(),
+		"remote_password_set":    cfg.RemotePassword != "",
+		"remote_credentials_set": cfg.RemoteCredentialsSet(),
+		"smtp_configured":        common.SMTPServer != "",
+	}
 }
 
 // ContentBackupPutConfig serves PUT /api/content_backup/config (Root only):
@@ -358,7 +361,78 @@ func ContentBackupPutConfig(c *gin.Context) {
 		contentBackupError(c, err, http.StatusInternalServerError)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"config": saved.Redacted(), "remote_password_set": saved.RemotePassword != "", "remote_credentials_set": saved.RemoteCredentialsSet()}})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": contentBackupConfigData(saved)})
+}
+
+// ContentBackupTestNotify serves POST /api/content_backup/notify/test：给已保存的收件人发一封
+// 测试邮件。管理端按 code 分支提示，状态码和 code 是契约，不随错误文案变。
+func ContentBackupTestNotify(c *gin.Context) {
+	now := time.Now()
+	recipients, err := service.SendContentBackupTestEmail(operation_setting.GetContentBackupConfig(), now)
+	if err != nil {
+		code, status := contentBackupTestNotifyFailure(err)
+		c.JSON(status, gin.H{"success": false, "code": code, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"recipients": recipients,
+			"sent_at":    now.UTC().Format(time.RFC3339),
+		},
+	})
+}
+
+// contentBackupTestNotifyFailure 把测试邮件的失败翻译成管理端认的 code 和状态码。
+func contentBackupTestNotifyFailure(err error) (string, int) {
+	switch {
+	case errors.Is(err, service.ErrContentBackupNoRecipients):
+		return "no_recipients", http.StatusBadRequest
+	case errors.Is(err, service.ErrContentBackupSMTPNotConfigured):
+		return "smtp_not_configured", http.StatusBadRequest
+	case errors.Is(err, common.ErrEmailThrottled):
+		return "email_throttled", http.StatusTooManyRequests
+	default:
+		return "send_failed", http.StatusBadGateway
+	}
+}
+
+// ContentBackupListChannels serves GET /api/content_backup/channels.
+// It returns only the fields the console needs to toggle backup collection.
+// Channel keys and the rest of the setting blob stay on the server.
+func ContentBackupListChannels(c *gin.Context) {
+	if model.DB == nil {
+		contentBackupError(c, errors.New("database is not initialized"), http.StatusInternalServerError)
+		return
+	}
+	var rows []struct {
+		Id      int
+		Name    string
+		Status  int
+		Setting *string
+	}
+	if err := model.DB.Model(&model.Channel{}).Select("id", "name", "status", "setting").Order("id asc").Find(&rows).Error; err != nil {
+		contentBackupError(c, err, http.StatusInternalServerError)
+		return
+	}
+	items := make([]gin.H, 0, len(rows))
+	for _, row := range rows {
+		enabled := false
+		if row.Setting != nil && *row.Setting != "" {
+			var settings dto.ChannelSettings
+			if err := common.Unmarshal([]byte(*row.Setting), &settings); err == nil {
+				enabled = settings.ContentBackupEnabled
+			}
+		}
+		items = append(items, gin.H{
+			"id":                     row.Id,
+			"name":                   row.Name,
+			"status":                 row.Status,
+			"content_backup_enabled": enabled,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"items": items}})
 }
 
 // ContentBackupUpdateChannels serves PUT /api/content_backup/channels/backup:

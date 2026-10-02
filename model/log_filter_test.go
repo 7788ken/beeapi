@@ -25,13 +25,13 @@ func TestGetAllLogsModelNameExactUnlessWildcardExplicit(t *testing.T) {
 	insertLog(t, &Log{ModelName: "gpt-4o", Type: LogTypeConsume, Username: "admin"})
 	insertLog(t, &Log{ModelName: "gpt-4.1", Type: LogTypeConsume, Username: "admin"})
 
-	logs, total, err := GetAllLogs(LogTypeUnknown, 0, 0, "gpt-4", "", "", 0, 20, 0, "", "")
+	logs, total, err := GetAllLogs(LogTypeUnknown, 0, 0, "gpt-4", "", "", 0, 20, 0, "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Len(t, logs, 1)
 	require.Equal(t, "gpt-4", logs[0].ModelName)
 
-	logs, total, err = GetAllLogs(LogTypeUnknown, 0, 0, "gpt-4%", "", "", 0, 20, 0, "", "")
+	logs, total, err = GetAllLogs(LogTypeUnknown, 0, 0, "gpt-4%", "", "", 0, 20, 0, "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), total)
 	require.Len(t, logs, 3)
@@ -114,6 +114,7 @@ func TestGetUserLogsCapsTotalAtSearchLimit(t *testing.T) {
 		20,
 		"",
 		"",
+		false,
 	)
 	require.NoError(t, err)
 	require.Len(t, logs, 20)
@@ -139,9 +140,29 @@ func TestGetUserLogsReturnsExactTotalForShortFirstPage(t *testing.T) {
 		20,
 		"",
 		"",
+		false,
 	)
 	require.NoError(t, err)
 	require.Len(t, logs, 2)
 	require.Equal(t, int64(2), total)
 	require.False(t, totalIsCapped)
+}
+
+func TestGetAllLogsOldestFirstStartsAtFirstRecord(t *testing.T) {
+	truncateTables(t)
+
+	insertLog(t, &Log{RequestId: "req-chain", ModelName: "claude", Type: LogTypeError, CreatedAt: 100, ChannelId: 27})
+	insertLog(t, &Log{RequestId: "req-chain", ModelName: "claude", Type: LogTypeConsume, CreatedAt: 200, ChannelId: 17})
+	insertLog(t, &Log{RequestId: "other", ModelName: "claude", Type: LogTypeConsume, CreatedAt: 50, ChannelId: 1})
+
+	logs, total, err := GetAllLogs(LogTypeUnknown, 0, 0, "", "", "", 0, 20, 0, "", "req-chain", true)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Equal(t, 27, logs[0].ChannelId)
+	require.Equal(t, 17, logs[1].ChannelId)
+
+	logs, _, err = GetAllLogs(LogTypeUnknown, 0, 0, "", "", "", 0, 20, 0, "", "req-chain", false)
+	require.NoError(t, err)
+	require.Equal(t, 17, logs[0].ChannelId)
+	require.Equal(t, 27, logs[1].ChannelId)
 }

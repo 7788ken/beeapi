@@ -61,6 +61,7 @@ export function getChannelTypeIcon(type: number): string {
     31: 'Yi', // LingYiWanWu
     35: 'Minimax', // MiniMax
     61: 'Minimax', // MiniMaxInf (service-inference 网关 minimax-h3)
+    62: 'OpenAI', // TypeSafe (System One 决策模型，暂无专用图标)
     45: 'Volcengine', // VolcEngine
 
     // Other AI providers

@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, test } from 'bun:test'
 import type { NavGroup } from '@/components/layout/types'
 import type { SystemStatus } from '@/features/auth/types'
+import { INTEGRATIONS_SECTION_IDS } from '@/features/system-settings/integrations/section-registry.tsx'
 import {
   ensureContentBackupModuleEnabled,
   withoutContentBackupNav,
@@ -73,6 +74,12 @@ function findGroup(groups: NavGroup[], id: string): NavGroup {
   if (!group) throw new Error(`nav group ${id} missing`)
   return group
 }
+
+describe('public content backup entries', () => {
+  test('integrations registry does not list the content-backup section', () => {
+    expect([...INTEGRATIONS_SECTION_IDS]).not.toContain('content-backup')
+  })
+})
 
 describe('withoutContentBackupNav', () => {
   test('removes the top-level /content-backup page entry', () => {

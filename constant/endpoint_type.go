@@ -12,6 +12,7 @@ const (
 	EndpointTypeImageGeneration       EndpointType = "image-generation"
 	EndpointTypeEmbeddings            EndpointType = "embeddings"
 	EndpointTypeOpenAIVideo           EndpointType = "openai-video"
+	EndpointTypeTypeSafeSystemOne     EndpointType = "typesafe-systemone" // TypeSafe System One 决策模型（Jev），POST /v1/systemone
 	//EndpointTypeMidjourney     EndpointType = "midjourney-proxy"
 	//EndpointTypeSuno           EndpointType = "suno-proxy"
 	//EndpointTypeKling          EndpointType = "kling"

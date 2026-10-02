@@ -97,6 +97,19 @@ func isCryptomusWebhookEnabled() bool {
 	return isCryptomusTopUpEnabled()
 }
 
+// isBepusdtTopUpEnabled 网关地址 + 对接令牌齐全且开关打开才开放（fail-closed）。
+func isBepusdtTopUpEnabled() bool {
+	if !setting.BepusdtEnabled {
+		return false
+	}
+	return strings.TrimSpace(setting.BepusdtBaseURL) != "" &&
+		strings.TrimSpace(setting.BepusdtApiToken) != ""
+}
+
+func isBepusdtWebhookEnabled() bool {
+	return isBepusdtTopUpEnabled()
+}
+
 func isAgouTopUpEnabled() bool {
 	if !setting.AgouEnabled {
 		return false

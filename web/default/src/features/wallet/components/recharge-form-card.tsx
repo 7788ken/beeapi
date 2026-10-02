@@ -82,6 +82,7 @@ interface RechargeFormCardProps {
   waffoMinTopup?: number
   enableWaffoPancakeTopup?: boolean
   enableCryptomusTopup?: boolean
+  enableBepusdtTopup?: boolean
   enableAgouTopup?: boolean
   agouPayMethods?: AgouPayMethod[]
   agouMinTopup?: number
@@ -250,6 +251,7 @@ export function RechargeFormCard({
   waffoMinTopup,
   enableWaffoPancakeTopup,
   enableCryptomusTopup,
+  enableBepusdtTopup,
   enableAgouTopup,
   agouMinTopup,
   providers,
@@ -275,6 +277,7 @@ export function RechargeFormCard({
     enableWaffoTopup ||
     enableWaffoPancakeTopup ||
     enableCryptomusTopup ||
+    enableBepusdtTopup ||
     enableAgouTopup
   const hasWaffoPaymentMethods =
     enableWaffoTopup &&
@@ -312,7 +315,12 @@ export function RechargeFormCard({
     }
 
     // ② legacy 静态方式（epay/stripe/waffo旧）；waffo_pancake/cryptomus/agou 已并入 providers，去重排除。
-    const providerCovered = new Set(['waffo_pancake', 'cryptomus', 'sfpay'])
+    const providerCovered = new Set([
+      'waffo_pancake',
+      'cryptomus',
+      'bepusdt',
+      'sfpay',
+    ])
     if (Array.isArray(topupInfo?.pay_methods)) {
       for (const method of topupInfo.pay_methods) {
         if (providerCovered.has(method.type)) continue

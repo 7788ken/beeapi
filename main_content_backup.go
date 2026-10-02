@@ -19,8 +19,9 @@ import (
 const contentBackupDefaultSpoolDir = "content-backup"
 
 // contentBackupModuleEnabled 解析部署级模块开关 CONTENT_BACKUP_MODULE：未设置或 on 为开启，
-// off 为关闭（不启动采集/上传/告警，不注册 /api/content_backup/*，前端隐藏全部入口）；
+// off 为关闭（不启动采集/上传/告警，不注册 /api/content_backup/*）；
 // 其它取值直接启动失败，避免拼错后模块被静默开关。
+// 公开后台不再提供内容备份入口；开启时也只有持有 CONTENT_BACKUP_CONSOLE_TOKEN 的管理端能调接口。
 func contentBackupModuleEnabled() (bool, error) {
 	switch strings.TrimSpace(os.Getenv("CONTENT_BACKUP_MODULE")) {
 	case "", "on":
@@ -30,6 +31,10 @@ func contentBackupModuleEnabled() (bool, error) {
 	default:
 		return false, errors.New("CONTENT_BACKUP_MODULE must be on or off")
 	}
+}
+
+func contentBackupConsoleToken() string {
+	return strings.TrimSpace(os.Getenv("CONTENT_BACKUP_CONSOLE_TOKEN"))
 }
 
 // initContentBackupCapture starts the in-process backup runtime and arms the capture hooks.

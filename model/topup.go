@@ -31,6 +31,7 @@ const (
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
 	PaymentMethodCryptomus    = "cryptomus"
+	PaymentMethodBepusdt      = "bepusdt"
 	PaymentMethodAgou         = "sfpay"
 	// PaymentMethodBalance 标识"使用账户余额支付订阅"
 	PaymentMethodBalance = "balance"
@@ -43,6 +44,7 @@ const (
 	PaymentProviderWaffo        = "waffo"
 	PaymentProviderWaffoPancake = "waffo_pancake"
 	PaymentProviderCryptomus    = "cryptomus"
+	PaymentProviderBepusdt      = "bepusdt"
 	PaymentProviderAgou         = "sfpay"
 	PaymentProviderBalance      = "balance"
 )
@@ -797,6 +799,74 @@ func RechargeCryptomus(tradeNo string) (err error) {
 
 	if quotaToAdd > 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("Cryptomus 充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
+	}
+
+	return nil
+}
+
+// RechargeBepusdt 处理 BEpusdt 回调入账：行锁 → 校验渠道 → 已成功幂等返回 → pending 转 success 并加额度。
+func RechargeBepusdt(tradeNo string) (err error) {
+	if tradeNo == "" {
+		return errors.New("未提供支付单号")
+	}
+
+	var quotaToAdd int
+	topUp := &TopUp{}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		err := withForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error
+		if err != nil {
+			return errors.New("充值订单不存在")
+		}
+
+		if topUp.PaymentProvider != PaymentProviderBepusdt {
+			return ErrPaymentMethodMismatch
+		}
+
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil
+		}
+
+		if topUp.Status != common.TopUpStatusPending {
+			return errors.New("充值订单状态错误")
+		}
+
+		quotaToAdd = int(decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart())
+		if quotaToAdd <= 0 {
+			return errors.New("无效的充值额度")
+		}
+
+		topUp.CompleteTime = common.GetTimestamp()
+		if err := transitionPendingTopUpTx(tx, topUp, map[string]interface{}{
+			"complete_time": topUp.CompleteTime,
+			"status":        common.TopUpStatusSuccess,
+		}); err != nil {
+			return err
+		}
+
+		if err := requireSingleRow(
+			tx.Model(&User{}).Where("id = ?", topUp.UserId).
+				Update("quota", gorm.Expr("quota + ?", quotaToAdd)),
+			errors.New("充值用户不存在"),
+		); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		common.SysError("bepusdt topup failed: " + err.Error())
+		return errors.New("充值失败，请稍后重试")
+	}
+
+	if quotaToAdd > 0 {
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("USDT（BEpusdt）充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package contentbackup
 
 import (
 	"fmt"
+	"net/mail"
 	"path"
 	"regexp"
 	"strings"
@@ -101,7 +102,14 @@ type Config struct {
 	CleanupPendingAlertMinutes int `json:"cleanup_pending_alert_minutes"`
 	AlertDedupMinutes          int `json:"alert_dedup_minutes"`
 
-	// Notify* 控制哪些告警发信。旧配置缺这些键时 Parse 从 DefaultConfig 起解码，保持全开。
+	// NotifyEmailEnabled 是告警邮件总开关，默认关：关着时告警照常记账，一封邮件都不发。
+	// 已部署站点库里的旧整包没有这个键，解码取默认值，所以升级后默认停发，直到在管理端打开。
+	NotifyEmailEnabled bool `json:"notify_email_enabled"`
+	// NotifyEmails 是告警邮件的全部收件人（; 或 , 分隔），经本站 SMTP 发出。不再发给 Root
+	// 的通知设置：那条路径可能是 webhook/bark，管理端既看不见也改不了。
+	NotifyEmails string `json:"notify_emails"`
+
+	// Notify* 分类开关决定总开关打开后发哪几类。旧配置缺这些键时 Parse 从 DefaultConfig 起解码，保持全开。
 	NotifyOldestPending   bool `json:"notify_oldest_pending"`
 	NotifyCleanupPending  bool `json:"notify_cleanup_pending"`
 	NotifySpoolHigh       bool `json:"notify_spool_high"`
@@ -144,6 +152,7 @@ var LaterConfigKeys = []string{
 	"remote_protocol", "sftp_host", "sftp_port", "sftp_host_key_sha256", "sftp_base_dir",
 	"notify_oldest_pending", "notify_cleanup_pending", "notify_spool_high",
 	"notify_inode_high", "notify_failed", "notify_handoff_rejected", "notify_node_offline",
+	"notify_email_enabled", "notify_emails",
 }
 
 func DefaultConfig() Config {
@@ -213,6 +222,9 @@ func DefaultConfig() Config {
 		OldestPendingAlertMinutes:  15,
 		CleanupPendingAlertMinutes: 30,
 		AlertDedupMinutes:          30,
+
+		NotifyEmailEnabled: false,
+		NotifyEmails:       "",
 
 		NotifyOldestPending:   true,
 		NotifyCleanupPending:  true,
@@ -342,6 +354,9 @@ func ValidateConfig(cfg Config) error {
 			return invalidConfig("site_label", err.Error())
 		}
 	}
+	if err := validateNotifyEmails(cfg); err != nil {
+		return err
+	}
 	if cfg.Enabled {
 		if cfg.SiteLabel == "" {
 			return invalidConfig("site_label", "must be set before capture is enabled")
@@ -370,6 +385,48 @@ func ValidateConfig(cfg Config) error {
 		}
 	}
 	return nil
+}
+
+const maxNotifyEmails = 10
+
+// validateNotifyEmails 只收裸地址：common.SendEmail 把整串原样写进 To 头，再按 ; 切开逐个
+// RCPT，"Name <a@b>" 会让 RCPT 收到带名字和尖括号的整段，被 SMTP 服务器拒掉。
+func validateNotifyEmails(cfg Config) error {
+	recipients := cfg.NotifyEmailList()
+	for _, item := range recipients {
+		addr, err := mail.ParseAddress(item)
+		if err != nil || addr.Name != "" || addr.Address != item {
+			return invalidConfig("notify_emails", fmt.Sprintf("%q is not a plain email address", item))
+		}
+	}
+	if len(recipients) > maxNotifyEmails {
+		return invalidConfig("notify_emails", fmt.Sprintf("at most %d recipients", maxNotifyEmails))
+	}
+	seen := make(map[string]bool, len(recipients))
+	for _, item := range recipients {
+		key := strings.ToLower(item)
+		if seen[key] {
+			return invalidConfig("notify_emails", fmt.Sprintf("duplicate recipient %q", item))
+		}
+		seen[key] = true
+	}
+	if cfg.NotifyEmailEnabled && len(recipients) == 0 {
+		return invalidConfig("notify_emails", "at least one recipient is required when notify_email_enabled is on")
+	}
+	return nil
+}
+
+// NotifyEmailList 按 ; 或 , 切开收件人，去掉前后空白和空项，保持填写顺序。校验和发送共用
+// 这一份解析，保证校验通过的就是实际会发到的。
+func (cfg Config) NotifyEmailList() []string {
+	fields := strings.FieldsFunc(cfg.NotifyEmails, func(r rune) bool { return r == ';' || r == ',' })
+	recipients := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if item := strings.TrimSpace(field); item != "" {
+			recipients = append(recipients, item)
+		}
+	}
+	return recipients
 }
 
 // ValidateRemoteBaseDir accepts "" (use the account's login directory) or an absolute,
@@ -406,8 +463,8 @@ func normalizeRemoteProtocol(value string) (string, bool) {
 	return "", false
 }
 
-// AlertNotifyEnabled 是设置页「邮件通知」开关的唯一判定。未知原因默认不发，避免以后
-// 新增告警在没加开关之前就打扰管理员。
+// AlertNotifyEnabled 是分类开关的唯一判定，只决定总开关打开后发哪几类。未知原因默认不发，
+// 避免以后新增告警在没加开关之前就打扰管理员。
 func (cfg Config) AlertNotifyEnabled(reason string) bool {
 	switch reason {
 	case "oldest_pending":

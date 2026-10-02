@@ -381,6 +381,14 @@ func GenRelayInfoRerank(c *gin.Context, request *dto.RerankRequest) *RelayInfo {
 	return info
 }
 
+// GenRelayInfoSystemOne TypeSafe System One（Jev）：非流式、无 assistant 消息，RelayMode 固定为 SystemOne。
+func GenRelayInfoSystemOne(c *gin.Context, request *dto.SystemOneRequest) *RelayInfo {
+	info := genBaseRelayInfo(c, request)
+	info.RelayMode = relayconstant.RelayModeSystemOne
+	info.RelayFormat = types.RelayFormatSystemOne
+	return info
+}
+
 func GenRelayInfoOpenAIAudio(c *gin.Context, request dto.Request) *RelayInfo {
 	info := genBaseRelayInfo(c, request)
 	info.RelayFormat = types.RelayFormatOpenAIAudio
@@ -568,6 +576,12 @@ func GenRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request dto.Req
 		err = errors.New("request is not a RerankRequest")
 	case types.RelayFormatGemini:
 		info = GenRelayInfoGemini(c, request)
+	case types.RelayFormatSystemOne:
+		if request, ok := request.(*dto.SystemOneRequest); ok {
+			info = GenRelayInfoSystemOne(c, request)
+			break
+		}
+		err = errors.New("request is not a SystemOneRequest")
 	case types.RelayFormatEmbedding:
 		info = GenRelayInfoEmbedding(c, request)
 	case types.RelayFormatOpenAIResponses:

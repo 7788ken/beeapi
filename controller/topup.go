@@ -30,6 +30,7 @@ func GetTopUpInfo(c *gin.Context) {
 	waffoGroupAllowed := operation_setting.IsGroupAllowed(setting.WaffoAllowedGroups, userGroup)
 	waffoPancakeGroupAllowed := operation_setting.IsGroupAllowed(setting.WaffoPancakeAllowedGroups, userGroup)
 	cryptomusGroupAllowed := operation_setting.IsGroupAllowed(setting.CryptomusAllowedGroups, userGroup)
+	bepusdtGroupAllowed := operation_setting.IsGroupAllowed(setting.BepusdtAllowedGroups, userGroup)
 	agouGroupAllowed := operation_setting.IsGroupAllowed(setting.AgouAllowedGroups, userGroup)
 
 	// 获取支付方式
@@ -99,7 +100,29 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
-	enableCryptomus := isCryptomusTopUpEnabled()
+	// BEpusdt（自建 USDT 网关）启用后顶替 Cryptomus：充值页只露一个加密货币入口，
+	// Cryptomus 配置保留、webhook 照常处理在途订单；关掉 BEpusdt 即自动切回。
+	enableBepusdt := isBepusdtTopUpEnabled()
+	if enableBepusdt {
+		hasBepusdt := false
+		for _, method := range payMethods {
+			if method["type"] == model.PaymentMethodBepusdt {
+				hasBepusdt = true
+				break
+			}
+		}
+
+		if !hasBepusdt {
+			payMethods = append(payMethods, map[string]string{
+				"name":      "Crypto (USDT)",
+				"type":      model.PaymentMethodBepusdt,
+				"color":     "rgba(var(--semi-green-5), 1)",
+				"min_topup": strconv.Itoa(setting.BepusdtMinTopUp),
+			})
+		}
+	}
+
+	enableCryptomus := isCryptomusTopUpEnabled() && !enableBepusdt
 	if enableCryptomus {
 		hasCryptomus := false
 		for _, method := range payMethods {
@@ -138,16 +161,23 @@ func GetTopUpInfo(c *gin.Context) {
 	if enableCryptomus && !cryptomusGroupAllowed {
 		groupBlockedMethods = append(groupBlockedMethods, model.PaymentMethodCryptomus)
 	}
+	if enableBepusdt && !bepusdtGroupAllowed {
+		groupBlockedMethods = append(groupBlockedMethods, model.PaymentMethodBepusdt)
+	}
 	if enableAgou && !agouGroupAllowed {
 		groupBlockedMethods = append(groupBlockedMethods, model.PaymentMethodAgou)
 	}
 
-	// 统一支付平台（provider）列表，顺序：Waffo Pancake | Cryptomus | Agou。
+	// 统一支付平台（provider）列表，顺序：Waffo Pancake | BEpusdt 或 Cryptomus（二选一）| Agou。
 	// 每个平台带后台可配置的支付渠道（仅暴露启用项，隐藏内部网关参数 Params）。
 	providers := make([]gin.H, 0, 3)
 	if enableWaffoPancake {
 		providers = append(providers, buildTopUpProvider("waffo_pancake", "Waffo Pancake", setting.WaffoPancakeLogo,
 			setting.WaffoPancakeMinTopUp, 0, !waffoPancakeGroupAllowed, setting.GetWaffoPancakePayChannels()))
+	}
+	if enableBepusdt {
+		providers = append(providers, buildTopUpProvider("bepusdt", "Crypto (USDT)", setting.BepusdtLogo,
+			setting.BepusdtMinTopUp, 0, !bepusdtGroupAllowed, setting.GetBepusdtPayChannels()))
 	}
 	if enableCryptomus {
 		providers = append(providers, buildTopUpProvider("cryptomus", "Cryptomus", setting.CryptomusLogo,
@@ -165,6 +195,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_waffo_topup":         enableWaffo,
 		"enable_waffo_pancake_topup": enableWaffoPancake,
 		"enable_cryptomus_topup":     enableCryptomus,
+		"enable_bepusdt_topup":       enableBepusdt,
 		"enable_sfpay_topup":         enableAgou,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
@@ -189,6 +220,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
 		"cryptomus_min_topup":     setting.CryptomusMinTopUp,
+		"bepusdt_min_topup":       setting.BepusdtMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,

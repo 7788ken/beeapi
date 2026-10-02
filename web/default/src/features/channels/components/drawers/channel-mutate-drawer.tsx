@@ -82,7 +82,10 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
-import { useContentBackupModuleEnabled } from '@/features/content-backup/module'
+import {
+  getOptionValue,
+  useSystemOptions,
+} from '@/features/system-settings/hooks/use-system-options'
 import {
   createChannel,
   fetchModels,
@@ -106,6 +109,7 @@ import {
 } from '../../constants'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
+  createChannelFormDefaults,
   channelFormSchema,
   channelsQueryKeys,
   transformChannelToFormDefaults,
@@ -386,9 +390,7 @@ export function ChannelMutateDrawer({
   >(null)
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
-  // 模块关闭时只隐藏开关，表单值照常回显并原样提交
-  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
-
+  // 渠道页不提供内容备份开关。是否采集只由内容备份管理端修改。
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
 
@@ -445,6 +447,19 @@ export function ChannelMutateDrawer({
   // Check if this is a multi-key channel
   const isMultiKeyChannel =
     isEditing && channelData?.data?.channel_info?.is_multi_key === true
+
+  const { data: systemOptions } = useSystemOptions()
+  const createDefaults = useMemo(() => {
+    const parsed = getOptionValue(systemOptions?.data, {
+      'response_quality_setting.new_channel_block_apology': false,
+      'response_quality_setting.new_channel_block_low_token': false,
+    })
+    return createChannelFormDefaults({
+      blockApology: parsed['response_quality_setting.new_channel_block_apology'],
+      blockLowToken:
+        parsed['response_quality_setting.new_channel_block_low_token'],
+    })
+  }, [systemOptions?.data])
 
   // Form setup
   const form = useForm<ChannelFormValues>({
@@ -665,25 +680,60 @@ export function ChannelMutateDrawer({
     upstreamUpdateMeta.detectedModels.length -
     upstreamDetectedModelsPreview.length
 
+  // 读一次，让 react-hook-form 订阅脏状态；只在 effect 里读会拿到旧值。
+  const createFormIsDirty = form.formState.isDirty
+  const apologySwitchDirty = Boolean(
+    form.formState.dirtyFields.block_apology_enabled
+  )
+  const lowTokenSwitchDirty = Boolean(
+    form.formState.dirtyFields.block_low_token_enabled
+  )
+
   // Load channel data into form when editing
+  // 编辑回填不能依赖脏状态：否则用户一改字段就触发 reset，改动被立刻还原。
   useEffect(() => {
-    if (isEditing && channelData?.data) {
-      const defaults = transformChannelToFormDefaults(channelData.data)
-      form.reset(defaults)
-      // Store initial values for comparison
-      initialModelsRef.current = parseModelsString(
-        channelData.data.models || ''
-      )
-      initialModelMappingRef.current = channelData.data.model_mapping || ''
-      initialStatusCodeMappingRef.current =
-        channelData.data.status_code_mapping || ''
-    } else if (!isEditing) {
-      form.reset(CHANNEL_FORM_DEFAULT_VALUES)
-      initialModelsRef.current = []
-      initialModelMappingRef.current = ''
-      initialStatusCodeMappingRef.current = ''
-    }
+    if (!isEditing || !channelData?.data) return
+    const defaults = transformChannelToFormDefaults(channelData.data)
+    form.reset(defaults)
+    // Store initial values for comparison
+    initialModelsRef.current = parseModelsString(channelData.data.models || '')
+    initialModelMappingRef.current = channelData.data.model_mapping || ''
+    initialStatusCodeMappingRef.current =
+      channelData.data.status_code_mapping || ''
   }, [isEditing, channelData, form])
+
+  // Apply site defaults to the create form
+  useEffect(() => {
+    if (isEditing) return
+    if (createFormIsDirty) {
+      if (!apologySwitchDirty) {
+        form.setValue(
+          'block_apology_enabled',
+          createDefaults.block_apology_enabled,
+          { shouldDirty: false }
+        )
+      }
+      if (!lowTokenSwitchDirty) {
+        form.setValue(
+          'block_low_token_enabled',
+          createDefaults.block_low_token_enabled,
+          { shouldDirty: false }
+        )
+      }
+      return
+    }
+    form.reset(createDefaults)
+    initialModelsRef.current = []
+    initialModelMappingRef.current = ''
+    initialStatusCodeMappingRef.current = ''
+  }, [
+    isEditing,
+    form,
+    createDefaults,
+    createFormIsDirty,
+    apologySwitchDirty,
+    lowTokenSwitchDirty,
+  ])
 
   // Handle type change - set default values for specific types
   useEffect(() => {
@@ -995,12 +1045,27 @@ export function ChannelMutateDrawer({
     [form]
   )
 
+  // Handle drawer close
+  const handleOpenChange = useCallback(
+    (v: boolean) => {
+      onOpenChange(v)
+      if (!v) {
+        form.reset(createDefaults)
+        setActiveTab('basic')
+      }
+    },
+    [onOpenChange, form, createDefaults]
+  )
+
   // Handle successful submission
+  // 和取消走同一个关闭流程重置表单，否则下次「创建渠道」会带上刚编辑的渠道内容；
+  // 详情也要失效，否则 10 秒内重开同一渠道读到的是保存前的缓存。
   const handleSuccess = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-    onOpenChange(false)
+    queryClient.invalidateQueries({ queryKey: channelsQueryKeys.details() })
+    handleOpenChange(false)
     setOpen(null)
-  }, [queryClient, onOpenChange, setOpen])
+  }, [queryClient, handleOpenChange, setOpen])
 
   // Show missing models confirmation dialog
   const confirmMissingModelMappings = useCallback(
@@ -1206,18 +1271,6 @@ export function ChannelMutateDrawer({
     )
     if (firstTab) setActiveTab(firstTab.value)
   }, [])
-
-  // Handle drawer close
-  const handleOpenChange = useCallback(
-    (v: boolean) => {
-      onOpenChange(v)
-      if (!v) {
-        form.reset(CHANNEL_FORM_DEFAULT_VALUES)
-        setActiveTab('basic')
-      }
-    },
-    [onOpenChange, form]
-  )
 
   return (
     <>
@@ -3910,31 +3963,6 @@ export function ChannelMutateDrawer({
                             </FormItem>
                           )}
                         />
-
-                        {contentBackupModuleEnabled && (
-                          <FormField
-                            control={form.control}
-                            name='content_backup_enabled'
-                            render={({ field }) => (
-                              <FormItem className='flex items-center justify-between px-4 py-3'>
-                                <div className='space-y-0.5'>
-                                  <FormLabel>{t('Content backup')}</FormLabel>
-                                  <FormDescription>
-                                    {t(
-                                      'Include this channel in content backup collection. Off by default.'
-                                    )}
-                                  </FormDescription>
-                                </div>
-                                <FormControl>
-                                  <Switch
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                  />
-                                </FormControl>
-                              </FormItem>
-                            )}
-                          />
-                        )}
 
                         <FormField
                           control={form.control}

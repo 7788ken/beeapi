@@ -59,6 +59,7 @@ const (
 	ChannelTypeAdvancedCustom = 59
 	ChannelTypeSdVideoV2      = 60 // sd 网关 v2（dreamina max 线路：/v2/video/generate + /v2/video/tasks，v1 不再接受 -max 模型）
 	ChannelTypeMiniMaxInf     = 61 // MiniMax 视频（service-inference 网关：/v1/video/generate + /v1/video/tasks/{id}）
+	ChannelTypeTypeSafe       = 62 // TypeSafe System One（Jev 决策模型：POST /v1/systemone，请求响应原样透传，只按输入 token 计费）
 	ChannelTypeDummy               // this one is only for count, do not add any channel after this
 
 )
@@ -126,6 +127,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //59
 	"https://model.service-inference.ai",        //60
 	"https://model.service-inference.ai",        //61
+	"https://api.typesafe.ai",                   //62
 }
 
 var ChannelTypeNames = map[int]string{
@@ -187,6 +189,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom: "Advanced Custom",
 	ChannelTypeSdVideoV2:      "SdVideoV2",
 	ChannelTypeMiniMaxInf:     "MiniMaxInf",
+	ChannelTypeTypeSafe:       "TypeSafe",
 }
 
 func GetChannelTypeName(channelType int) string {

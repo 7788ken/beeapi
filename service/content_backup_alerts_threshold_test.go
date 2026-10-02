@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/contentbackup"
 	"gorm.io/gorm"
@@ -208,8 +207,7 @@ func contentBackupAlertSeedCleanupZeroAvailable(t *testing.T, db *gorm.DB, at in
 // 后者测不到"已 firing 就换用恢复阈值"这条接线。
 func TestContentBackupAlertInodeHysteresis(t *testing.T) {
 	db := contentBackupAlertTestDB(t)
-	contentBackupAlertSeedRootUser(t, db, "root@example.com", dto.UserSetting{NotifyType: dto.NotifyTypeEmail})
-	contentBackupAlertUseSpy(t, &contentBackupAlertSpy{outcome: contentBackupAlertOutcome{attempted: true}})
+	contentBackupUseMailSpy(t, &contentBackupMailSpy{})
 
 	cfg := contentbackup.DefaultConfig()
 	store := model.NewContentBackupStore(db, contentBackupAlertTestSite)

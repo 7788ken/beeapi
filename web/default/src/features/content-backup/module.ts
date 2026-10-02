@@ -3,8 +3,8 @@ import { statusQueryOptions, useStatus } from '@/hooks/use-status'
 import type { NavGroup } from '@/components/layout/types'
 import type { SystemStatus } from '@/features/auth/types'
 
-// 内容备份模块默认开启；部署环境变量 CONTENT_BACKUP_MODULE=off 时后端不注册 /api/content_backup/*、
-// 前端隐藏所有入口。依据 /api/status 的 content_backup_module_enabled，仅明确为 false 才算关闭
+// 公开后台不再挂内容备份入口。侧栏和命令面板始终摘掉这两条地址。
+// content_backup_module_enabled 只表示采集模块是否在跑，不再决定菜单是否出现。
 function isContentBackupModuleEnabled(status: SystemStatus | null): boolean {
   return status?.content_backup_module_enabled !== false
 }

@@ -78,6 +78,15 @@ export function isCryptomusPayment(paymentType: string): boolean {
 }
 
 /**
+ * Check if payment method is BEpusdt (self-hosted USDT gateway).
+ *
+ * 与 Cryptomus 一样走托管收银台 URL，要特判。
+ */
+export function isBepusdtPayment(paymentType: string): boolean {
+  return paymentType === PAYMENT_TYPES.BEPUSDT
+}
+
+/**
  * Check if payment method is agou (支付宝/微信).
  *
  * agou 走自己的 /agou/amount 询价与 /agou/pay 收银台跳转，用合成 key 'sfpay'
@@ -110,6 +119,10 @@ export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
 
   if (topupInfo.enable_waffo_pancake_topup) {
     return PAYMENT_TYPES.WAFFO_PANCAKE
+  }
+
+  if (topupInfo.enable_bepusdt_topup) {
+    return PAYMENT_TYPES.BEPUSDT
   }
 
   if (topupInfo.enable_cryptomus_topup) {
@@ -160,6 +173,10 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
 
   if (topupInfo.enable_waffo_pancake_topup) {
     return topupInfo.waffo_pancake_min_topup || DEFAULT_MIN_TOPUP
+  }
+
+  if (topupInfo.enable_bepusdt_topup) {
+    return topupInfo.bepusdt_min_topup || DEFAULT_MIN_TOPUP
   }
 
   if (topupInfo.enable_cryptomus_topup) {

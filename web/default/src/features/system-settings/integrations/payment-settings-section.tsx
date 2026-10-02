@@ -42,6 +42,10 @@ import {
   CryptomusSettingsSection,
   type CryptomusSettingsValues,
 } from './cryptomus-settings-section'
+import {
+  BepusdtSettingsSection,
+  type BepusdtSettingsValues,
+} from './bepusdt-settings-section'
 
 const paymentSchema = z.object({
   PayAddress: z.string().refine((value) => {
@@ -116,6 +120,7 @@ type PaymentSettingsSectionProps = {
   waffoDefaultValues: WaffoSettingsValues
   waffoPancakeDefaultValues: WaffoPancakeSettingsValues
   cryptomusDefaultValues: CryptomusSettingsValues
+  bepusdtDefaultValues: BepusdtSettingsValues
 }
 
 export function PaymentSettingsSection({
@@ -123,6 +128,7 @@ export function PaymentSettingsSection({
   waffoDefaultValues,
   waffoPancakeDefaultValues,
   cryptomusDefaultValues,
+  bepusdtDefaultValues,
 }: PaymentSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
@@ -427,6 +433,7 @@ export function PaymentSettingsSection({
           <TabsTrigger value='waffo'>Waffo</TabsTrigger>
           <TabsTrigger value='waffo-pancake'>Waffo Pancake</TabsTrigger>
           <TabsTrigger value='cryptomus'>Cryptomus（数字货币）</TabsTrigger>
+          <TabsTrigger value='bepusdt'>USDT 自建网关（BEpusdt）</TabsTrigger>
         </TabsList>
 
         <Form {...form}>
@@ -1170,6 +1177,10 @@ export function PaymentSettingsSection({
 
         <TabsContent value='cryptomus' className='flex-1 space-y-4 overflow-y-auto pr-2'>
           <CryptomusSettingsSection defaultValues={cryptomusDefaultValues} />
+        </TabsContent>
+
+        <TabsContent value='bepusdt' className='flex-1 space-y-4 overflow-y-auto pr-2'>
+          <BepusdtSettingsSection defaultValues={bepusdtDefaultValues} />
         </TabsContent>
       </Tabs>
       {/* eslint-enable react-hooks/refs */}

@@ -1,134 +1,110 @@
 import { useCallback, useRef } from 'react'
-import { SSE } from 'sse.js'
-import { getDashboardAuthHeaders } from '@/lib/api'
+import { SSE, type ReadyStateEvent, type SSEvent } from 'sse.js'
+import { parseRelayError, relayAuthHeaders } from '@/lib/relay-client'
 import { API_ENDPOINTS, ERROR_MESSAGES } from '../constants'
 import type { ChatCompletionRequest, ChatCompletionChunk } from '../types'
 
+type StreamUpdate = (type: 'reasoning' | 'content', chunk: string) => void
+type StreamError = (error: string, errorCode?: string) => void
+
 /**
- * Hook for handling streaming chat completion requests
+ * 流式对话：带所选 API Key 直连 /v1/chat/completions，不带控制台登录凭证。
+ * 每路请求只回调一次结束：收到 [DONE]、报错、或连接自己关闭，以先到者为准。
  */
 export function useStreamRequest() {
   const sseSourceRef = useRef<SSE | null>(null)
-  const isStreamCompleteRef = useRef(false)
 
   const sendStreamRequest = useCallback(
-    async (
+    (
+      secret: string,
       payload: ChatCompletionRequest,
-      onUpdate: (type: 'reasoning' | 'content', chunk: string) => void,
+      onUpdate: StreamUpdate,
       onComplete: () => void,
-      onError: (error: string, errorCode?: string) => void
+      onError: StreamError
     ) => {
-      let headers: Record<string, string>
-      try {
-        headers = await getDashboardAuthHeaders()
-      } catch {
-        onError(ERROR_MESSAGES.NETWORK_ERROR)
-        return
-      }
       const source = new SSE(API_ENDPOINTS.CHAT_COMPLETIONS, {
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          ...relayAuthHeaders(secret),
+        },
         method: 'POST',
         payload: JSON.stringify(payload),
+        start: false,
       })
-
       sseSourceRef.current = source
-      isStreamCompleteRef.current = false
 
-      const closeSource = () => {
-        source.close()
+      // 被停止或已经收尾后，这一路后续的事件一律不再处理
+      const isCurrent = () => sseSourceRef.current === source
+      let received = false
+      const settle = (notify: () => void) => {
+        if (!isCurrent()) return
         sseSourceRef.current = null
+        source.close()
+        notify()
       }
 
-      const handleError = (errorMessage: string, errorCode?: string) => {
-        if (!isStreamCompleteRef.current) {
-          onError(errorMessage, errorCode)
-          closeSource()
-        }
-      }
-
-      source.addEventListener('message', (e: MessageEvent) => {
+      source.addEventListener('message', (e: SSEvent) => {
+        if (!isCurrent()) return
         if (e.data === '[DONE]') {
-          isStreamCompleteRef.current = true
-          closeSource()
-          onComplete()
+          settle(onComplete)
           return
         }
 
+        let chunk: ChatCompletionChunk
         try {
-          const chunk: ChatCompletionChunk = JSON.parse(e.data)
-          const delta = chunk.choices?.[0]?.delta
-
-          if (delta) {
-            if (delta.reasoning_content) {
-              onUpdate('reasoning', delta.reasoning_content)
-            }
-            if (delta.content) {
-              onUpdate('content', delta.content)
-            }
-          }
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('Failed to parse SSE message:', error)
-          handleError(ERROR_MESSAGES.PARSE_ERROR)
+          chunk = JSON.parse(e.data)
+        } catch {
+          settle(() => onError(ERROR_MESSAGES.PARSE_ERROR))
+          return
+        }
+        const delta = chunk.choices?.[0]?.delta
+        if (delta?.reasoning_content) {
+          received = true
+          onUpdate('reasoning', delta.reasoning_content)
+        }
+        if (delta?.content) {
+          received = true
+          onUpdate('content', delta.content)
         }
       })
 
-      source.addEventListener('error', (e: Event & { data?: string }) => {
-        // Only handle errors if stream didn't complete normally
-        if (source.readyState !== 2) {
-          // eslint-disable-next-line no-console
-          console.error('SSE Error:', e)
-          let errorMessage = e.data || ERROR_MESSAGES.API_REQUEST_ERROR
-          let errorCode: string | undefined
-          if (e.data) {
-            try {
-              const parsed = JSON.parse(e.data) as {
-                error?: { message?: string; code?: string }
-              }
-              if (parsed?.error) {
-                errorMessage = parsed.error.message || errorMessage
-                errorCode = parsed.error.code || undefined
-              }
-            } catch {
-              // not JSON, use raw string
-            }
+      // 非 2xx 时 data 是 /v1 的错误体 {error:{message,code}}；状态码 0 是网络没连上
+      source.addEventListener('error', (e: SSEvent) => {
+        const status = e.responseCode ?? 0
+        settle(() => {
+          // 状态码 0 是网络断开：已经收到内容就按已收到的收尾（与断流规则一致），否则报网络错误
+          if (status === 0) {
+            if (received) onComplete()
+            else onError(ERROR_MESSAGES.NETWORK_ERROR)
+            return
           }
-          handleError(errorMessage, errorCode)
-        }
+          const error = parseRelayError(status, String(e.data ?? ''))
+          onError(error.message, error.code)
+        })
       })
 
-      source.addEventListener(
-        'readystatechange',
-        (e: Event & { readyState?: number }) => {
-          const status = (source as unknown as { status?: number }).status
-          if (
-            e.readyState !== undefined &&
-            e.readyState >= 2 &&
-            status !== undefined &&
-            status !== 200
-          ) {
-            handleError(`HTTP ${status}: ${ERROR_MESSAGES.CONNECTION_CLOSED}`)
-          }
-        }
-      )
+      // 没发 [DONE] 就断开：收到过内容就按已收到的收尾，一点没收到算中断（与刷新时恢复未完成消息的规则一致）
+      source.addEventListener('readystatechange', (e: ReadyStateEvent) => {
+        if (e.readyState !== SSE.CLOSED) return
+        settle(
+          received ? onComplete : () => onError(ERROR_MESSAGES.INTERRUPTED)
+        )
+      })
 
       try {
         source.stream()
-      } catch (error: unknown) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to start SSE stream:', error)
-        onError(ERROR_MESSAGES.STREAM_START_ERROR)
-        sseSourceRef.current = null
+      } catch {
+        settle(() => onError(ERROR_MESSAGES.STREAM_START_ERROR))
       }
     },
     []
   )
 
   const stopStream = useCallback(() => {
-    if (sseSourceRef.current) {
-      sseSourceRef.current.close()
-      sseSourceRef.current = null
-    }
+    const source = sseSourceRef.current
+    if (!source) return
+    sseSourceRef.current = null
+    source.close()
   }, [])
 
   // eslint-disable-next-line react-hooks/refs

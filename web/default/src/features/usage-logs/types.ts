@@ -266,6 +266,7 @@ export interface GetLogsParams {
   channel?: number
   group?: string
   request_id?: string
+  order?: 'asc'
 }
 
 export interface GetLogsResponse {

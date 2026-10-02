@@ -32,6 +32,12 @@ type ResponseQualitySetting struct {
 	// RetryOnBlock 为真时，道歉和低 token 拦截不再带 SkipRetry，按普通失败重试。
 	// 零值必须是 false：旧配置没有这个键时保持「不重试」。
 	RetryOnBlock bool `json:"retry_on_block"`
+	// NewChannelBlockApology 新建渠道时，管理端表单里道歉拦截的初始值。
+	// 零值 false。只在某个站的 options 里写成 true 才默认打开，其它站不变。
+	// 不改变已有渠道，也不参与请求时的拦截判断。
+	NewChannelBlockApology bool `json:"new_channel_block_apology"`
+	// NewChannelBlockLowToken 新建渠道时，管理端表单里低 token 拦截的初始值。
+	NewChannelBlockLowToken bool `json:"new_channel_block_low_token"`
 }
 
 const (

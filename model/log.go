@@ -72,6 +72,17 @@ func recentLogOrder(prefix string) string {
 	return prefix + "created_at desc, " + prefix + "id desc"
 }
 
+// logListOrder 默认最新在前。oldestFirst 时从早到晚，用来从链路的首条发起记录看起。
+func logListOrder(prefix string, oldestFirst bool) string {
+	if !oldestFirst {
+		return recentLogOrder(prefix)
+	}
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		return prefix + "created_at asc, " + prefix + "event_id asc"
+	}
+	return prefix + "created_at asc, " + prefix + "id asc"
+}
+
 func assignDisplayLogIds(logs []*Log, startIdx int) {
 	for index := range logs {
 		logs[index].Id = startIdx + index + 1
@@ -470,7 +481,7 @@ func BuildAllLogsQuery(logType int, startTimestamp int64, endTimestamp int64, mo
 	return tx, nil
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, oldestFirst bool) (logs []*Log, total int64, err error) {
 	tx, err := BuildAllLogsQuery(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, requestId)
 	if err != nil {
 		return nil, 0, err
@@ -479,7 +490,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if err != nil {
 		return nil, 0, err
 	}
-	err = tx.Order(recentLogOrder("logs.")).Limit(num).Offset(startIdx).Find(&logs).Error
+	err = tx.Order(logListOrder("logs.", oldestFirst)).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -588,13 +599,13 @@ func countLogsUpTo(query *gorm.DB, limit int) (int64, error) {
 	return total, err
 }
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, totalIsCapped bool, err error) {
+func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, oldestFirst bool) (logs []*Log, total int64, totalIsCapped bool, err error) {
 	tx, err := BuildUserLogsQuery(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, group, requestId)
 	if err != nil {
 		return nil, 0, false, err
 	}
 
-	err = tx.Order(recentLogOrder("logs.")).Limit(num).Offset(startIdx).Find(&logs).Error
+	err = tx.Order(logListOrder("logs.", oldestFirst)).Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		common.SysError("failed to search user logs: " + err.Error())
 		return nil, 0, false, errors.New("查询日志失败")

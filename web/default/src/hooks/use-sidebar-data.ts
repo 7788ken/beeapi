@@ -22,7 +22,6 @@ import {
   AlertTriangle,
   Sparkles,
   BrainCircuit,
-  Archive,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
@@ -209,12 +208,6 @@ export function useSidebarData(): SidebarData {
             url: '/anomaly-monitor',
             icon: AlertTriangle,
             iconClassName: 'text-amber-500',
-          },
-          {
-            title: t('Content backup'),
-            url: '/content-backup',
-            icon: Archive,
-            iconClassName: 'text-cyan-500',
           },
           {
             title: t('System Settings'),

@@ -132,7 +132,7 @@ export interface ChannelSettings {
   system_prompt_override?: boolean
   // 渠道级排除零产出免单；未设置=跟随全局开关
   disable_no_output_refund?: boolean
-  // 该渠道是否纳入内容备份采集范围；未设置=不采集（docs/2026-09-15-channel-content-backup-upload.md）
+  // 是否纳入内容备份。渠道页不编辑它，只由内容备份管理端写入 setting JSON。
   content_backup_enabled?: boolean
   block_apology_enabled?: boolean
   block_low_token_enabled?: boolean

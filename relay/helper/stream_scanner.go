@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/pkg/httplifecycle"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -217,6 +218,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			dataHandler(data, sr)
 			writeMutex.Unlock()
 			if sr.IsStopped() {
+				return
+			}
+			// 质量闸门已拦截：后面的内容都会被丢弃，不再等上游生成完，直接停流关闭上游。
+			if service.QualityStreamBlocked(c) {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonQualityBlocked, nil)
 				return
 			}
 		}

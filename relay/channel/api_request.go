@@ -320,11 +320,11 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
 	if common2.DebugEnabled {
-		println("fullRequestURL:", fullRequestURL)
+		println("fullRequestURL:", common2.RedactURL(fullRequestURL))
 	}
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("new request failed: %w", err)
+		return nil, fmt.Errorf("new request failed: %w", common2.RedactURLError(err))
 	}
 	applyUpstreamContentLength(req, info)
 	applyUpstreamGetBody(req, requestBody)
@@ -355,11 +355,11 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
 	if common2.DebugEnabled {
-		println("fullRequestURL:", fullRequestURL)
+		println("fullRequestURL:", common2.RedactURL(fullRequestURL))
 	}
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("new request failed: %w", err)
+		return nil, fmt.Errorf("new request failed: %w", common2.RedactURLError(err))
 	}
 	applyUpstreamContentLength(req, info)
 	applyUpstreamGetBody(req, requestBody)
@@ -410,7 +410,7 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		targetHeader,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("dial failed to %s: %w", fullRequestURL, err)
+		return nil, fmt.Errorf("dial failed to %s: %w", common2.RedactURL(fullRequestURL), common2.RedactURLError(err))
 	}
 	// send request body
 	//all, err := io.ReadAll(requestBody)
@@ -459,6 +459,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 
 	resp, err := client.Do(req)
 	if err != nil {
+		err = common2.RedactURLError(err)
 		logger.LogError(c, "do request failed: "+err.Error())
 		return nil, classifyDoRequestError(err)
 	}
@@ -523,7 +524,7 @@ func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, req
 	}
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("new request failed: %w", err)
+		return nil, fmt.Errorf("new request failed: %w", common2.RedactURLError(err))
 	}
 	applyUpstreamContentLength(req, info)
 	// 不要在这里手写 GetBody 返回同一个（已被消费的）reader：任何 transport 级重放

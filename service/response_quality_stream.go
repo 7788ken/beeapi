@@ -28,6 +28,12 @@ func QualityStreamHoldActive(c *gin.Context) bool {
 	return hold != nil && hold.active && !hold.released && !hold.blocked && !hold.finished
 }
 
+// QualityStreamBlocked 为真时本轮已在放行前命中道歉，读取上游的循环应立即停止。
+func QualityStreamBlocked(c *gin.Context) bool {
+	hold := qualityHoldFrom(c)
+	return hold != nil && hold.active && hold.blocked && !hold.finished
+}
+
 func BeginSkipQualityStreamNote(c *gin.Context) {
 	if c == nil {
 		return

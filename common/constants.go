@@ -187,6 +187,10 @@ var BatchUpdateInterval int
 // ContentBackupModuleEnabled 内容备份模块开关，默认开启；容器环境变量 CONTENT_BACKUP_MODULE=off 时关闭（启动时解析一次）。
 var ContentBackupModuleEnabled = true
 
+// ContentBackupConsoleToken 是独立管理端调用 /api/content_backup 的令牌。
+// 来自环境变量 CONTENT_BACKUP_CONSOLE_TOKEN。为空时该组接口一律 404，普通管理员和 root 浏览器会话都不能进。
+var ContentBackupConsoleToken = ""
+
 var RelayTimeout int // unit is second
 
 var RelayMaxIdleConns int

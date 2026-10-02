@@ -20,6 +20,8 @@ const (
 	StreamEndReasonEOF         StreamEndReason = "eof"
 	StreamEndReasonPanic       StreamEndReason = "panic"
 	StreamEndReasonPingFail    StreamEndReason = "ping_fail"
+	// StreamEndReasonQualityBlocked 质量闸门放行前命中道歉，网关主动停止读取上游。
+	StreamEndReasonQualityBlocked StreamEndReason = "quality_blocked"
 )
 
 const maxStreamErrorEntries = 20
@@ -132,7 +134,8 @@ func (s *StreamStatus) IsNormalEnd() bool {
 	defer s.mu.Unlock()
 	return s.endReason == StreamEndReasonDone ||
 		s.endReason == StreamEndReasonEOF ||
-		s.endReason == StreamEndReasonHandlerStop
+		s.endReason == StreamEndReasonHandlerStop ||
+		s.endReason == StreamEndReasonQualityBlocked
 }
 
 func (s *StreamStatus) Summary() string {

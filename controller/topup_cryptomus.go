@@ -153,6 +153,11 @@ func RequestCryptomusPay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Cryptomus 支付未启用"})
 		return
 	}
+	// BEpusdt 启用期间 Cryptomus 不再接新单（充值页已不展示，这里兜住旧页面/直接调接口）
+	if isBepusdtTopUpEnabled() {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Cryptomus 支付已切换为新的 USDT 网关，请刷新页面"})
+		return
+	}
 	if strings.TrimSpace(setting.CryptomusMerchantID) == "" ||
 		strings.TrimSpace(setting.CryptomusPaymentApiKey) == "" {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Cryptomus 配置不完整"})

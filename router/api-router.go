@@ -45,43 +45,28 @@ func SetApiRouter(router *gin.Engine) {
 			iqTestRoute.GET("/results/:id", controller.GetIQTestResult)
 		}
 		// 渠道内容备份（docs/2026-09-15-channel-content-backup-upload.md §6）：统一前缀
-		// /api/content_backup，与前端 features/content-backup/api.ts 的 BASE 对齐。挂在
-		// apiRouter 而不是用户管理的 adminRoute 下，后者 basePath 是 /api/user，会把整套
-		// 接口推到 /api/user/content_backup，前端全部 404。
-		// 元数据走 view，重试走 manage，渠道开关走 channel.edit，正文与配置是 Root 专属。
-		// 模块关闭（CONTENT_BACKUP_MODULE=off）时整组不注册，请求落到 NoRoute 返回 404。
+		// /api/content_backup。挂在 apiRouter 而不是用户管理的 adminRoute 下，后者
+		// basePath 是 /api/user，会把整套接口推到 /api/user/content_backup。
+		// 只认 CONTENT_BACKUP_CONSOLE_TOKEN。管理员权限和 root 浏览器会话都不放行。
+		// 令牌缺失或错误返回 404。模块关闭（CONTENT_BACKUP_MODULE=off）时整组不注册，同样 404。
 		if common.ContentBackupModuleEnabled {
 			contentBackupRoute := apiRouter.Group("/content_backup")
-			contentBackupRoute.Use(middleware.AdminAuth())
+			contentBackupRoute.Use(middleware.ContentBackupConsoleAuth())
 			{
-				contentBackupViewRoute := contentBackupRoute.Group("")
-				contentBackupViewRoute.Use(middleware.RequireAdminPerm(model.AdminPermContentBackupView, model.AdminPermContentBackupManage))
-				{
-					contentBackupViewRoute.GET("/status", controller.ContentBackupStatus)
-					contentBackupViewRoute.GET("/nodes", controller.ContentBackupNodes)
-					contentBackupViewRoute.GET("/jobs", controller.ContentBackupJobs)
-					contentBackupViewRoute.POST("/jobs/search-session", controller.ContentBackupSearchSession)
-					contentBackupViewRoute.GET("/jobs/:job_id", controller.ContentBackupJobDetail)
-				}
-				contentBackupManageRoute := contentBackupRoute.Group("")
-				contentBackupManageRoute.Use(middleware.RequireAdminPerm(model.AdminPermContentBackupManage))
-				{
-					contentBackupManageRoute.POST("/jobs/retry", controller.ContentBackupRetry)
-				}
-				contentBackupChannelRoute := contentBackupRoute.Group("")
-				contentBackupChannelRoute.Use(middleware.RequireAdminPerm(model.AdminPermChannelEdit))
-				{
-					contentBackupChannelRoute.PUT("/channels/backup", controller.ContentBackupUpdateChannels)
-				}
-				contentBackupRootRoute := contentBackupRoute.Group("")
-				contentBackupRootRoute.Use(middleware.RootAuth())
-				{
-					contentBackupRootRoute.GET("/config", controller.ContentBackupGetConfig)
-					contentBackupRootRoute.PUT("/config", controller.ContentBackupPutConfig)
-					contentBackupRootRoute.GET("/jobs/:job_id/preview", controller.ContentBackupPreview)
-					contentBackupRootRoute.GET("/jobs/:job_id/download", controller.ContentBackupDownload)
-					contentBackupRootRoute.POST("/test_connection", middleware.CriticalRateLimit(), controller.ContentBackupTestConnection)
-				}
+				contentBackupRoute.GET("/status", controller.ContentBackupStatus)
+				contentBackupRoute.GET("/nodes", controller.ContentBackupNodes)
+				contentBackupRoute.GET("/jobs", controller.ContentBackupJobs)
+				contentBackupRoute.POST("/jobs/search-session", controller.ContentBackupSearchSession)
+				contentBackupRoute.GET("/jobs/:job_id", controller.ContentBackupJobDetail)
+				contentBackupRoute.POST("/jobs/retry", controller.ContentBackupRetry)
+				contentBackupRoute.GET("/channels", controller.ContentBackupListChannels)
+				contentBackupRoute.PUT("/channels/backup", controller.ContentBackupUpdateChannels)
+				contentBackupRoute.GET("/config", controller.ContentBackupGetConfig)
+				contentBackupRoute.PUT("/config", controller.ContentBackupPutConfig)
+				contentBackupRoute.GET("/jobs/:job_id/preview", controller.ContentBackupPreview)
+				contentBackupRoute.GET("/jobs/:job_id/download", controller.ContentBackupDownload)
+				contentBackupRoute.POST("/test_connection", middleware.CriticalRateLimit(), controller.ContentBackupTestConnection)
+				contentBackupRoute.POST("/notify/test", middleware.CriticalRateLimit(), controller.ContentBackupTestNotify)
 			}
 		}
 		apiRouter.GET("/notice", controller.GetNotice)
@@ -132,6 +117,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/waffo/webhook", anonymousRequestBodyLimit, controller.WaffoWebhook)
 		apiRouter.POST("/waffo-pancake/webhook", anonymousRequestBodyLimit, controller.WaffoPancakeWebhook)
 		apiRouter.POST("/cryptomus/webhook", anonymousRequestBodyLimit, controller.CryptomusWebhook)
+		apiRouter.POST("/bepusdt/webhook", anonymousRequestBodyLimit, controller.BepusdtWebhook)
 		apiRouter.POST("/sfpay/notify", anonymousRequestBodyLimit, controller.AgouNotify)
 
 		// Universal secure verification routes
@@ -182,6 +168,8 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
 				selfRoute.POST("/cryptomus/amount", controller.RequestCryptomusAmount)
 				selfRoute.POST("/cryptomus/pay", middleware.CriticalRateLimit(), controller.RequestCryptomusPay)
+				selfRoute.POST("/bepusdt/amount", controller.RequestBepusdtAmount)
+				selfRoute.POST("/bepusdt/pay", middleware.CriticalRateLimit(), controller.RequestBepusdtPay)
 				selfRoute.POST("/sfpay/amount", controller.RequestAgouAmount)
 				selfRoute.POST("/sfpay/pay", middleware.CriticalRateLimit(), controller.RequestAgouPay)
 				selfRoute.POST("/aff_transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.TransferAffQuota)

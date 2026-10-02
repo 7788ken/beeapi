@@ -26,6 +26,13 @@ type listModelsResponse struct {
 	Object  string             `json:"object"`
 }
 
+type anthropicListModelsResponse struct {
+	Data    []dto.AnthropicModel `json:"data"`
+	FirstID *string              `json:"first_id"`
+	HasMore bool                 `json:"has_more"`
+	LastID  *string              `json:"last_id"`
+}
+
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -279,4 +286,77 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-tiered-empty-expr-model")
 	require.NotContains(t, ids, "zz-token-tiered-missing-expr-model")
 	require.NotContains(t, ids, "zz-token-unpriced-model")
+}
+
+// Anthropic 规范里 first_id/last_id 是 string|null：分组下没有可用模型时必须返回空列表，不能取首尾元素。
+func TestListModelsAnthropicEmptyListReturnsNullCursors(t *testing.T) {
+	withSelfUseModeDisabled(t)
+
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1003,
+		Username: "anthropic-empty-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1003)
+
+	require.NotPanics(t, func() {
+		ListModels(ctx, constant.ChannelTypeAnthropic)
+	})
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"data":[],"first_id":null,"has_more":false,"last_id":null}`, recorder.Body.String())
+}
+
+func TestListModelsAnthropicCursorsMatchListEnds(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{
+		"zz-anthropic-cursor-model-a": "tiered_expr",
+		"zz-anthropic-cursor-model-b": "tiered_expr",
+	}, map[string]string{
+		"zz-anthropic-cursor-model-a": `tier("base", p * 1 + c * 2)`,
+		"zz-anthropic-cursor-model-b": `tier("base", p * 1 + c * 2)`,
+	})
+
+	for _, models := range [][]string{
+		{"zz-anthropic-cursor-model-a"},
+		{"zz-anthropic-cursor-model-a", "zz-anthropic-cursor-model-b"},
+	} {
+		t.Run(fmt.Sprintf("%d_models", len(models)), func(t *testing.T) {
+			db := setupModelListControllerTestDB(t)
+			require.NoError(t, db.Create(&model.User{
+				Id:       1004,
+				Username: "anthropic-cursor-user",
+				Password: "password",
+				Group:    "default",
+				Status:   common.UserStatusEnabled,
+			}).Error)
+			for _, modelName := range models {
+				require.NoError(t, db.Create(&model.Ability{Group: "default", Model: modelName, ChannelId: 1, Enabled: true}).Error)
+			}
+
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+			ctx.Set("id", 1004)
+
+			ListModels(ctx, constant.ChannelTypeAnthropic)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var payload anthropicListModelsResponse
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+			require.Len(t, payload.Data, len(models))
+			require.False(t, payload.HasMore)
+			require.NotNil(t, payload.FirstID)
+			require.NotNil(t, payload.LastID)
+			require.Equal(t, payload.Data[0].ID, *payload.FirstID)
+			require.Equal(t, payload.Data[len(models)-1].ID, *payload.LastID)
+		})
+	}
 }

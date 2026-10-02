@@ -175,6 +175,9 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			if data, err := common.Marshal(delta); err == nil {
 				_ = helper.StringData(c, string(data))
 			}
+			if service.QualityStreamBlocked(c) {
+				break
+			}
 			continue
 		}
 		// done frame. Ollama often puts tool_calls only on this last frame.

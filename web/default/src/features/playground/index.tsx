@@ -1,92 +1,90 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getUserModels, getUserGroups } from './api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { isChatModel } from '@/lib/model-capabilities'
+import { cn } from '@/lib/utils'
+import { getRelayFailure, useRelayKey } from '@/hooks/use-relay-key'
+import { composerChip } from '@/components/composer-styles'
+import {
+  KeyHasNoModelsNotice,
+  KeyUnusableNotice,
+  KeySelector,
+  ModelSelector,
+  NoUsableKeyNotice,
+} from '@/components/key-model-selector'
 import { PlaygroundChat } from './components/playground-chat'
 import { PlaygroundInput } from './components/playground-input'
 import { usePlaygroundState, useChatHandler } from './hooks'
-import { createUserMessage, createLoadingAssistantMessage } from './lib'
+import {
+  chatColumn,
+  createUserMessage,
+  createLoadingAssistantMessage,
+} from './lib'
 import type { Message as MessageType } from './types'
 
+// 空态的示例提示：点击只填进输入框，不直接发送
+const EXAMPLE_PROMPTS = [
+  'Explain this code step by step',
+  'Draft a polite follow-up email',
+  'Summarize the key points of an article',
+  'Brainstorm 10 product name ideas',
+]
+
 export function Playground() {
+  const { t } = useTranslation()
   const {
     config,
     parameterEnabled,
     messages,
-    models,
-    groups,
     updateMessages,
-    setModels,
-    setGroups,
+    clearMessages,
     updateConfig,
     updateParameterEnabled,
   } = usePlaygroundState()
 
+  // 先选 key，模型只列这把 key 能对话的
+  const relay = useRelayKey(config.tokenId)
+  const chatModels = useMemo(
+    () => relay.models.filter(isChatModel).map((m) => ({ id: m.id })),
+    [relay.models]
+  )
+  const hasModel = chatModels.some((m) => m.id === config.model)
+
+  // 换 key 后当前模型不在新列表里，就切到第一个
+  useEffect(() => {
+    if (chatModels.length > 0 && !hasModel) {
+      updateConfig('model', chatModels[0].id)
+    }
+  }, [chatModels, hasModel, updateConfig])
+
   const { sendChat, stopGeneration, isGenerating } = useChatHandler({
     config,
     parameterEnabled,
+    secret: relay.secret,
     onMessageUpdate: updateMessages,
   })
+  const canSend = !!relay.secret && hasModel && !isGenerating
+
+  const [draft, setDraft] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Edit dialog state
   const [editingMessageKey, setEditingMessageKey] = useState<string | null>(
     null
   )
 
-  // Load models
-  const { data: modelsData, isLoading: isLoadingModels } = useQuery({
-    queryKey: ['playground-models'],
-    queryFn: getUserModels,
-  })
-
-  // Load groups
-  const { data: groupsData } = useQuery({
-    queryKey: ['playground-groups'],
-    queryFn: getUserGroups,
-  })
-
-  // Update models when data changes
-  useEffect(() => {
-    if (!modelsData) return
-
-    setModels(modelsData)
-
-    // Set default model if current model is not available
-    const isCurrentModelValid = modelsData.some((m) => m.value === config.model)
-    if (modelsData.length > 0 && !isCurrentModelValid) {
-      updateConfig('model', modelsData[0].value)
-    }
-  }, [modelsData, config.model, setModels, updateConfig])
-
-  // Update groups when data changes
-  useEffect(() => {
-    if (!groupsData) return
-
-    setGroups(groupsData)
-
-    const hasCurrentGroup = groupsData.some((g) => g.value === config.group)
-    if (!hasCurrentGroup && groupsData.length > 0) {
-      const fallback =
-        groupsData.find((g) => g.value === 'default')?.value ??
-        groupsData[0].value
-      updateConfig('group', fallback)
-    }
-  }, [groupsData, setGroups, config.group, updateConfig])
-
-  const handleSendMessage = (text: string) => {
-    const userMessage = createUserMessage(text)
-    const assistantMessage = createLoadingAssistantMessage()
-
-    const newMessages = [...messages, userMessage, assistantMessage]
-    updateMessages(newMessages)
-
-    // Send chat request
-    sendChat(newMessages)
+  const fillPrompt = (text: string) => {
+    setDraft(text)
+    textareaRef.current?.focus()
   }
 
-  const handleCopyMessage = (message: MessageType) => {
-    // Copy is handled in MessageActions component
-    // eslint-disable-next-line no-console
-    console.log('Message copied:', message.key)
+  const handleSendMessage = (text: string) => {
+    const newMessages = [
+      ...messages,
+      createUserMessage(text),
+      createLoadingAssistantMessage(),
+    ]
+    updateMessages(newMessages)
+    sendChat(newMessages)
   }
 
   const handleRegenerateMessage = (message: MessageType) => {
@@ -146,43 +144,138 @@ export function Playground() {
     updateMessages(newMessages)
   }
 
+  const hasMessages = messages.length > 0
+  const failure = getRelayFailure(relay)
+  const showNoKeyNotice =
+    !relay.keysLoading && !relay.activeKey && !relay.keysError
+  const showNoModelsNotice =
+    !!relay.activeKey &&
+    !relay.activeKeyUnusable &&
+    !relay.modelsLoading &&
+    !failure.error &&
+    chatModels.length === 0
+
+  const selectors = (
+    <>
+      <KeySelector
+        keys={relay.keys}
+        activeKey={relay.activeKey}
+        onSelect={(id) => updateConfig('tokenId', id)}
+        loading={relay.keysLoading}
+        disabled={isGenerating}
+      />
+      <ModelSelector
+        models={chatModels}
+        value={config.model}
+        onChange={(id) => updateConfig('model', id)}
+        loading={relay.modelsLoading}
+        error={failure.error}
+        onRetry={failure.retry}
+        disabled={isGenerating || (!relay.activeKey && !failure.error)}
+        emptyText={t(
+          'This key has no chat models. Pick another key or allow more models in the key settings.'
+        )}
+      />
+    </>
+  )
+
   return (
     <div className='relative flex size-full flex-col overflow-hidden'>
-      {/* Full-width scroll container: scrolling works even over side whitespace */}
-      <div className='flex flex-1 flex-col overflow-hidden'>
-        <PlaygroundChat
-          messages={messages}
-          onCopyMessage={handleCopyMessage}
-          onRegenerateMessage={handleRegenerateMessage}
-          onEditMessage={handleEditMessage}
-          onDeleteMessage={handleDeleteMessage}
-          isGenerating={isGenerating}
-          editingKey={editingMessageKey}
-          onCancelEdit={handleEditOpenChange}
-          onSaveEdit={(newContent) => applyEdit(newContent, false)}
-          onSaveEditAndSubmit={(newContent) => applyEdit(newContent, true)}
-        />
-      </div>
+      {hasMessages && (
+        <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+          <PlaygroundChat
+            messages={messages}
+            onRegenerateMessage={handleRegenerateMessage}
+            onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
+            isGenerating={isGenerating}
+            canSend={canSend}
+            editingKey={editingMessageKey}
+            onCancelEdit={handleEditOpenChange}
+            onSaveEdit={(newContent) => applyEdit(newContent, false)}
+            onSaveEditAndSubmit={(newContent) => applyEdit(newContent, true)}
+          />
+        </div>
+      )}
 
-      {/* Input area: center content and constrain to the same container width */}
-      <div className='mx-auto w-full max-w-4xl'>
-        <PlaygroundInput
-          config={config}
-          disabled={isGenerating}
-          groups={groups}
-          groupValue={config.group}
-          isGenerating={isGenerating}
-          isModelLoading={isLoadingModels}
-          modelValue={config.model}
-          models={models}
-          onGroupChange={(value) => updateConfig('group', value)}
-          onConfigChange={updateConfig}
-          onModelChange={(value) => updateConfig('model', value)}
-          onParameterEnabledChange={updateParameterEnabled}
-          onStop={stopGeneration}
-          onSubmit={handleSendMessage}
-          parameterEnabled={parameterEnabled}
-        />
+      {/* 空态整列垂直居中，有消息后输入卡吸底；输入卡始终挂在同一位置，发出第一条后焦点不丢 */}
+      <div
+        className={cn(
+          // 消息滚动区（use-stick-to-bottom）两侧预留了滚动条位置，这里同样预留，输入卡与气泡左右对齐
+          'flex flex-col [scrollbar-gutter:stable_both-edges]',
+          hasMessages
+            ? 'shrink-0 overflow-y-hidden'
+            : 'min-h-0 flex-1 overflow-y-auto'
+        )}
+      >
+        <div className={cn(chatColumn, hasMessages ? 'pb-4' : 'my-auto py-10')}>
+          {!hasMessages && (
+            <div className='text-center'>
+              <h2 className='text-foreground text-2xl font-semibold'>
+                {t('What can I help with?')}
+              </h2>
+              <p className='text-muted-foreground mt-2 text-sm text-balance'>
+                {t(
+                  'Pick one of your API keys and a model below. Usage is billed to that key.'
+                )}
+              </p>
+            </div>
+          )}
+
+          <div className={cn(!hasMessages && 'mt-6')}>
+            {showNoKeyNotice && (
+              <div className='mb-3'>
+                <NoUsableKeyNotice hasKeys={relay.keys.length > 0} />
+              </div>
+            )}
+            {relay.activeKey && relay.activeKeyUnusable && (
+              <div className='mb-3'>
+                <KeyUnusableNotice
+                  keyName={relay.activeKey.name}
+                  reason={relay.activeKeyUnusable}
+                />
+              </div>
+            )}
+            {showNoModelsNotice && relay.activeKey && (
+              <div className='mb-3'>
+                <KeyHasNoModelsNotice
+                  keyName={relay.activeKey.name}
+                  kind='chat'
+                />
+              </div>
+            )}
+            <PlaygroundInput
+              value={draft}
+              onValueChange={setDraft}
+              textareaRef={textareaRef}
+              onSubmit={handleSendMessage}
+              onStop={stopGeneration}
+              canSend={canSend}
+              isGenerating={isGenerating}
+              selectors={selectors}
+              onNewChat={hasMessages ? clearMessages : undefined}
+              config={config}
+              parameterEnabled={parameterEnabled}
+              onConfigChange={updateConfig}
+              onParameterEnabledChange={updateParameterEnabled}
+            />
+          </div>
+
+          {!hasMessages && (
+            <div className='mt-3 flex flex-wrap justify-center gap-2'>
+              {EXAMPLE_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type='button'
+                  className={composerChip}
+                  onClick={() => fillPrompt(t(prompt))}
+                >
+                  {t(prompt)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

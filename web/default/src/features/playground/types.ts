@@ -40,7 +40,6 @@ export interface ContentPart {
 
 export interface ChatCompletionRequest {
   model: string
-  group?: string
   messages: ChatCompletionMessage[]
   stream: boolean
   temperature?: number
@@ -91,7 +90,8 @@ export interface ChatCompletionResponse {
 // Configuration types
 export interface PlaygroundConfig {
   model: string
-  group: string
+  /** 选中的 API Key id；为空或这把 key 不可用时自动落到第一个可用 key */
+  tokenId: number | null
   temperature: number
   top_p: number
   max_tokens: number
@@ -108,17 +108,4 @@ export interface ParameterEnabled {
   frequency_penalty: boolean
   presence_penalty: boolean
   seed: boolean
-}
-
-// Model and group options
-export interface ModelOption {
-  label: string
-  value: string
-}
-
-export interface GroupOption {
-  label: string
-  value: string
-  ratio: number
-  desc?: string
 }

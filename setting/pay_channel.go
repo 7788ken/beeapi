@@ -10,6 +10,7 @@ const (
 	optionKeyAgouPayChannels         = "SfpayPayChannels"
 	optionKeyCryptomusPayChannels    = "CryptomusPayChannels"
 	optionKeyWaffoPancakePayChannels = "WaffoPancakePayChannels"
+	optionKeyBepusdtPayChannels      = "BepusdtPayChannels"
 )
 
 // getPayChannels 从 OptionMap 读指定键的渠道列表；为空或解析失败回退默认列表。
@@ -76,6 +77,17 @@ func SetCryptomusPayChannels(channels []constant.PayChannel) error {
 }
 func CryptomusPayChannels2JsonString() string {
 	return payChannels2JsonString(constant.DefaultCryptomusPayChannels)
+}
+
+// BEpusdt 支付渠道（纯展示，Params 为空）
+func GetBepusdtPayChannels() []constant.PayChannel {
+	return getPayChannels(optionKeyBepusdtPayChannels, constant.DefaultBepusdtPayChannels)
+}
+func SetBepusdtPayChannels(channels []constant.PayChannel) error {
+	return setPayChannels(optionKeyBepusdtPayChannels, channels)
+}
+func BepusdtPayChannels2JsonString() string {
+	return payChannels2JsonString(constant.DefaultBepusdtPayChannels)
 }
 
 // Waffo Pancake 支付渠道（纯展示，Params 为空）

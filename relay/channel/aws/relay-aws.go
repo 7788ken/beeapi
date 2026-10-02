@@ -292,6 +292,11 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 			fmt.Println("union is nil or unknown type")
 			return types.NewError(errors.New("nil or unknown response type"), types.ErrorCodeInvalidRequest), nil
 		}
+		// 质量闸门已拦截：不再等 Bedrock 生成完，退出循环后由 defer 关闭流并取消调用。
+		if service.QualityStreamBlocked(c) {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonQualityBlocked, nil)
+			break
+		}
 	}
 
 	if streamCtx.Err() != nil {

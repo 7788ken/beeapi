@@ -23,6 +23,16 @@ var DefaultCryptomusPayChannels = []PayChannel{
 	{Key: "eth", Name: "Ethereum", Icon: "ethereum", Enabled: true, Params: map[string]string{"to_currency": "ETH"}},
 }
 
+// DefaultBepusdtPayChannels：BEpusdt 自建加密币网关——充值页仅展示支持的 USDT 链，
+// 不参与下单（create-order 收银台由用户自选链），故 Params 为空。
+var DefaultBepusdtPayChannels = []PayChannel{
+	{Key: "usdt_trc20", Name: "USDT-TRC20", Icon: "tether", Enabled: true, Params: map[string]string{}},
+	{Key: "usdt_bep20", Name: "USDT-BEP20", Icon: "tether", Enabled: true, Params: map[string]string{}},
+	{Key: "usdt_erc20", Name: "USDT-ERC20", Icon: "tether", Enabled: true, Params: map[string]string{}},
+	{Key: "usdt_arbitrum", Name: "USDT-Arbitrum", Icon: "tether", Enabled: true, Params: map[string]string{}},
+	{Key: "usdt_solana", Name: "USDT-Solana", Icon: "tether", Enabled: true, Params: map[string]string{}},
+}
+
 // DefaultWaffoPancakePayChannels：Waffo Pancake 托管收银台——渠道仅用于充值页展示，
 // 不参与下单（跳转 Waffo 收银台后由用户自行选择），故 Params 为空。
 var DefaultWaffoPancakePayChannels = []PayChannel{

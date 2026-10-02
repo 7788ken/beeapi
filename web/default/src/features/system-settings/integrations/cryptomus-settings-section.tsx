@@ -156,6 +156,9 @@ export function CryptomusSettingsSection(props: Props) {
           在 cryptomus.com → Business 后台注册商户，拿到商户 UUID 和支付 API Key。
           Webhook 回调地址：<code className='break-all'>&lt;ServerAddress&gt;/api/cryptomus/webhook</code>，
           需在 Cryptomus 后台 IP/URL 白名单加上本服务地址。
+          <br />
+          注意：「USDT 自建网关（BEpusdt）」启用时会顶替 Cryptomus 成为充值页唯一的加密货币入口，
+          本页配置保留不动；关掉 BEpusdt 即自动切回 Cryptomus。
         </AlertDescription>
       </Alert>
 

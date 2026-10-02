@@ -40,6 +40,7 @@ func TestAnonymousPostRoutesRejectOversizeBodies(t *testing.T) {
 		"/api/waffo/webhook",
 		"/api/waffo-pancake/webhook",
 		"/api/cryptomus/webhook",
+		"/api/bepusdt/webhook",
 		"/api/sfpay/notify",
 		"/api/user/register",
 		"/api/user/login",

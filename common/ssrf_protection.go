@@ -328,7 +328,7 @@ func (p *SSRFProtection) ValidateURL(urlStr string) error {
 	// 解析URL
 	u, err := url.Parse(urlStr)
 	if err != nil {
-		return fmt.Errorf("invalid URL format: %v", err)
+		return fmt.Errorf("invalid URL format: %v", RedactURLError(err))
 	}
 
 	// 只允许HTTP/HTTPS协议

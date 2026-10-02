@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -11,6 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// 只有带 request_id 时才接受正序，避免整表被 order=asc 翻成最旧在前。
+func logListOldestFirst(c *gin.Context, requestId string) bool {
+	return strings.TrimSpace(requestId) != "" && strings.EqualFold(strings.TrimSpace(c.Query("order")), "asc")
+}
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
@@ -23,7 +29,7 @@ func GetAllLogs(c *gin.Context) {
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
 	requestId := c.Query("request_id")
-	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId)
+	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, logListOldestFirst(c, requestId))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -44,7 +50,7 @@ func GetUserLogs(c *gin.Context) {
 	modelName := c.Query("model_name")
 	group := c.Query("group")
 	requestId := c.Query("request_id")
-	logs, total, totalIsCapped, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId)
+	logs, total, totalIsCapped, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, logListOldestFirst(c, requestId))
 	if err != nil {
 		common.ApiError(c, err)
 		return

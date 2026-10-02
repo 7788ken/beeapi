@@ -120,6 +120,9 @@ func tencentStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *htt
 		if err != nil {
 			common.SysLog(err.Error())
 		}
+		if service.QualityStreamBlocked(c) {
+			break
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

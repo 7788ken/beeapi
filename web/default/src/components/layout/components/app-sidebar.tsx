@@ -13,10 +13,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
-import {
-  useContentBackupModuleEnabled,
-  withoutContentBackupNav,
-} from '@/features/content-backup/module'
+import { withoutContentBackupNav } from '@/features/content-backup/module'
 import { getNavGroupsForPath } from '../lib/workspace-registry'
 import { NavGroup } from './nav-group'
 import { WorkspaceSwitcher } from './workspace-switcher'
@@ -36,7 +33,6 @@ export function AppSidebar() {
   const userRole = useAuthStore((state) => state.auth.user?.role)
   const adminPerms = useAdminPerms()
   const sidebarData = useSidebarData()
-  const contentBackupModuleEnabled = useContentBackupModuleEnabled()
 
   // Get navigation group configuration corresponding to current path from workspace registry
   // If workspace has its own nav groups, prepend them before the default nav groups
@@ -45,12 +41,9 @@ export function AppSidebar() {
     ? [...workspaceNavGroups, ...sidebarData.navGroups]
     : sidebarData.navGroups
 
-  // Filter sidebar navigation items based on backend configuration
-  // 本部署关闭内容备份模块时，先摘掉所有内容备份入口
+  // 内容备份入口不出现在公开后台，与模块开关无关。
   const configFilteredNavGroups = useSidebarConfig(
-    contentBackupModuleEnabled
-      ? allNavGroups
-      : withoutContentBackupNav(allNavGroups)
+    withoutContentBackupNav(allNavGroups)
   )
 
   // Filter navigation groups based on user role
@@ -76,11 +69,6 @@ export function AppSidebar() {
             if (url === '/subscriptions') return adminPerms.subscription_manage
             if (url === '/users')
               return adminPerms.user_manage || adminPerms.quota_grant
-            if (url === '/content-backup')
-              return (
-                adminPerms.content_backup_view ||
-                adminPerms.content_backup_manage
-              )
             return true
           }),
         }

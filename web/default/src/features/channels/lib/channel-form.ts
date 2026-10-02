@@ -57,8 +57,6 @@ export const channelFormSchema = z
     disable_no_output_refund: z.boolean().optional(),
     // 备用 base_url（多行文本，每行一个 URL；存 setting.backup_base_urls 数组）
     backup_base_urls: z.string().optional(),
-    // 是否纳入内容备份采集范围；默认关（docs/2026-09-15-channel-content-backup-upload.md）
-    content_backup_enabled: z.boolean().optional(),
     block_apology_enabled: z.boolean().optional(),
     block_low_token_enabled: z.boolean().optional(),
     // 不参与定时测试和可用性测试（全量测试/恢复探活/降级探测都跳过）
@@ -201,7 +199,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   system_prompt_override: false,
   disable_no_output_refund: false,
   backup_base_urls: '',
-  content_backup_enabled: false,
   block_apology_enabled: false,
   block_low_token_enabled: false,
   skip_auto_test: false,
@@ -242,6 +239,19 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   verify_auto_enable_above: null,
 }
 
+// 新建渠道的初始值。blockApology / blockLowToken 来自本站
+// response_quality_setting.new_channel_block_*，缺省或 false 时两个开关保持关闭。
+export function createChannelFormDefaults(options?: {
+  blockApology?: boolean
+  blockLowToken?: boolean
+}): ChannelFormValues {
+  return {
+    ...CHANNEL_FORM_DEFAULT_VALUES,
+    block_apology_enabled: options?.blockApology === true,
+    block_low_token_enabled: options?.blockLowToken === true,
+  }
+}
+
 // ============================================================================
 // Transform Functions
 // ============================================================================
@@ -262,7 +272,6 @@ export function transformChannelToFormDefaults(
     system_prompt_override: false,
     disable_no_output_refund: false,
     backup_base_urls: '',
-    content_backup_enabled: false,
     block_apology_enabled: false,
     block_low_token_enabled: false,
     skip_auto_test: false,
@@ -282,7 +291,6 @@ export function transformChannelToFormDefaults(
         backup_base_urls: Array.isArray(parsed.backup_base_urls)
           ? parsed.backup_base_urls.join('\n')
           : '',
-        content_backup_enabled: parsed.content_backup_enabled === true,
         block_apology_enabled: parsed.block_apology_enabled === true,
         block_low_token_enabled: parsed.block_low_token_enabled === true,
         skip_auto_test: parsed.skip_auto_test === true,
@@ -447,7 +455,8 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     system_prompt_override: formData.system_prompt_override || false,
     disable_no_output_refund: formData.disable_no_output_refund || false,
     backup_base_urls: parseBackupBaseUrls(formData.backup_base_urls),
-    content_backup_enabled: formData.content_backup_enabled || false,
+    // content_backup_enabled 不在这里写。渠道页没有这个开关，只由内容备份管理端改。
+    // 基底展开会保留 setting 里已有的值；新渠道没有这个键就保持不采集。
     block_apology_enabled: formData.block_apology_enabled || false,
     block_low_token_enabled: formData.block_low_token_enabled || false,
     skip_auto_test: formData.skip_auto_test || false,

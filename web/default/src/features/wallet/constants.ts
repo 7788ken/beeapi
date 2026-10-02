@@ -19,6 +19,7 @@ export const PAYMENT_TYPES = {
   WAFFO: 'waffo',
   WAFFO_PANCAKE: 'waffo_pancake',
   CRYPTOMUS: 'cryptomus',
+  BEPUSDT: 'bepusdt',
   // agou provider 询价/分发用的合成 key（其方式以 alipay/wxpay 渲染图标）
   AGOU: 'sfpay',
 } as const
@@ -39,6 +40,7 @@ export const PAYMENT_ICON_COLORS = {
   [PAYMENT_TYPES.WAFFO]: '#2563EB',
   [PAYMENT_TYPES.WAFFO_PANCAKE]: '#F97316',
   [PAYMENT_TYPES.CRYPTOMUS]: '#26A17B',
+  [PAYMENT_TYPES.BEPUSDT]: '#26A17B',
 } as const
 
 /**

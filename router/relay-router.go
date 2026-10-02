@@ -157,6 +157,11 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatRerank)
 		})
 
+		// TypeSafe System One（Jev 决策模型）：原样透传，不做聊天转换
+		httpRouter.POST("/systemone", func(c *gin.Context) {
+			controller.Relay(c, types.RelayFormatSystemOne)
+		})
+
 		// gemini relay routes
 		httpRouter.POST("/engines/:model/embeddings", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatGemini)

@@ -14,21 +14,15 @@ export const MESSAGE_STATUS = {
   ERROR: 'error',
 } as const
 
-// API endpoints
+// API endpoints：用所选 API Key 直连同源中转接口，计费、分组、模型限制都按这把 key 走
 export const API_ENDPOINTS = {
-  CHAT_COMPLETIONS: '/pg/chat/completions',
-  USER_MODELS: '/api/user/models',
-  USER_GROUPS: '/api/user/self/groups',
+  CHAT_COMPLETIONS: '/v1/chat/completions',
 } as const
-
-// Default group — uses 'default' as the safe fallback; auto-group is
-// only selected when the backend confirms it is available for the user.
-export const DEFAULT_GROUP = 'default' as const
 
 // Default configuration
 export const DEFAULT_CONFIG: PlaygroundConfig = {
   model: 'gpt-4o',
-  group: DEFAULT_GROUP,
+  tokenId: null,
   temperature: 0.7,
   top_p: 1,
   max_tokens: 4096,

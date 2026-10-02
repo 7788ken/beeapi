@@ -2,8 +2,6 @@ import type { QueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { formatCurrencyFromUSD } from '@/lib/currency'
-import { updateContentBackupChannelsBackup } from '@/features/content-backup/api'
-import { CONTENT_BACKUP_MAX_CHANNEL_BULK } from '@/features/content-backup/types'
 import {
   copyChannel,
   deleteChannel,
@@ -408,52 +406,6 @@ export async function handleBatchDisable(
     }
   } catch (_error) {
     toast.error(i18next.t('Failed to disable channels'))
-  }
-}
-
-/**
- * Batch enable/disable content backup for channels.
- * 一次 PUT 调用，后端按读-改-写事务逐条更新，只翻转 content_backup_enabled，
- * 其余 setting 字段（proxy、system_prompt 等）原样保留；一批最多
- * CONTENT_BACKUP_MAX_CHANNEL_BULK 个（后端硬校验，超出直接 400）。
- */
-export async function handleBatchToggleContentBackup(
-  ids: number[],
-  enabled: boolean,
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  if (ids.length === 0) {
-    toast.error(i18next.t('No channels selected'))
-    return
-  }
-  if (ids.length > CONTENT_BACKUP_MAX_CHANNEL_BULK) {
-    toast.error(
-      i18next.t('At most {{max}} channels can be updated in one batch', {
-        max: CONTENT_BACKUP_MAX_CHANNEL_BULK,
-      })
-    )
-    return
-  }
-
-  try {
-    const result = await updateContentBackupChannelsBackup(ids, enabled)
-    toast.success(
-      enabled
-        ? i18next.t('{{count}} channel(s) added to content backup', {
-            count: result.updated,
-          })
-        : i18next.t('{{count}} channel(s) removed from content backup', {
-            count: result.updated,
-          })
-    )
-    queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-    onSuccess?.()
-  } catch (_error: unknown) {
-    const err = _error as { response?: { data?: { message?: string } } }
-    toast.error(
-      err?.response?.data?.message || i18next.t(ERROR_MESSAGES.UPDATE_FAILED)
-    )
   }
 }
 

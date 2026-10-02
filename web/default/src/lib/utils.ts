@@ -1,5 +1,11 @@
 import { type ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
+
+// theme.css 自定义的 --shadow-surface 要登记给 twMerge：否则它和原语自带的 shadow-xs 等会同时留下，
+// 谁生效全看 CSS 顺序（shadow-xs 恰好排在后面，卡片阴影被吞）
+const twMerge = extendTailwindMerge({
+  extend: { theme: { shadow: ['surface'] } },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

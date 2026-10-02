@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Link } from '@tanstack/react-router'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { CircleAlert, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +21,7 @@ import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import type { UsageLog } from '../../data/schema'
 import { getLogAvatarStyle } from '../../lib/avatar-color'
+import { buildChainLogSearch } from '../../lib/chain-search'
 import {
   formatChannelChain,
   formatModelName,
@@ -42,6 +43,8 @@ import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { ModelBadge } from '../model-badge'
 import { useUsageLogsContext } from '../usage-logs-provider'
+
+const logsRoute = getRouteApi('/_authenticated/usage-logs/$section')
 
 interface DetailSegment {
   text: string
@@ -385,7 +388,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Chain')} />
         ),
-        cell: ({ row }) => {
+        cell: function RetryChainCell({ row }) {
+          const navigate = useNavigate()
+          const search = logsRoute.useSearch()
           const log = row.original
           if (!isDisplayableLogType(log.type)) return null
 
@@ -400,13 +405,44 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             )
           }
 
+          const requestId = log.request_id?.trim()
+          if (!requestId) {
+            return (
+              <span
+                className='text-foreground max-w-[9rem] truncate font-mono text-xs tabular-nums'
+                title={chain}
+              >
+                {chain}
+              </span>
+            )
+          }
+
           return (
-            <span
-              className='text-foreground max-w-[9rem] truncate font-mono text-xs tabular-nums'
-              title={chain}
+            <button
+              type='button'
+              className='max-w-[9rem] truncate rounded-sm font-mono text-xs tabular-nums text-[#635bff] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(99,91,255,0.3)]'
+              title={t('View this chain from the first record')}
+              onClick={(event) => {
+                event.stopPropagation()
+                navigate({
+                  to: '/usage-logs/$section',
+                  params: { section: 'common' },
+                  search: buildChainLogSearch({
+                    requestId,
+                    createdAtSec: log.created_at,
+                    startTime: search.startTime,
+                    endTime: search.endTime,
+                    pageSize: search.pageSize,
+                    model: search.model,
+                    token: search.token,
+                    group: search.group,
+                    username: search.username,
+                  }),
+                })
+              }}
             >
               {chain}
-            </span>
+            </button>
           )
         },
         meta: { label: t('Chain'), mobileHidden: true },

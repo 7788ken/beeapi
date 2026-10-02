@@ -214,11 +214,17 @@ func ListModels(c *gin.Context, modelType int) {
 				Type:        "model",
 			}
 		}
+		// Anthropic 规范里 first_id/last_id 是 string|null，无可用模型时返回空列表
+		var firstId, lastId *string
+		if len(useranthropicModels) > 0 {
+			firstId = &useranthropicModels[0].ID
+			lastId = &useranthropicModels[len(useranthropicModels)-1].ID
+		}
 		c.JSON(200, gin.H{
 			"data":     useranthropicModels,
-			"first_id": useranthropicModels[0].ID,
+			"first_id": firstId,
 			"has_more": false,
-			"last_id":  useranthropicModels[len(useranthropicModels)-1].ID,
+			"last_id":  lastId,
 		})
 	case constant.ChannelTypeGemini:
 		userGeminiModels := make([]dto.GeminiModel, len(userOpenAiModels))

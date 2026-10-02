@@ -209,8 +209,12 @@ export function buildApiParams(config: {
       : {}),
     ...(isAdmin && username && { username }),
     ...(requestId && { request_id: requestId }),
+    ...(requestId && searchParams.order === 'asc' ? { order: 'asc' as const } : {}),
     ...buildTimeRangeParams(searchParams, false),
   }
+
+  // 链路视图以 URL 为准。列筛选从 URL 同步晚一拍，不能把刚清掉的渠道和类型写回去。
+  const chainView = Boolean(requestId) && searchParams.order === 'asc'
 
   // Override with column filters if present
   if (columnFilters.length > 0) {
@@ -221,7 +225,7 @@ export function buildApiParams(config: {
 
       switch (id) {
         case 'type':
-          params.type = processType(value)
+          if (!chainView) params.type = processType(value)
           break
         case 'model_name':
           params.model_name = String(trimmed)
@@ -233,7 +237,7 @@ export function buildApiParams(config: {
           params.group = String(trimmed)
           break
         case 'channel':
-          if (isAdmin) params.channel = normalizeChannelId(value)
+          if (isAdmin && !chainView) params.channel = normalizeChannelId(value)
           break
         case 'username':
           if (isAdmin) params.username = String(trimmed)
@@ -266,7 +270,13 @@ export function buildLogTrendParams(
     columnFilters: [],
     isAdmin,
   })
-  const { p: _page, page_size: _pageSize, type: _type, ...trendParams } = params
+  const {
+    p: _page,
+    page_size: _pageSize,
+    type: _type,
+    order: _order,
+    ...trendParams
+  } = params
 
   return {
     ...trendParams,

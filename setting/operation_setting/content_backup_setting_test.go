@@ -97,6 +97,50 @@ func TestContentBackupConfigParseFillsMissingKeysWithDefaults(t *testing.T) {
 	}
 }
 
+// 告警邮件"默认关闭"要对已部署站点生效，只能靠新增键缺失取默认：库里旧整包没有这两个键，
+// 升级后必须解码成总开关关、收件人空，且不报错；旧整包里存过的分类开关原样保留。
+func TestContentBackupConfigParseOldBlobLeavesAlertEmailOff(t *testing.T) {
+	legacy := contentBackupEnabledTestConfig()
+	legacy.Version = 4
+	legacy.NotifyFailed = false
+	blob, err := common.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := common.Unmarshal(blob, &raw); err != nil {
+		t.Fatal(err)
+	}
+	delete(raw, "notify_email_enabled")
+	delete(raw, "notify_emails")
+	stored, err := common.Marshal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "notify_email") {
+		t.Fatalf("the simulated old blob still carries a new key: %s", stored)
+	}
+
+	parsed, err := ParseContentBackupConfig(string(stored))
+	if err != nil {
+		t.Fatalf("an old blob without the alert email keys must still parse: %v", err)
+	}
+	if parsed.NotifyEmailEnabled || parsed.NotifyEmails != "" {
+		t.Fatalf("alert email must default to off with no recipients, got enabled=%v emails=%q", parsed.NotifyEmailEnabled, parsed.NotifyEmails)
+	}
+	if !parsed.Enabled || parsed.Version != 4 || parsed.NotifyFailed || !parsed.NotifyNodeOffline {
+		t.Fatalf("stored values must survive: %+v", parsed.Redacted())
+	}
+
+	// 显式存进去的"开着却没有收件人"不是缺键，照常整包拒绝，不借采集开关那条降级放行。
+	raw["notify_email_enabled"] = true
+	raw["notify_emails"] = ""
+	explicit, _ := common.Marshal(raw)
+	if _, err := ParseContentBackupConfig(string(explicit)); !errors.Is(err, ErrContentBackupConfigInvalid) || !errors.Is(err, contentbackup.ErrInvalidConfig) {
+		t.Fatalf("an explicit switch-on without recipients must be rejected, got %v", err)
+	}
+}
+
 // 旧版本保存的整包可能是"开关开着、但没有 site_label / 凭据"（当时还不是启用前置）。
 // 这种行必须降级为关、保留其余字段，而不是整包拒掉让页面上的配置消失、日志每分钟一条。
 func TestContentBackupConfigParseDegradesEnabledWithoutPrerequisitesToDisabled(t *testing.T) {

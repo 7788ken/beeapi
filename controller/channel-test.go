@@ -107,6 +107,10 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if normalized != "" {
 		return normalized
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeTypeSafe {
+		// 决策模型没有聊天接口，测试只能走 /v1/systemone；否则自动测试会把渠道误判为坏并禁用。
+		return string(constant.EndpointTypeTypeSafeSystemOne)
+	}
 	if strings.HasSuffix(modelName, ratio_setting.CompactModelSuffix) {
 		return string(constant.EndpointTypeOpenAIResponseCompact)
 	}
@@ -242,6 +246,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 			relayFormat = types.RelayFormatOpenAIImage
 		case constant.EndpointTypeEmbeddings:
 			relayFormat = types.RelayFormatEmbedding
+		case constant.EndpointTypeTypeSafeSystemOne:
+			relayFormat = types.RelayFormatSystemOne
 		default:
 			relayFormat = types.RelayFormatOpenAI
 		}
@@ -377,6 +383,17 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 				context:     c,
 				localErr:    errors.New("invalid rerank request type"),
 				newAPIError: types.NewError(errors.New("invalid rerank request type"), types.ErrorCodeConvertRequestFailed),
+			}
+		}
+	case relayconstant.RelayModeSystemOne:
+		// TypeSafe System One：原样透传，不经过任何 Convert*
+		if systemOneReq, ok := request.(*dto.SystemOneRequest); ok {
+			convertedRequest = systemOneReq
+		} else {
+			return testResult{
+				context:     c,
+				localErr:    errors.New("invalid system one request type"),
+				newAPIError: types.NewError(errors.New("invalid system one request type"), types.ErrorCodeConvertRequestFailed),
 			}
 		}
 	case relayconstant.RelayModeResponses:
@@ -758,6 +775,18 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				Query:     "What is Deep Learning?",
 				Documents: []any{"Deep Learning is a subset of machine learning.", "Machine learning is a field of artificial intelligence."},
 				TopN:      lo.ToPtr(2),
+			}
+		case constant.EndpointTypeTypeSafeSystemOne:
+			// TypeSafe System One：一个 noul 问题，几十个输入 token，厂商不计输出
+			return &dto.SystemOneRequest{
+				Model: model,
+				State: "The customer writes: I was charged twice for order A-104, please refund the duplicate.",
+				Questions: map[string]any{
+					"refund_requested": map[string]any{
+						"type":         dto.SystemOneQuestionNoul,
+						"instructions": "The customer is explicitly asking for a refund",
+					},
+				},
 			}
 		case constant.EndpointTypeOpenAIResponse:
 			// 返回 OpenAIResponsesRequest

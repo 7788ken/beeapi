@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/backgroundtask"
 	"github.com/QuantumNous/new-api/pkg/contentbackup"
@@ -19,7 +19,8 @@ import (
 
 // content_backup_alerts.go 是 content-backup 告警调度的唯一实现：按 design doc
 // docs/2026-09-15-channel-content-backup-upload.md §7.3 的规则周期评估每个存储节点，
-// 通过 model.ContentBackupStore 的 CAS 方法发布/解除告警并去重发送通知。
+// 通过 model.ContentBackupStore 的 CAS 方法发布/解除告警，并去重发送告警邮件。
+// 邮件只发给配置里的 notify_emails，经本站 SMTP 发出；总开关 notify_email_enabled 默认关。
 //
 // 刻意不按 common.IsMasterNode 收敛：doc 要求所有节点独立评估，真正的"只发一次"
 // 由 ClaimAlertSend 的数据库租约保证——多进程可以重复判断，但只有一个进程真正发送。
@@ -33,11 +34,6 @@ const (
 	// 租约到期即可在下一轮重试，不占用 AlertDedupMinutes 那个 30 分钟的语义去重窗口
 	// ——ClaimAlertSend 的 send_lease_until 和 last_sent_at 是两个独立闸门。
 	contentBackupAlertLeaseWindow = 20 * time.Second
-
-	// contentBackupAlertNotifyType 是 dto.Notify.Type，同时也是 CheckNotificationLimit
-	// 限流 key 的一部分；现有 dto.NotifyType* 常量都不对应这个场景，本文件私有即可，
-	// 不需要改 dto/notify.go。
-	contentBackupAlertNotifyType = "content_backup_alert"
 )
 
 // StartContentBackupAlertTask 是 main.go 接线用的导出入口。功能默认关闭时的安全行为
@@ -124,7 +120,6 @@ func runContentBackupAlertRound(ctx context.Context, store *model.ContentBackupS
 		return nil
 	}
 
-	rootUser := contentBackupAlertRootUser()
 	dedup := time.Duration(cfg.AlertDedupMinutes) * time.Minute
 
 	var firstErr error
@@ -142,26 +137,13 @@ func runContentBackupAlertRound(ctx context.Context, store *model.ContentBackupS
 			continue
 		}
 		for _, eval := range evaluations {
-			if err := applyContentBackupAlertEvaluation(ctx, store, rootUser, eval, cfg, dedup, owner, now); err != nil {
+			if err := applyContentBackupAlertEvaluation(ctx, store, eval, cfg, dedup, owner, now); err != nil {
 				common.SysError(fmt.Sprintf("content backup alert %s/%s: %s", eval.storageNodeID, eval.reason, err.Error()))
 				record(err)
 			}
 		}
 	}
 	return firstErr
-}
-
-// contentBackupAlertRootUser 复现 NotifyRootUser（service/user_notify.go）的取用户方式，
-// 但把"根用户尚不存在"当成可恢复路径处理：这里跑在 backgroundtask 的顶层 goroutine 里，
-// panic 会被 pkg/backgroundtask 兜住，但兜住之后整条 ticker 循环会永久退出——比起在部署
-// 脚本还没建管理员时就让调度器彻底死掉，跳过本轮通知、保留告警记账明显更安全。
-func contentBackupAlertRootUser() *model.UserBase {
-	user := model.GetRootUser()
-	if user == nil || user.Id == 0 {
-		common.SysError("content backup alert: root user not found, skipping notification dispatch this round")
-		return nil
-	}
-	return user.ToBaseUser()
 }
 
 func contentBackupEvaluateNode(ctx context.Context, store *model.ContentBackupStore, cfg contentbackup.Config, tracker *contentBackupAlertTracker, node model.ContentBackupNodeStatus, now time.Time) ([]contentBackupAlertEvaluation, error) {
@@ -321,23 +303,23 @@ func contentBackupEvaluateConfigMismatch(cfg contentbackup.Config, node model.Co
 	}
 }
 
-// contentBackupAlertShouldNotify 只放真正要人处理、且管理员在设置里勾选了的故障。
-// 恢复、配置版本短暂落后（保存后下一轮心跳就会对齐）都不发信。
+// contentBackupAlertShouldNotify 只放真正要人处理、管理端打开了告警邮件总开关、且勾选了
+// 该类型的故障。恢复、配置版本短暂落后（保存后下一轮心跳就会对齐）都不发信。
 func contentBackupAlertShouldNotify(cfg contentbackup.Config, reason string, recovered bool) bool {
 	if recovered || reason == model.ContentBackupAlertConfigMismatch {
 		return false
 	}
-	return cfg.AlertNotifyEnabled(reason)
+	return cfg.NotifyEmailEnabled && cfg.AlertNotifyEnabled(reason)
 }
 
 // applyContentBackupAlertEvaluation 是触发态与恢复态两条路径的唯一入口。
 //
-// 触发态：UpsertAlert 记账 -> ClaimAlertSend 抢租约 -> 抢到才尝试发送 -> 真发出去才
-// MarkAlertSent。目标未配置或发送出错都不能调用 MarkAlertSent，否则 30 分钟去重窗口
-// 内不会再重试。不该打扰的原因（配置版本短暂落后）仍记账，但标记为已发送以免空转抢租约。
+// 触发态：UpsertAlert 记账 -> ClaimAlertSend 抢租约 -> 抢到才发邮件 -> 真发出去才
+// MarkAlertSent。发送出错不能调用 MarkAlertSent，否则 30 分钟去重窗口内不会再重试。
+// 不该打扰的原因（配置版本短暂落后）仍记账，但标记为已发送以免空转抢租约。
 //
 // 恢复态：ResolveAlert 只在 firing->resolved 这一次跳变时落库，不再发信。
-func applyContentBackupAlertEvaluation(ctx context.Context, store *model.ContentBackupStore, rootUser *model.UserBase, eval contentBackupAlertEvaluation, cfg contentbackup.Config, dedup time.Duration, owner string, now time.Time) error {
+func applyContentBackupAlertEvaluation(ctx context.Context, store *model.ContentBackupStore, eval contentBackupAlertEvaluation, cfg contentbackup.Config, dedup time.Duration, owner string, now time.Time) error {
 	if eval.firing {
 		if err := store.UpsertAlert(ctx, model.ContentBackupAlert{
 			StorageNodeID: eval.storageNodeID,
@@ -347,7 +329,7 @@ func applyContentBackupAlertEvaluation(ctx context.Context, store *model.Content
 			return fmt.Errorf("upsert alert: %w", err)
 		}
 
-		// 管理员关掉的类型只记账、不抢发送租约，重新打开后下一轮就能立刻发。
+		// 总开关关着、或管理员关掉的类型只记账、不抢发送租约，重新打开后下一轮就能立刻发。
 		// 配置版本短暂落后仍抢租约并标已发送，避免空转。
 		if !contentBackupAlertShouldNotify(cfg, eval.reason, false) {
 			if eval.reason == model.ContentBackupAlertConfigMismatch {
@@ -370,20 +352,11 @@ func applyContentBackupAlertEvaluation(ctx context.Context, store *model.Content
 		if !won {
 			return nil
 		}
-		if rootUser == nil {
-			return nil
-		}
 
-		notify := contentBackupAlertNotify(store.SiteID(), eval, false, now)
-		outcome := contentBackupAlertSendFunc(rootUser, notify)
-		if outcome.err != nil {
-			return fmt.Errorf("send alert notification: %w", outcome.err)
-		}
-		if !outcome.attempted {
-			// 目标未配置：NotifyUser 对这种情况也是静默 return nil，如果照单全收会被
-			// 误判成"发送成功"，30 分钟去重窗口内再也不会重试。这里必须直接返回，
-			// 绝不调用 MarkAlertSent。
-			return nil
+		// 不判收件人为空：配置校验保证总开关打开时至少有一个收件人。
+		subject, content := contentBackupAlertMail(store.SiteID(), eval, false, now)
+		if err := contentBackupSendEmail(subject, strings.Join(cfg.NotifyEmailList(), ";"), content); err != nil {
+			return fmt.Errorf("send alert email: %w", err)
 		}
 		if err := store.MarkAlertSent(ctx, eval.storageNodeID, eval.reason, owner, now); err != nil {
 			return fmt.Errorf("mark alert sent: %w", err)
@@ -397,49 +370,6 @@ func applyContentBackupAlertEvaluation(ctx context.Context, store *model.Content
 	return nil
 }
 
-// contentBackupAlertOutcome 把"目标没配置"和"发送失败"区分开：前者绝不能被当成已发送。
-type contentBackupAlertOutcome struct {
-	attempted bool
-	err       error
-}
-
-// contentBackupAlertSendFunc 是发送通知的唯一出口，测试通过重写这个包级变量避免真实
-// 网络 I/O。
-var contentBackupAlertSendFunc = defaultContentBackupAlertSend
-
-func defaultContentBackupAlertSend(user *model.UserBase, notify dto.Notify) contentBackupAlertOutcome {
-	setting := user.GetSetting()
-	if contentBackupAlertTarget(user, setting) == "" {
-		return contentBackupAlertOutcome{attempted: false}
-	}
-	err := NotifyUser(user.Id, user.Email, setting, notify)
-	return contentBackupAlertOutcome{attempted: true, err: err}
-}
-
-// contentBackupAlertTarget 原样复刻 NotifyUser（service/user_notify.go）逐渠道的判空
-// 分支。NotifyUser 目标为空、或 notify_type 不匹配任何已知渠道时都是静默 return nil，
-// 全代码库现有调用点都没做这层判断——这里必须自己判断，不能信任它的 nil。
-func contentBackupAlertTarget(user *model.UserBase, setting dto.UserSetting) string {
-	notifyType := setting.NotifyType
-	if notifyType == "" {
-		notifyType = dto.NotifyTypeEmail
-	}
-	switch notifyType {
-	case dto.NotifyTypeEmail:
-		if setting.NotificationEmail != "" {
-			return setting.NotificationEmail
-		}
-		return user.Email
-	case dto.NotifyTypeWebhook:
-		return setting.WebhookUrl
-	case dto.NotifyTypeBark:
-		return setting.BarkUrl
-	case dto.NotifyTypeGotify:
-		if setting.GotifyUrl == "" || setting.GotifyToken == "" {
-			return ""
-		}
-		return setting.GotifyUrl
-	default:
-		return ""
-	}
-}
+// contentBackupSendEmail 是告警邮件和测试邮件共用的唯一出口：经本站 SMTP 发出，多个收件人
+// 用 ; 连接（common.SendEmail 按 ; 切开逐个 RCPT）。测试重写这个包级变量避免真实网络 I/O。
+var contentBackupSendEmail = common.SendEmail

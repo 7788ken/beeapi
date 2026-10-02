@@ -53,7 +53,6 @@ import { Route as AuthenticatedIqTestIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedGroupSquareIndexRouteImport } from './routes/_authenticated/group-square/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedCreateCenterIndexRouteImport } from './routes/_authenticated/create-center/index'
-import { Route as AuthenticatedContentBackupIndexRouteImport } from './routes/_authenticated/content-backup/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedAnomalyMonitorIndexRouteImport } from './routes/_authenticated/anomaly-monitor/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
@@ -313,12 +312,6 @@ const AuthenticatedCreateCenterIndexRoute =
     path: '/create-center/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedContentBackupIndexRoute =
-  AuthenticatedContentBackupIndexRouteImport.update({
-    id: '/content-backup/',
-    path: '/content-backup/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedChannelsIndexRoute =
   AuthenticatedChannelsIndexRouteImport.update({
     id: '/channels/',
@@ -495,7 +488,6 @@ export interface FileRoutesByFullPath {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/anomaly-monitor/': typeof AuthenticatedAnomalyMonitorIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
-  '/content-backup/': typeof AuthenticatedContentBackupIndexRoute
   '/create-center/': typeof AuthenticatedCreateCenterIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-square/': typeof AuthenticatedGroupSquareIndexRoute
@@ -563,7 +555,6 @@ export interface FileRoutesByTo {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/anomaly-monitor': typeof AuthenticatedAnomalyMonitorIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
-  '/content-backup': typeof AuthenticatedContentBackupIndexRoute
   '/create-center': typeof AuthenticatedCreateCenterIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-square': typeof AuthenticatedGroupSquareIndexRoute
@@ -635,7 +626,6 @@ export interface FileRoutesById {
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/anomaly-monitor/': typeof AuthenticatedAnomalyMonitorIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
-  '/_authenticated/content-backup/': typeof AuthenticatedContentBackupIndexRoute
   '/_authenticated/create-center/': typeof AuthenticatedCreateCenterIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-square/': typeof AuthenticatedGroupSquareIndexRoute
@@ -706,7 +696,6 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/anomaly-monitor/'
     | '/channels/'
-    | '/content-backup/'
     | '/create-center/'
     | '/dashboard/'
     | '/group-square/'
@@ -774,7 +763,6 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/anomaly-monitor'
     | '/channels'
-    | '/content-backup'
     | '/create-center'
     | '/dashboard'
     | '/group-square'
@@ -845,7 +833,6 @@ export interface FileRouteTypes {
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/anomaly-monitor/'
     | '/_authenticated/channels/'
-    | '/_authenticated/content-backup/'
     | '/_authenticated/create-center/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-square/'
@@ -1213,13 +1200,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCreateCenterIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/content-backup/': {
-      id: '/_authenticated/content-backup/'
-      path: '/content-backup'
-      fullPath: '/content-backup/'
-      preLoaderRoute: typeof AuthenticatedContentBackupIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/channels/': {
       id: '/_authenticated/channels/'
       path: '/channels'
@@ -1490,7 +1470,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedAnomalyMonitorIndexRoute: typeof AuthenticatedAnomalyMonitorIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
-  AuthenticatedContentBackupIndexRoute: typeof AuthenticatedContentBackupIndexRoute
   AuthenticatedCreateCenterIndexRoute: typeof AuthenticatedCreateCenterIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupSquareIndexRoute: typeof AuthenticatedGroupSquareIndexRoute
@@ -1520,7 +1499,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedAnomalyMonitorIndexRoute: AuthenticatedAnomalyMonitorIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
-  AuthenticatedContentBackupIndexRoute: AuthenticatedContentBackupIndexRoute,
   AuthenticatedCreateCenterIndexRoute: AuthenticatedCreateCenterIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedGroupSquareIndexRoute: AuthenticatedGroupSquareIndexRoute,

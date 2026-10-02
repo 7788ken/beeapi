@@ -1,4 +1,3 @@
-import { ContentBackupSettingsForm } from '@/features/content-backup/components/settings-form'
 import type { IntegrationSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { AgouSettingsSection } from './agou-settings-section'
@@ -89,6 +88,19 @@ const INTEGRATIONS_SECTIONS = [
           CryptomusAllowedGroups: settings.CryptomusAllowedGroups ?? '',
           CryptomusPayChannels: settings.CryptomusPayChannels ?? '[]',
           CryptomusLogo: settings.CryptomusLogo ?? '',
+        }}
+        bepusdtDefaultValues={{
+          BepusdtEnabled: settings.BepusdtEnabled ?? false,
+          BepusdtBaseURL: settings.BepusdtBaseURL ?? '',
+          BepusdtApiToken: settings.BepusdtApiToken ?? '',
+          BepusdtCurrencies: settings.BepusdtCurrencies ?? 'USDT',
+          BepusdtLifetimeSec: settings.BepusdtLifetimeSec ?? 1200,
+          BepusdtUnitPrice: settings.BepusdtUnitPrice ?? 1,
+          BepusdtMinTopUp: settings.BepusdtMinTopUp ?? 1,
+          BepusdtReturnURL: settings.BepusdtReturnURL ?? '',
+          BepusdtAllowedGroups: settings.BepusdtAllowedGroups ?? '',
+          BepusdtPayChannels: settings.BepusdtPayChannels ?? '[]',
+          BepusdtLogo: settings.BepusdtLogo ?? '',
         }}
       />
     ),
@@ -189,13 +201,6 @@ const INTEGRATIONS_SECTIONS = [
     descriptionKey:
       'Configure upstream new-api sites used to sync groups & pricing.',
     build: (_settings: IntegrationSettings) => <SubSiteSettingsSection />,
-  },
-  {
-    id: 'content-backup',
-    titleKey: 'Content backup',
-    descriptionKey:
-      'Configure the remote upload target (FTPS or SFTP), capture limits and operational tuning for the content backup pipeline.',
-    build: (_settings: IntegrationSettings) => <ContentBackupSettingsForm />,
   },
 ] as const
 

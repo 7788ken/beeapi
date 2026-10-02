@@ -47,6 +47,8 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 		err = relay.AudioHelper(c, info)
 	case relayconstant.RelayModeRerank:
 		err = relay.RerankHelper(c, info)
+	case relayconstant.RelayModeSystemOne:
+		err = relay.SystemOneHelper(c, info)
 	case relayconstant.RelayModeEmbeddings:
 		err = relay.EmbeddingHelper(c, info)
 	case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
@@ -283,6 +285,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		// 上游拒绝标记同理必须按轮清空：渠道A写入 refusal/content_filter 后失败重试，
 		// 渠道B的零产出若继承陈旧标记会被错误拒退（免单判定读该键）。
 		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "")
+		// 本地估算标记同理：被质量闸门截断的一轮按本地估算，不能带进后面成功那轮的日志。
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, false)
 
 		// 总 deadline 触发：直接退出，返回 504 + relay_deadline_exceeded
 		if err := totalCtx.Err(); err != nil {
@@ -533,6 +537,9 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 		meta.MaxTokens = int(lo.FromPtr(r.MaxTokens))
 	case *dto.ImageRequest:
 		// Pricing for image requests depends on ImagePriceRatio; safe to compute even when CountToken is disabled.
+		return r.GetTokenCountMeta()
+	case *dto.SystemOneRequest:
+		// 决策模型没有 max_tokens，预扣费只能按 state + questions 的文本量估；体量小，直接算。
 		return r.GetTokenCountMeta()
 	default:
 		// Best-effort: leave CombineText empty to avoid large allocations.

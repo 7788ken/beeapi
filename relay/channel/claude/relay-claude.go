@@ -181,6 +181,10 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 	if claudeInfo.Usage != nil && claudeInfo.Usage.BillingUsage == nil {
 		claudeInfo.Usage.BillingUsage = dto.NewClaudeMessagesBillingUsage(buildMessageDeltaPatchUsage(nil, claudeInfo))
 	}
+	// 质量闸门拦截后提前停流、没处理到 message_delta 时，计费快照的输出还停在 message_start，改按已收到的内容计。
+	if !claudeInfo.Done && service.QualityStreamBlocked(c) {
+		refreshBillingOutputTokens(claudeInfo.Usage)
+	}
 
 	if info.RelayFormat == types.RelayFormatClaude {
 		//
@@ -195,6 +199,17 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		}
 		helper.Done(c)
 	}
+}
+
+func refreshBillingOutputTokens(usage *dto.Usage) {
+	if usage == nil || usage.BillingUsage == nil || usage.BillingUsage.ClaudeUsage == nil ||
+		usage.BillingUsage.ClaudeUsage.OutputTokens >= usage.CompletionTokens {
+		return
+	}
+	billing := dto.CloneBillingUsage(usage.BillingUsage)
+	billing.ClaudeUsage.OutputTokens = usage.CompletionTokens
+	billing.Estimated = true
+	usage.BillingUsage = billing
 }
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {

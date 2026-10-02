@@ -212,6 +212,17 @@ export type IntegrationSettings = {
   CryptomusAllowedGroups: string
   CryptomusPayChannels: string
   CryptomusLogo: string
+  BepusdtEnabled: boolean
+  BepusdtBaseURL: string
+  BepusdtApiToken: string
+  BepusdtCurrencies: string
+  BepusdtLifetimeSec: number
+  BepusdtUnitPrice: number
+  BepusdtMinTopUp: number
+  BepusdtReturnURL: string
+  BepusdtAllowedGroups: string
+  BepusdtPayChannels: string
+  BepusdtLogo: string
   SfpayEnabled: boolean
   SfpayBaseURL: string
   SfpayAppId: string

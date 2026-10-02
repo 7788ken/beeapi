@@ -74,27 +74,32 @@ export function CommonLogsFilterBar({
   const { usernameOptions } = useUsernameSearch(filters.username || '')
 
   useEffect(() => {
-    const next: Partial<CommonLogFilters> = {}
-    if (searchParams.startTime)
-      next.startTime = new Date(searchParams.startTime)
-    if (searchParams.endTime) next.endTime = new Date(searchParams.endTime)
-    if (searchParams.channel) next.channel = String(searchParams.channel)
-    if (searchParams.model) next.model = searchParams.model
-    if (searchParams.token) next.token = searchParams.token
-    if (searchParams.group) next.group = searchParams.group
-    if (searchParams.username) next.username = searchParams.username
-    if (searchParams.requestId) next.requestId = searchParams.requestId
-
-    if (Object.keys(next).length > 0) {
-      // The URL is the source of truth after navigation; sync the local form
-      // state so opening the chart uses exactly the visible table filters.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFilters((prev) => ({ ...prev, ...next }))
-    }
+    // URL 是筛选的来源。点开链路会去掉渠道和类型，输入框要跟着清掉。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters((prev) => ({
+      startTime: searchParams.startTime
+        ? new Date(searchParams.startTime)
+        : prev.startTime,
+      endTime: searchParams.endTime
+        ? new Date(searchParams.endTime)
+        : prev.endTime,
+      channel: searchParams.channel ? String(searchParams.channel) : undefined,
+      model: searchParams.model || undefined,
+      token: searchParams.token || undefined,
+      group: searchParams.group || undefined,
+      username: searchParams.username || undefined,
+      requestId: searchParams.requestId || undefined,
+    }))
 
     const typeArr = searchParams.type
-    if (Array.isArray(typeArr) && typeArr.length === 1) {
+    if (
+      Array.isArray(typeArr) &&
+      typeArr.length === 1 &&
+      isLogTypeValue(typeArr[0])
+    ) {
       setLogType(typeArr[0])
+    } else {
+      setLogType('')
     }
   }, [
     searchParams.startTime,
@@ -108,6 +113,13 @@ export function CommonLogsFilterBar({
     searchParams.type,
   ])
 
+  useEffect(() => {
+    if (searchParams.order === 'asc' && searchParams.requestId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExpanded(true)
+    }
+  }, [searchParams.order, searchParams.requestId])
+
   const handleChange = useCallback(
     (field: keyof CommonLogFilters, value: Date | string | undefined) => {
       setFilters((prev) => ({ ...prev, [field]: value }))
@@ -117,18 +129,22 @@ export function CommonLogsFilterBar({
 
   const handleApply = useCallback(() => {
     const filterParams = buildSearchParams(filters, 'common')
+    const requestId = filters.requestId?.trim()
     navigate({
       to: '/usage-logs/$section',
       params: { section: 'common' },
       search: {
         ...filterParams,
         ...(logType ? { type: [logType] } : {}),
+        ...(searchParams.order === 'asc' && requestId
+          ? { order: 'asc' as const }
+          : {}),
         page: 1,
       },
     })
     queryClient.invalidateQueries({ queryKey: ['logs'] })
     queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [filters, logType, navigate, queryClient])
+  }, [filters, logType, navigate, queryClient, searchParams.order])
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
@@ -293,6 +309,11 @@ export function CommonLogsFilterBar({
       <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <div className='flex min-w-0 flex-wrap items-center gap-2 sm:gap-3'>
           {stats && <div className='min-w-0'>{stats}</div>}
+          {searchParams.order === 'asc' && searchParams.requestId && (
+            <p className='text-muted-foreground text-xs'>
+              {t('Showing this request from the first record')}
+            </p>
+          )}
         </div>
 
         <div className='flex shrink-0 flex-wrap items-center justify-end gap-2 self-end sm:self-auto'>

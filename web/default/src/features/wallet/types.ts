@@ -34,6 +34,14 @@ export type WaffoPancakePaymentResponse = ApiResponse<
     }
   | string
 >
+export type BepusdtPaymentResponse = ApiResponse<
+  | {
+      checkout_url?: string
+      trade_id?: string
+      order_id?: string
+    }
+  | string
+>
 export type CryptomusPaymentResponse = ApiResponse<
   | {
       checkout_url?: string
@@ -190,6 +198,10 @@ export interface TopupInfo {
   enable_cryptomus_topup?: boolean
   /** Minimum topup amount for Cryptomus */
   cryptomus_min_topup?: number
+  /** Whether BEpusdt (self-hosted USDT gateway) topup is enabled; 启用时后端不再下发 Cryptomus */
+  enable_bepusdt_topup?: boolean
+  /** Minimum topup amount for BEpusdt */
+  bepusdt_min_topup?: number
   /** Whether agou (支付宝/微信) topup is enabled */
   enable_sfpay_topup?: boolean
   /** Available agou payment methods (支付宝/微信) */
@@ -256,6 +268,14 @@ export interface WaffoPaymentRequest {
  * Waffo Pancake payment request parameters
  */
 export interface WaffoPancakePaymentRequest {
+  /** Topup amount */
+  amount: number
+}
+
+/**
+ * BEpusdt payment request parameters（收银台自选链，无需渠道 key）
+ */
+export interface BepusdtPaymentRequest {
   /** Topup amount */
   amount: number
 }

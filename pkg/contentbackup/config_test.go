@@ -2,6 +2,7 @@ package contentbackup
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -74,6 +75,8 @@ func TestContentBackupConfigDefaults(t *testing.T) {
 	assertInt64(t, "OldestPendingAlertMinutes", int64(cfg.OldestPendingAlertMinutes), 15)
 	assertInt64(t, "CleanupPendingAlertMinutes", int64(cfg.CleanupPendingAlertMinutes), 30)
 	assertInt64(t, "AlertDedupMinutes", int64(cfg.AlertDedupMinutes), 30)
+	assertBool(t, "NotifyEmailEnabled", cfg.NotifyEmailEnabled, false)
+	assertString(t, "NotifyEmails", cfg.NotifyEmails, "")
 	assertBool(t, "NotifyOldestPending", cfg.NotifyOldestPending, true)
 	assertBool(t, "NotifyCleanupPending", cfg.NotifyCleanupPending, true)
 	assertBool(t, "NotifySpoolHigh", cfg.NotifySpoolHigh, true)
@@ -114,6 +117,7 @@ func TestContentBackupConfigJSONKeys(t *testing.T) {
 		"spool_alert_percent", "spool_stop_percent", "inode_alert_percent", "inode_recover_percent",
 		"min_free_bytes", "min_free_percent",
 		"oldest_pending_alert_minutes", "cleanup_pending_alert_minutes", "alert_dedup_minutes",
+		"notify_email_enabled", "notify_emails",
 		"notify_oldest_pending", "notify_cleanup_pending", "notify_spool_high",
 		"notify_inode_high", "notify_failed", "notify_handoff_rejected", "notify_node_offline",
 		"content_retention_days", "index_retention_days", "stats_retention_days",
@@ -503,6 +507,99 @@ func TestContentBackupAlertNotifyEnabled(t *testing.T) {
 	}
 	if !cfg.AlertNotifyEnabled("failed") {
 		t.Fatal("other reasons must stay independent")
+	}
+}
+
+// 收件人按 ; 或 , 切分，前后空白和空项忽略，顺序保持填写顺序；空白本身不是分隔符。
+func TestContentBackupNotifyEmailList(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  []string
+	}{
+		{name: "empty", value: "", want: []string{}},
+		{name: "only separators and blanks", value: " ; ,\t;\n, ", want: []string{}},
+		{name: "console normalized form", value: "a@x.com; b@y.com", want: []string{"a@x.com", "b@y.com"}},
+		{name: "mixed separators and blanks", value: "  a@x.com ;b@y.com,,\tc@z.com\n ; , d@w.com;", want: []string{"a@x.com", "b@y.com", "c@z.com", "d@w.com"}},
+		{name: "blank inside one item is not a separator", value: "a@x.com b@y.com", want: []string{"a@x.com b@y.com"}},
+		{name: "keeps the written order and case", value: "Z@x.com,a@y.com", want: []string{"Z@x.com", "a@y.com"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.NotifyEmails = test.value
+			got := cfg.NotifyEmailList()
+			if strings.Join(got, "|") != strings.Join(test.want, "|") || len(got) != len(test.want) {
+				t.Fatalf("NotifyEmailList(%q) = %q, want %q", test.value, got, test.want)
+			}
+		})
+	}
+}
+
+// 校验 reason 是管理端照着展示的契约，逐字锁死。
+func TestContentBackupValidateConfigNotifyEmails(t *testing.T) {
+	recipients := func(n int) string {
+		items := make([]string, 0, n)
+		for i := 0; i < n; i++ {
+			items = append(items, fmt.Sprintf("ops%d@example.com", i))
+		}
+		return strings.Join(items, "; ")
+	}
+	rejected := []struct {
+		name       string
+		enabled    bool
+		emails     string
+		wantReason string
+	}{
+		{name: "display name form", emails: "ops@example.com; Ops <a@b.com>", wantReason: `"Ops <a@b.com>" is not a plain email address`},
+		{name: "angle brackets only", emails: "<a@b.com>", wantReason: `"<a@b.com>" is not a plain email address`},
+		{name: "comment form", emails: "a@b.com (Ops)", wantReason: `"a@b.com (Ops)" is not a plain email address`},
+		{name: "not an address", emails: "not-an-email", wantReason: `"not-an-email" is not a plain email address`},
+		{name: "blank separated pair", emails: "a@x.com b@y.com", wantReason: `"a@x.com b@y.com" is not a plain email address`},
+		{name: "eleven recipients", emails: recipients(11), wantReason: "at most 10 recipients"},
+		{name: "case insensitive duplicate", emails: "Ops@Example.com, a@b.com; ops@example.com", wantReason: `duplicate recipient "ops@example.com"`},
+		{name: "enabled without recipients", enabled: true, emails: "", wantReason: "at least one recipient is required when notify_email_enabled is on"},
+		{name: "enabled with only separators", enabled: true, emails: " ; , ", wantReason: "at least one recipient is required when notify_email_enabled is on"},
+	}
+	for _, test := range rejected {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.NotifyEmailEnabled = test.enabled
+			cfg.NotifyEmails = test.emails
+			err := ValidateConfig(cfg)
+			if !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("ValidateConfig error = %v, want %v", err, ErrInvalidConfig)
+			}
+			var validation *ValidationError
+			if !errors.As(err, &validation) || validation.Field != "notify_emails" || validation.Reason != test.wantReason {
+				t.Fatalf("error = %v, want notify_emails: %s", err, test.wantReason)
+			}
+			if err.Error() != "contentbackup: notify_emails: "+test.wantReason {
+				t.Fatalf("error text = %q", err.Error())
+			}
+		})
+	}
+
+	accepted := []struct {
+		name    string
+		enabled bool
+		emails  string
+	}{
+		{name: "default is off and empty", enabled: false, emails: ""},
+		{name: "recipients may be saved while off", enabled: false, emails: "ops@example.com"},
+		{name: "on with one recipient", enabled: true, emails: "ops@example.com"},
+		{name: "on with ten recipients", enabled: true, emails: recipients(10)},
+		{name: "mixed separators", enabled: true, emails: " a@x.com ;b@y.com,, c@z.com ; "},
+	}
+	for _, test := range accepted {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.NotifyEmailEnabled = test.enabled
+			cfg.NotifyEmails = test.emails
+			if err := ValidateConfig(cfg); err != nil {
+				t.Fatalf("ValidateConfig = %v", err)
+			}
+		})
 	}
 }
 

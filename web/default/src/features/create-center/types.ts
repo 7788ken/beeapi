@@ -1,47 +1,31 @@
 // Create Center 类型定义
+import type { GenerateImagesInput } from './api'
 
-/** OpenAI 兼容图像生成响应中的单张图 */
-export interface GeneratedImage {
-  /** base64 编码（如果后端返回 b64_json） */
-  b64_json?: string
-  /** 图像 URL（如果后端返回 url） */
-  url?: string
-  /** 修订后的 prompt（部分模型返回） */
-  revised_prompt?: string
-}
-
-/** 单次图像生成任务的本地状态 */
-export interface ImageJob {
-  /** 本地唯一 id（前端生成，不依赖后端） */
-  id: string
-  prompt: string
-  model: string
+export interface ImageParams {
+  /** images 协议是 size（如 1024x1536 / auto），chat 协议是 aspect_ratio（如 3:4） */
   size: string
   n: number
-  /** 'pending' 排队 / 'running' 进行中 / 'done' 完成 / 'error' 失败 */
-  status: 'pending' | 'running' | 'done' | 'error'
-  /** 创建时间 (unix ms) */
-  createdAt: number
-  /** 错误信息（status='error' 时） */
-  errorMessage?: string
-  /** 生成的图像数组（status='done' 时） */
-  images?: GeneratedImage[]
+  /** auto 或空串表示不传、由上游决定 */
+  quality: string
+  style: string
+  /** Gemini Pro 生图的 image_size（1K/2K/4K），其它模型为空 */
+  resolution: string
 }
 
-/** 图像生成请求 payload */
-export interface GenerateImageRequest {
-  model: string
-  prompt: string
-  /** 数量；DALL-E 3 仅支持 n=1 */
-  n: number
-  /** 尺寸 e.g. "1024x1024" */
-  size?: string
-  /** 质量 (DALL-E 3): standard|hd */
-  quality?: string
-  /** 风格 (DALL-E 3): vivid|natural */
-  style?: string
-  /** 参考图（base64 data URL）— GPT-Image-2 / Gemini Image 支持 */
-  reference_image_b64?: string
+/** 一次生图任务；只存在当前页面内存里，刷新即清空。 */
+export interface ImageJob {
+  id: string
+  /** 重新生成时原样再发一次（含当时的 key） */
+  input: GenerateImagesInput
+  keyId: number
+  keyName: string
+  status: 'running' | 'done' | 'error'
+  startedAt: number
+  finishedAt?: number
+  images: string[]
+  error?: string
+  /** 模型只回了文字没回图时的原话 */
+  modelText?: string
 }
 
 /** MJ 历史任务（来自 /api/mj/self，简化字段） */

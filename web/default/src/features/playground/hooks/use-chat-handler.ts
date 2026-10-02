@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { toast } from 'sonner'
+import { RelayError } from '@/lib/relay-client'
 import { sendChatCompletion } from '../api'
 import { MESSAGE_STATUS, ERROR_MESSAGES } from '../constants'
 import {
@@ -15,6 +16,8 @@ import { useStreamRequest } from './use-stream-request'
 interface UseChatHandlerOptions {
   config: PlaygroundConfig
   parameterEnabled: ParameterEnabled
+  /** 所选 API Key 的完整值；还没取到时不发请求 */
+  secret: string | undefined
   onMessageUpdate: (updater: (prev: Message[]) => Message[]) => void
 }
 
@@ -24,6 +27,7 @@ interface UseChatHandlerOptions {
 export function useChatHandler({
   config,
   parameterEnabled,
+  secret,
   onMessageUpdate,
 }: UseChatHandlerOptions) {
   const { sendStreamRequest, stopStream, isStreaming } = useStreamRequest()
@@ -84,13 +88,14 @@ export function useChatHandler({
 
   // Send streaming chat request
   const sendStreamingChat = useCallback(
-    (messages: Message[]) => {
+    (apiKey: string, messages: Message[]) => {
       const payload = buildChatCompletionPayload(
         messages,
         config,
         parameterEnabled
       )
       sendStreamRequest(
+        apiKey,
         payload,
         handleStreamUpdate,
         handleStreamComplete,
@@ -109,7 +114,7 @@ export function useChatHandler({
 
   // Send non-streaming chat request
   const sendNonStreamingChat = useCallback(
-    async (messages: Message[]) => {
+    async (apiKey: string, messages: Message[]) => {
       const payload = buildChatCompletionPayload(
         messages,
         config,
@@ -117,7 +122,7 @@ export function useChatHandler({
       )
 
       try {
-        const response = await sendChatCompletion(payload)
+        const response = await sendChatCompletion(apiKey, payload)
         const choice = response.choices?.[0]
         if (!choice) return
 
@@ -139,17 +144,11 @@ export function useChatHandler({
           }))
         )
       } catch (error: unknown) {
-        const err = error as {
-          response?: {
-            data?: { message?: string; error?: { code?: string } }
-          }
-          message?: string
-        }
         handleStreamError(
-          err?.response?.data?.message ||
-            err?.message ||
-            ERROR_MESSAGES.API_REQUEST_ERROR,
-          err?.response?.data?.error?.code || undefined
+          error instanceof Error
+            ? error.message
+            : ERROR_MESSAGES.API_REQUEST_ERROR,
+          error instanceof RelayError ? error.code : undefined
         )
       }
     },
@@ -159,13 +158,14 @@ export function useChatHandler({
   // Send chat request (stream or non-stream based on config)
   const sendChat = useCallback(
     (messages: Message[]) => {
+      if (!secret) return
       if (config.stream) {
-        sendStreamingChat(messages)
+        sendStreamingChat(secret, messages)
       } else {
-        sendNonStreamingChat(messages)
+        sendNonStreamingChat(secret, messages)
       }
     },
-    [config.stream, sendStreamingChat, sendNonStreamingChat]
+    [secret, config.stream, sendStreamingChat, sendNonStreamingChat]
   )
 
   // Stop generation

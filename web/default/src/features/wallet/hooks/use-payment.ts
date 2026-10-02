@@ -6,6 +6,7 @@ import {
   calculateStripeAmount,
   calculateWaffoPancakeAmount,
   calculateCryptomusAmount,
+  calculateBepusdtAmount,
   calculateAgouAmount,
   requestPayment,
   requestStripePayment,
@@ -15,6 +16,7 @@ import {
   isStripePayment,
   isWaffoPancakePayment,
   isCryptomusPayment,
+  isBepusdtPayment,
   isAgouPayment,
   submitPaymentForm,
 } from '../lib'
@@ -36,6 +38,7 @@ export async function fetchAmountByType(
   const isStripe = isStripePayment(paymentType)
   const isPancake = isWaffoPancakePayment(paymentType)
   const isCryptomus = isCryptomusPayment(paymentType)
+  const isBepusdt = isBepusdtPayment(paymentType)
   const isAgou = isAgouPayment(paymentType)
   try {
     const response = isStripe
@@ -44,9 +47,11 @@ export async function fetchAmountByType(
         ? await calculateWaffoPancakeAmount({ amount: topupAmount })
         : isCryptomus
           ? await calculateCryptomusAmount({ amount: topupAmount })
-          : isAgou
-            ? await calculateAgouAmount({ amount: topupAmount })
-            : await calculateAmount({ amount: topupAmount })
+          : isBepusdt
+            ? await calculateBepusdtAmount({ amount: topupAmount })
+            : isAgou
+              ? await calculateAgouAmount({ amount: topupAmount })
+              : await calculateAmount({ amount: topupAmount })
 
     if (isApiSuccess(response) && response.data) {
       const value = parseFloat(response.data)

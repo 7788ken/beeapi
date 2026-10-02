@@ -81,6 +81,9 @@ func main() {
 	// 模块关闭（CONTENT_BACKUP_MODULE=off）时不装配：采集器直接放行，上传/清理/心跳都不启动。
 	if common.ContentBackupModuleEnabled {
 		initContentBackupCapture()
+		if common.ContentBackupConsoleToken == "" {
+			common.SysLog("content backup console token is empty; /api/content_backup returns 404 until CONTENT_BACKUP_CONSOLE_TOKEN is set")
+		}
 	} else {
 		common.SysLog("content backup module disabled (CONTENT_BACKUP_MODULE=off)")
 	}
@@ -486,6 +489,7 @@ func InitResources() error {
 	if err != nil {
 		return err
 	}
+	common.ContentBackupConsoleToken = contentBackupConsoleToken()
 
 	logger.SetupLogger()
 

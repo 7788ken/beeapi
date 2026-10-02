@@ -1,5 +1,4 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { ensureContentBackupModuleEnabled } from '@/features/content-backup/module'
 import { IntegrationSettings } from '@/features/system-settings/integrations'
 import {
   INTEGRATIONS_DEFAULT_SECTION,
@@ -9,13 +8,10 @@ import {
 export const Route = createFileRoute(
   '/_authenticated/system-settings/integrations/$section'
 )({
-  beforeLoad: async ({ context, params }) => {
+  beforeLoad: ({ params }) => {
     const validSections = INTEGRATIONS_SECTION_IDS as unknown as string[]
-    // 内容备份模块未启用时，该分区与不存在的分区同样处理
-    const hiddenSection =
-      params.section === 'content-backup' &&
-      !(await ensureContentBackupModuleEnabled(context.queryClient))
-    if (!validSections.includes(params.section) || hiddenSection) {
+    // 内容备份设置已不在公开后台。旧地址与其它不存在的分区一样回到默认分区。
+    if (!validSections.includes(params.section)) {
       throw redirect({
         to: '/system-settings/integrations/$section',
         params: { section: INTEGRATIONS_DEFAULT_SECTION },

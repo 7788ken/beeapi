@@ -803,7 +803,13 @@ export const PromptInputTextarea = ({
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === 'Enter') {
-      if (isComposing || e.nativeEvent.isComposing) {
+      // Safari 输入法确认候选词的回车 isComposing 为 false、keyCode 为 229；按住回车的连发也不提交
+      if (
+        isComposing ||
+        e.nativeEvent.isComposing ||
+        e.nativeEvent.keyCode === 229 ||
+        e.repeat
+      ) {
         return
       }
       if (e.shiftKey) {

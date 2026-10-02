@@ -20,6 +20,7 @@ import {
   useWaffoPayment,
   useWaffoPancakePayment,
   useCryptomusPayment,
+  useBepusdtPayment,
   useAgouPayment,
 } from './hooks'
 import {
@@ -28,6 +29,7 @@ import {
   getSelectedMethodMinTopup,
   isWaffoPancakePayment,
   isCryptomusPayment,
+  isBepusdtPayment,
 } from './lib'
 import type {
   UserWalletData,
@@ -82,6 +84,8 @@ export function Wallet(props: WalletProps) {
     useWaffoPancakePayment()
   const { processing: cryptomusProcessing, processCryptomusPayment } =
     useCryptomusPayment()
+  const { processing: bepusdtProcessing, processBepusdtPayment } =
+    useBepusdtPayment()
   const { processing: agouProcessing, processAgouPayment } = useAgouPayment()
 
   // Fetch and refresh user data
@@ -321,6 +325,8 @@ export function Wallet(props: WalletProps) {
       try {
         if (provider.id === 'cryptomus') {
           await processCryptomusPayment(topupAmount)
+        } else if (provider.id === 'bepusdt') {
+          await processBepusdtPayment(topupAmount)
         } else if (provider.id === 'sfpay') {
           await processAgouPayment(topupAmount, defaultChannel?.key ?? '')
         } else {
@@ -365,11 +371,14 @@ export function Wallet(props: WalletProps) {
 
     const isPancake = isWaffoPancakePayment(paymentType)
     const isCryptomus = isCryptomusPayment(paymentType)
+    const isBepusdt = isBepusdtPayment(paymentType)
     let success = false
     if (isPancake) {
       success = await processWaffoPancakePayment(topupAmount)
     } else if (isCryptomus) {
       success = await processCryptomusPayment(topupAmount)
+    } else if (isBepusdt) {
+      success = await processBepusdtPayment(topupAmount)
     } else {
       success = await processPayment(topupAmount, paymentType)
     }
@@ -445,6 +454,7 @@ export function Wallet(props: WalletProps) {
                   processing ||
                   pancakeProcessing ||
                   cryptomusProcessing ||
+                  bepusdtProcessing ||
                   agouProcessing ||
                   !!paymentLoading
                 }
@@ -468,6 +478,7 @@ export function Wallet(props: WalletProps) {
                   topupInfo?.enable_waffo_pancake_topup
                 }
                 enableCryptomusTopup={topupInfo?.enable_cryptomus_topup}
+                enableBepusdtTopup={topupInfo?.enable_bepusdt_topup}
                 enableAgouTopup={topupInfo?.enable_sfpay_topup}
                 agouPayMethods={topupInfo?.sfpay_pay_methods}
                 agouMinTopup={topupInfo?.sfpay_min_topup}
@@ -490,7 +501,12 @@ export function Wallet(props: WalletProps) {
             : undefined
         }
         calculating={calculating}
-        processing={processing || pancakeProcessing || cryptomusProcessing}
+        processing={
+          processing ||
+          pancakeProcessing ||
+          cryptomusProcessing ||
+          bepusdtProcessing
+        }
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />

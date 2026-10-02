@@ -108,7 +108,7 @@ func GetStatus(c *gin.Context) {
 		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],
 		"SidebarModulesAdmin": common.OptionMap["SidebarModulesAdmin"],
 
-		// 内容备份模块由部署环境变量 CONTENT_BACKUP_MODULE 控制，false 时前端隐藏全部入口
+		// 内容备份模块是否在跑。公开后台入口已移除，这个开关不再决定菜单。
 		"content_backup_module_enabled": common.ContentBackupModuleEnabled,
 
 		"oidc_enabled":                system_setting.GetOIDCSettings().Enabled,

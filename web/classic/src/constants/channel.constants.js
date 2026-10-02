@@ -209,6 +209,11 @@ export const CHANNEL_OPTIONS = [
     color: 'blue',
     label: 'MiniMaxInf (minimax-h3)',
   },
+  {
+    value: 62,
+    color: 'green',
+    label: 'TypeSafe (System One)',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

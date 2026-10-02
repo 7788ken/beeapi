@@ -171,6 +171,17 @@ func InitOptionMap() {
 	common.OptionMap["CryptomusAllowedGroups"] = setting.CryptomusAllowedGroups
 	common.OptionMap["CryptomusPayChannels"] = setting.CryptomusPayChannels2JsonString()
 	common.OptionMap["CryptomusLogo"] = setting.CryptomusLogo
+	common.OptionMap["BepusdtEnabled"] = strconv.FormatBool(setting.BepusdtEnabled)
+	common.OptionMap["BepusdtBaseURL"] = setting.BepusdtBaseURL
+	common.OptionMap["BepusdtApiToken"] = setting.BepusdtApiToken
+	common.OptionMap["BepusdtCurrencies"] = setting.BepusdtCurrencies
+	common.OptionMap["BepusdtLifetimeSec"] = strconv.Itoa(setting.BepusdtLifetimeSec)
+	common.OptionMap["BepusdtUnitPrice"] = strconv.FormatFloat(setting.BepusdtUnitPrice, 'f', -1, 64)
+	common.OptionMap["BepusdtMinTopUp"] = strconv.Itoa(setting.BepusdtMinTopUp)
+	common.OptionMap["BepusdtReturnURL"] = setting.BepusdtReturnURL
+	common.OptionMap["BepusdtAllowedGroups"] = setting.BepusdtAllowedGroups
+	common.OptionMap["BepusdtPayChannels"] = setting.BepusdtPayChannels2JsonString()
+	common.OptionMap["BepusdtLogo"] = setting.BepusdtLogo
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -730,6 +741,24 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.CryptomusReturnURL = value
 	case "CryptomusAllowedGroups":
 		setting.CryptomusAllowedGroups = value
+	case "BepusdtEnabled":
+		setting.BepusdtEnabled = value == "true"
+	case "BepusdtBaseURL":
+		setting.BepusdtBaseURL = strings.TrimRight(strings.TrimSpace(value), "/")
+	case "BepusdtApiToken":
+		setting.BepusdtApiToken = strings.TrimSpace(value)
+	case "BepusdtCurrencies":
+		setting.BepusdtCurrencies = value
+	case "BepusdtLifetimeSec":
+		setting.BepusdtLifetimeSec, _ = strconv.Atoi(value)
+	case "BepusdtUnitPrice":
+		setting.BepusdtUnitPrice, _ = strconv.ParseFloat(value, 64)
+	case "BepusdtMinTopUp":
+		setting.BepusdtMinTopUp, _ = strconv.Atoi(value)
+	case "BepusdtReturnURL":
+		setting.BepusdtReturnURL = value
+	case "BepusdtAllowedGroups":
+		setting.BepusdtAllowedGroups = value
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
@@ -885,13 +914,15 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.StreamCacheQueueLength, _ = strconv.Atoi(value)
 	case "PayMethods":
 		err = operation_setting.UpdatePayMethodsByJsonString(value)
-	case "WaffoPayMethods", "SfpayPayChannels", "CryptomusPayChannels", "WaffoPancakePayChannels":
+	case "WaffoPayMethods", "SfpayPayChannels", "CryptomusPayChannels", "WaffoPancakePayChannels", "BepusdtPayChannels":
 		// 这些支付方式/渠道配置直接从 OptionMap 读（setting.GetWaffoPayMethods / GetXxxPayChannels），
 		// 值已在本函数开头 common.OptionMap[key] = value 写入，无需额外同步内存变量。
 	case "WaffoPancakeLogo":
 		setting.WaffoPancakeLogo = value
 	case "CryptomusLogo":
 		setting.CryptomusLogo = value
+	case "BepusdtLogo":
+		setting.BepusdtLogo = value
 	case "SfpayLogo":
 		setting.AgouLogo = value
 	}

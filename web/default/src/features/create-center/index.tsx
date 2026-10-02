@@ -1,12 +1,14 @@
 import { lazy, Suspense } from 'react'
-import { getRouteApi, useNavigate } from '@tanstack/react-router'
+import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
+import { History, KeyRound, MessageCircle, Palette } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { MessageCircle, Palette, History, Sparkles } from 'lucide-react'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { composerChip } from '@/components/composer-styles'
 import { AppHeader, Main } from '@/components/layout'
-import { ImageTab } from './image-tab'
 import { HistoryTab } from './history-tab'
+import { ImageTab } from './image-tab'
 
 // Playground 是已有完整组件，直接 lazy 嵌入作为 Chat tab
 const LazyPlayground = lazy(() =>
@@ -22,18 +24,17 @@ function isValidTab(v: string | undefined): v is CreateCenterTab {
 }
 
 /**
- * 创作中心整体布局：
- *  - 顶部 tabs bar 固定高度（shrink-0）
- *  - 下方内容区 flex-1 + overflow-hidden（外层不滚动）
- *  - Chat tab：Playground 自带内部 scroll，独占撑满
- *  - Image/History tab：自带 overflow-auto wrapper，内部自然增长
- *  这样保证页面只有一个滚动条（在内容区内部），不会出现 SectionPageLayout 的外层 + tab 内部双 scroll。
+ * 创作中心：顶部一行标题 + 分段切换，下面是整块工作区。
+ * 对话、生图两个工作区都是「内容流 + 吸底输入卡」，各自内部滚动，页面本身不出外层滚动条；
+ * 背景直接露出控制台的 40px 网格。
  */
 export function CreateCenter() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const search = route.useSearch() as { tab?: string }
-  const activeTab: CreateCenterTab = isValidTab(search.tab) ? search.tab : 'image'
+  const activeTab: CreateCenterTab = isValidTab(search.tab)
+    ? search.tab
+    : 'image'
 
   const handleTabChange = (value: string) => {
     if (!isValidTab(value)) return
@@ -46,51 +47,49 @@ export function CreateCenter() {
 
   return (
     <>
-      {/* 标准 AppHeader（breadcrumb / 用户菜单 / 主题切换 等） */}
       <AppHeader />
       <Main className='flex h-full flex-col p-0'>
-      {/* Tabs bar */}
-      <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 shrink-0 border-b px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3'>
-        <div className='flex items-center gap-2'>
-          <Sparkles className='h-4 w-4 text-violet-500' />
-          <Tabs value={activeTab} onValueChange={handleTabChange} className='flex-1'>
-            <TabsList className='h-auto'>
-              <TabsTrigger value='chat' className='gap-1.5'>
-                <MessageCircle className='h-3.5 w-3.5' />
+        <div className='flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-4 sm:px-6'>
+          <h1 className='text-lg font-semibold'>{t('Create Center')}</h1>
+          <Tabs value={activeTab} onValueChange={handleTabChange}>
+            <TabsList className='h-8'>
+              <TabsTrigger value='chat' className='px-2.5 text-xs'>
+                <MessageCircle className='size-3.5' />
                 {t('Chat')}
               </TabsTrigger>
-              <TabsTrigger value='image' className='gap-1.5'>
-                <Palette className='h-3.5 w-3.5' />
+              <TabsTrigger value='image' className='px-2.5 text-xs'>
+                <Palette className='size-3.5' />
                 {t('Image')}
               </TabsTrigger>
-              <TabsTrigger value='history' className='gap-1.5'>
-                <History className='h-3.5 w-3.5' />
-                {t('History')}
+              <TabsTrigger value='history' className='px-2.5 text-xs'>
+                <History className='size-3.5' />
+                {t('Midjourney history')}
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          <Link
+            to='/keys'
+            aria-label={t('Manage API keys')}
+            className={cn(composerChip, 'ml-auto')}
+          >
+            <KeyRound className='text-primary size-3.5' />
+            <span className='hidden sm:inline'>{t('Manage API keys')}</span>
+          </Link>
         </div>
-      </div>
 
-      {/* 内容区：外层 overflow-hidden，禁止 SectionPageLayout 风格的双 scroll */}
-      <div className='min-h-0 flex-1 overflow-hidden'>
-        {activeTab === 'chat' && (
-          <Suspense fallback={<TabSkeleton />}>
-            {/* Playground 自带 size-full + 内部 scroll，直接撑满即可 */}
-            <LazyPlayground />
-          </Suspense>
-        )}
-        {activeTab === 'image' && (
-          <div className='h-full overflow-auto px-3 py-3 sm:px-4 sm:py-4'>
-            <ImageTab />
-          </div>
-        )}
-        {activeTab === 'history' && (
-          <div className='h-full overflow-auto px-3 py-3 sm:px-4 sm:py-4'>
-            <HistoryTab />
-          </div>
-        )}
-      </div>
+        <div className='min-h-0 flex-1'>
+          {activeTab === 'chat' && (
+            <Suspense fallback={<TabSkeleton />}>
+              <LazyPlayground />
+            </Suspense>
+          )}
+          {activeTab === 'image' && <ImageTab />}
+          {activeTab === 'history' && (
+            <div className='h-full overflow-auto px-4 py-4 sm:px-6'>
+              <HistoryTab />
+            </div>
+          )}
+        </div>
       </Main>
     </>
   )
@@ -98,7 +97,7 @@ export function CreateCenter() {
 
 function TabSkeleton() {
   return (
-    <div className='h-full space-y-3 p-4'>
+    <div className='mx-auto h-full w-full max-w-3xl space-y-3 p-4'>
       <Skeleton className='h-12 w-full' />
       <Skeleton className='h-96 w-full' />
     </div>

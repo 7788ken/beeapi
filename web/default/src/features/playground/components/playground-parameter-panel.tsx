@@ -7,7 +7,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
-import { PromptInputButton } from '@/components/ai-elements/prompt-input'
+import { composerChip } from '@/components/composer-styles'
 import type { ParameterEnabled, PlaygroundConfig } from '../types'
 
 type ParameterKey = keyof ParameterEnabled
@@ -70,25 +70,22 @@ export function PlaygroundParameterPanel({
   onParameterEnabledChange,
 }: Props) {
   const { t } = useTranslation()
-  const activeCount = controls.filter(({ key }) => parameterEnabled[key]).length
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <PromptInputButton
+        <button
+          type='button'
           aria-label={t('Parameters')}
-          className='relative rounded-full border font-medium'
+          className={composerChip}
           disabled={disabled}
-          variant='outline'
         >
-          <SlidersHorizontalIcon size={16} />
-          <span className='bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px]'>
-            {activeCount}
-          </span>
-        </PromptInputButton>
+          <SlidersHorizontalIcon className='size-3.5 shrink-0' />
+          <span className='hidden sm:inline'>{t('Parameters')}</span>
+        </button>
       </PopoverTrigger>
       <PopoverContent
-        align='start'
+        align='end'
         className='w-[22rem] max-w-[calc(100vw-2rem)]'
         side='top'
       >

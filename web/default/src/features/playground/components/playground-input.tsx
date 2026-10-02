@@ -1,57 +1,33 @@
-import { useState } from 'react'
-import {
-  PaperclipIcon,
-  FileIcon,
-  ImageIcon,
-  ScreenShareIcon,
-  CameraIcon,
-  GlobeIcon,
-  SendIcon,
-  SquareIcon,
-  BarChartIcon,
-  BoxIcon,
-  NotepadTextIcon,
-  CodeSquareIcon,
-  GraduationCapIcon,
-} from 'lucide-react'
+import type { ReactNode, Ref } from 'react'
+import { MessageSquarePlus, SendIcon, SquareIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   PromptInput,
-  PromptInputButton,
   PromptInputFooter,
   PromptInputTextarea,
-  PromptInputTools,
-  type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { ModelGroupSelector } from '@/components/model-group-selector'
-import type {
-  GroupOption,
-  ModelOption,
-  ParameterEnabled,
-  PlaygroundConfig,
-} from '../types'
+import {
+  composerChip,
+  composerFrame,
+  composerPrimary,
+} from '@/components/composer-styles'
+import type { ParameterEnabled, PlaygroundConfig } from '../types'
 import { PlaygroundParameterPanel } from './playground-parameter-panel'
 
 interface PlaygroundInputProps {
+  /** 草稿由父级持有，空态的示例提示要能填进来 */
+  value: string
+  onValueChange: (value: string) => void
+  textareaRef: Ref<HTMLTextAreaElement>
   onSubmit: (text: string) => void
-  onStop?: () => void
-  disabled?: boolean
-  isGenerating?: boolean
-  models: ModelOption[]
-  modelValue: string
-  onModelChange: (value: string) => void
-  isModelLoading?: boolean
-  groups: GroupOption[]
-  groupValue: string
-  onGroupChange: (value: string) => void
+  onStop: () => void
+  /** 有 key、有模型、没在生成 */
+  canSend: boolean
+  isGenerating: boolean
+  /** 底栏左侧：API Key 与模型选择器 */
+  selectors: ReactNode
+  /** 有消息时提供：清空当前对话回到空态 */
+  onNewChat?: () => void
   config: PlaygroundConfig
   parameterEnabled: ParameterEnabled
   onConfigChange: <K extends keyof PlaygroundConfig>(
@@ -64,186 +40,92 @@ interface PlaygroundInputProps {
   ) => void
 }
 
-const suggestions = [
-  { icon: BarChartIcon, text: 'Analyze data', color: '#76d0eb' },
-  { icon: BoxIcon, text: 'Surprise me', color: '#76d0eb' },
-  { icon: NotepadTextIcon, text: 'Summarize text', color: '#ea8444' },
-  { icon: CodeSquareIcon, text: 'Code', color: '#6c71ff' },
-  { icon: GraduationCapIcon, text: 'Get advice', color: '#76d0eb' },
-  { icon: null, text: 'More' },
-]
-
 export function PlaygroundInput({
+  value,
+  onValueChange,
+  textareaRef,
   onSubmit,
   onStop,
-  disabled,
+  canSend,
   isGenerating,
-  models,
-  modelValue,
-  onModelChange,
-  isModelLoading = false,
-  groups,
-  groupValue,
-  onGroupChange,
+  selectors,
+  onNewChat,
   config,
   parameterEnabled,
   onConfigChange,
   onParameterEnabledChange,
 }: PlaygroundInputProps) {
   const { t } = useTranslation()
-  const [text, setText] = useState('')
-
-  const isModelSelectDisabled =
-    disabled || isModelLoading || models.length === 0
-  const isGroupSelectDisabled = disabled || groups.length === 0
-
-  const handleSubmit = (message: PromptInputMessage) => {
-    if (!message.text?.trim() || disabled) return
-    onSubmit(message.text)
-    setText('')
-  }
-
-  const handleFileAction = (action: string) => {
-    toast.info(t('Feature in development'), {
-      description: action,
-    })
-  }
-
-  const handleSuggestionClick = (suggestion: string) => {
-    onSubmit(suggestion)
-  }
+  const canSubmit = canSend && value.trim().length > 0
 
   return (
-    <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
-      <PromptInput
-        groupClassName='rounded-[20px] [--radius:20px]'
-        onSubmit={handleSubmit}
-      >
-        <PromptInputTextarea
-          autoComplete='off'
-          autoCorrect='off'
-          autoCapitalize='off'
-          spellCheck={false}
-          className='px-5 md:text-base'
-          disabled={disabled}
-          onChange={(event) => setText(event.target.value)}
-          placeholder={t('Ask anything')}
-          value={text}
-        />
+    <PromptInput
+      groupClassName={composerFrame}
+      // PromptInput 提交时会先清空表单再回调；发不出去时在捕获阶段拦下，草稿原样保留
+      onSubmitCapture={(event) => {
+        if (canSubmit) return
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onSubmit={(message) => {
+        onSubmit(message.text ?? '')
+        onValueChange('')
+      }}
+    >
+      <PromptInputTextarea
+        ref={textareaRef}
+        autoComplete='off'
+        autoCorrect='off'
+        autoCapitalize='off'
+        spellCheck={false}
+        className='px-4 md:text-base'
+        onChange={(event) => onValueChange(event.target.value)}
+        placeholder={t('Ask anything')}
+        value={value}
+      />
 
-        <PromptInputFooter className='p-2.5'>
-          <PromptInputTools>
-            <PlaygroundParameterPanel
-              config={config}
-              disabled={disabled}
-              onConfigChange={onConfigChange}
-              onParameterEnabledChange={onParameterEnabledChange}
-              parameterEnabled={parameterEnabled}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <PromptInputButton
-                  className='!rounded-full border font-medium'
-                  disabled={disabled}
-                  variant='outline'
-                >
-                  <PaperclipIcon size={16} />
-                  <span className='hidden sm:inline'>{t('Attach')}</span>
-                  <span className='sr-only sm:hidden'>{t('Attach')}</span>
-                </PromptInputButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='start'>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-file')}
-                >
-                  <FileIcon className='mr-2' size={16} />
-                  {t('Upload file')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-photo')}
-                >
-                  <ImageIcon className='mr-2' size={16} />
-                  {t('Upload photo')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-screenshot')}
-                >
-                  <ScreenShareIcon className='mr-2' size={16} />
-                  {t('Take screenshot')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-photo')}
-                >
-                  <CameraIcon className='mr-2' size={16} />
-                  {t('Take photo')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+      <PromptInputFooter className='items-end gap-2 p-2.5'>
+        <div className='flex min-w-0 flex-1 flex-wrap items-center gap-1.5'>
+          {selectors}
+        </div>
 
-            <PromptInputButton
-              className='rounded-full border font-medium'
-              disabled={disabled}
-              onClick={() => toast.info(t('Search feature in development'))}
-              variant='outline'
+        <div className='flex shrink-0 items-center gap-1.5'>
+          {onNewChat && (
+            <button
+              type='button'
+              onClick={onNewChat}
+              disabled={isGenerating}
+              aria-label={t('New chat')}
+              className={composerChip}
             >
-              <GlobeIcon size={16} />
-              <span className='hidden sm:inline'>{t('Search')}</span>
-              <span className='sr-only sm:hidden'>{t('Search')}</span>
-            </PromptInputButton>
-          </PromptInputTools>
-
-          <div className='flex items-center gap-1.5 md:gap-2'>
-            <ModelGroupSelector
-              selectedModel={modelValue}
-              models={models}
-              onModelChange={onModelChange}
-              selectedGroup={groupValue}
-              groups={groups}
-              onGroupChange={onGroupChange}
-              disabled={isModelSelectDisabled || isGroupSelectDisabled}
-            />
-
-            {isGenerating && onStop ? (
-              <PromptInputButton
-                className='text-foreground rounded-full font-medium'
-                onClick={onStop}
-                variant='secondary'
-              >
-                <SquareIcon className='fill-current' size={16} />
-                <span className='hidden sm:inline'>{t('Stop')}</span>
-                <span className='sr-only sm:hidden'>{t('Stop')}</span>
-              </PromptInputButton>
-            ) : (
-              <PromptInputButton
-                className='text-foreground rounded-full font-medium'
-                disabled={disabled || !text.trim()}
-                type='submit'
-                variant='secondary'
-              >
-                <SendIcon size={16} />
-                <span className='hidden sm:inline'>{t('Send')}</span>
-                <span className='sr-only sm:hidden'>{t('Send')}</span>
-              </PromptInputButton>
-            )}
-          </div>
-        </PromptInputFooter>
-      </PromptInput>
-
-      <Suggestions>
-        {suggestions.map(({ icon: Icon, text, color }) => (
-          <Suggestion
-            className={`text-xs font-normal sm:text-sm ${
-              text === 'More' ? 'hidden sm:flex' : ''
-            }`}
-            key={text}
-            onClick={() => handleSuggestionClick(text)}
-            suggestion={text}
-          >
-            {Icon && <Icon size={16} style={{ color }} />}
-            {text}
-          </Suggestion>
-        ))}
-      </Suggestions>
-    </div>
+              <MessageSquarePlus className='size-3.5 shrink-0' />
+              <span className='max-sm:sr-only'>{t('New chat')}</span>
+            </button>
+          )}
+          <PlaygroundParameterPanel
+            config={config}
+            disabled={isGenerating}
+            onConfigChange={onConfigChange}
+            onParameterEnabledChange={onParameterEnabledChange}
+            parameterEnabled={parameterEnabled}
+          />
+          {isGenerating ? (
+            <button type='button' onClick={onStop} className={composerChip}>
+              <SquareIcon className='size-3.5 shrink-0 fill-current' />
+              <span className='max-sm:sr-only'>{t('Stop')}</span>
+            </button>
+          ) : (
+            <button
+              type='submit'
+              disabled={!canSubmit}
+              className={composerPrimary}
+            >
+              <SendIcon className='size-3.5 shrink-0' />
+              <span className='max-sm:sr-only'>{t('Send')}</span>
+            </button>
+          )}
+        </div>
+      </PromptInputFooter>
+    </PromptInput>
   )
 }

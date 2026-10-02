@@ -8,13 +8,7 @@ import {
   loadMessages,
   saveMessages,
 } from '../lib'
-import type {
-  Message,
-  PlaygroundConfig,
-  ParameterEnabled,
-  ModelOption,
-  GroupOption,
-} from '../types'
+import type { Message, PlaygroundConfig, ParameterEnabled } from '../types'
 
 /**
  * Main state management hook for playground
@@ -36,9 +30,6 @@ export function usePlaygroundState() {
   const [messages, setMessages] = useState<Message[]>(() => {
     return loadMessages() || []
   })
-
-  const [models, setModels] = useState<ModelOption[]>([])
-  const [groups, setGroups] = useState<GroupOption[]>([])
 
   // Update config with automatic save
   const updateConfig = useCallback(
@@ -95,12 +86,6 @@ export function usePlaygroundState() {
     config,
     parameterEnabled,
     messages,
-    models,
-    groups,
-
-    // Setters
-    setModels,
-    setGroups,
 
     // Actions
     updateConfig,

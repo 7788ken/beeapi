@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -26,7 +27,7 @@ var (
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	urlStr := req.URL.String()
 	if err := validateURLWithCurrentFetchSetting(urlStr, true); err != nil {
-		return fmt.Errorf("redirect to %s blocked: %v", urlStr, err)
+		return fmt.Errorf("redirect to %s blocked: %v", common.RedactURL(urlStr), err)
 	}
 	if len(via) >= 10 {
 		return fmt.Errorf("stopped after 10 redirects")
@@ -37,7 +38,7 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 func checkProtectedFetchRedirect(req *http.Request, via []*http.Request) error {
 	urlStr := req.URL.String()
 	if err := ValidateSSRFProtectedFetchURL(urlStr); err != nil {
-		return fmt.Errorf("redirect to %s blocked: %v", urlStr, err)
+		return fmt.Errorf("redirect to %s blocked: %v", common.RedactURL(urlStr), err)
 	}
 	if len(via) >= 10 {
 		return fmt.Errorf("stopped after 10 redirects")
@@ -197,7 +198,8 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 
 	parsedURL, err := url.Parse(proxyURL)
 	if err != nil {
-		return nil, err
+		// 解析错误会带出整串代理地址（含账号密码），不回显原串
+		return nil, errors.New("invalid proxy URL")
 	}
 
 	switch parsedURL.Scheme {

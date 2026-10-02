@@ -23,6 +23,7 @@ const usageLogsSearchSchema = z.object({
   group: z.string().optional().catch(''),
   username: z.string().optional().catch(''),
   requestId: z.string().optional().catch(''),
+  order: z.literal('asc').optional().catch(undefined),
   startTime: z.number().optional(),
   endTime: z.number().optional(),
 })
